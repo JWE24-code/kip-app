@@ -53,13 +53,13 @@ jobs:
 
     steps:
       - name: Checkout kip-app
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: app
           fetch-depth: 1
 
       - name: Checkout kip (retrieval layer)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: JWE24-code/kip
           token: ${{ secrets.KIP_SCRIPTS_TOKEN }}
@@ -76,11 +76,11 @@ jobs:
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /usr/local/.ghcup || true
           df -h /
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
