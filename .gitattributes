@@ -4,3 +4,8 @@ packaging/linux/*.sh   text eol=lf
 packaging/linux/kip.sh text eol=lf
 packaging/linux/kip.desktop text eol=lf
 packaging/linux/PKGBUILD    text eol=lf
+packaging/windows/*.ps1     text eol=crlf
+
+# The committed tldraw whiteboard bundle — leave its bytes alone (no
+# eol normalization), it's a generated artifact.
+src/main/frontend/tldraw-logseq.js -text

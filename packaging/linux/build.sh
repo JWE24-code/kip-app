@@ -1,69 +1,84 @@
 #!/usr/bin/env bash
 #
-# Build a runnable Kip folder for Linux (x64) — out/Kip-linux-x64/.
+# Build a runnable Kip folder for Linux (x64) -> app/out/Kip-linux-x64/.
 #
-# Run this ON the Linux machine (Omarchy / Arch). It mirrors the Windows
-# hand-assembly documented in docs/BUILD.md, because electron-forge's packager
-# is unreliable on recent Node. Nothing here is cross-compilable from Windows:
-# better-sqlite3 is a native addon and has to be built on the target.
+# Runs on a Linux machine (Omarchy / Arch) or an ubuntu-latest GitHub runner.
+# Mirrors the Windows hand-assembly in docs/BUILD.md — electron-forge's packager
+# is unreliable on recent Node, and better-sqlite3 is a native addon that must
+# be built on the target (no cross-compile).
 #
-# Prereqs (Arch / Omarchy):  pacman -S --needed nodejs npm yarn jdk-openjdk \
-#                                     clojure rsync git base-devel
+# Layout it expects:  <root>/app  (this repo)  and  <root>/scripts  (the kip
+# retrieval-layer repo) as siblings — gulp's syncScripts reads ../scripts.
 #
-# Usage:   app/packaging/linux/build.sh            # full build
-#          SKIP_DEPS=1 app/packaging/linux/build.sh  # reuse installed deps
+# Prereqs (Arch):  pacman -S --needed nodejs npm yarn jdk-openjdk clojure rsync git base-devel
+#
+# Env:
+#   SKIP_DEPS=1        reuse an already-installed app/node_modules (skip `yarn` in app/)
+#   KIP_CLJS=release   use `clojure -M:cljs release` instead of `compile` (optimized,
+#                      but may deadlock on some machines — default is `compile`)
 #
 set -euo pipefail
 
-ELECTRON_VERSION="41.7.1"          # keep in sync with static/node_modules/electron
+ELECTRON_VERSION="41.7.1"
 ARCH="x64"
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(cd "$here/../.." && pwd)"        # .../app
-REPO_DIR="$(cd "$APP_DIR/.." && pwd)"       # repo root (has scripts/, package.json)
+ROOT_DIR="$(cd "$APP_DIR/.." && pwd)"       # sibling of app/ — must contain scripts/
 OUT="$APP_DIR/out/Kip-linux-$ARCH"
+CLJS_MODE="${KIP_CLJS:-compile}"
 
 step () { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 
-# --- 1. dependencies -------------------------------------------------------
-if [[ "${SKIP_DEPS:-}" != "1" ]]; then
-  step "retrieval-layer deps (repo root)"
-  ( cd "$REPO_DIR" && npm install --no-audit --no-fund )
+[[ -d "$ROOT_DIR/scripts" ]] || { echo "FATAL: no scripts/ next to app/ (checkout the kip repo there)"; exit 1; }
 
+# --- 1. app deps ---------------------------------------------------------------
+if [[ "${SKIP_DEPS:-}" != "1" ]]; then
   step "app deps (app/)"
-  ( cd "$APP_DIR" && yarn --frozen-lockfile )
+  ( cd "$APP_DIR" && yarn install --frozen-lockfile )
 fi
 
-# --- 2. gulp: clean static/, sync bundled scripts + assets + css ----------
-# Must run BEFORE the cljs compile: `gulp build` starts with `clean`, which
-# wipes static/** (keeping only node_modules + yarn.lock). Same order as the
-# canonical `yarn release` (run-s gulp:build cljs:*).
-step "gulp build (clean + syncScripts + assets + css)"
+# --- 2. gulp: clean static/, sync resources + assets + bundled scripts + css --
+# Runs BEFORE the cljs compile: `gulp build` starts with `clean`, wiping
+# static/** (keeps only node_modules + yarn.lock). Also copies resources/* ->
+# static/ (incl. package.json, electron.html, forge.config.js) and runs
+# `npm install --omit=dev` in static/scripts for the bundled retrieval layer.
+step "gulp build"
 ( cd "$APP_DIR" && NODE_ENV=production npx gulp build )
 
-# --- 3. compile ClojureScript -------------------------------------------------
-# compile, NOT release: the :app :release asset-path points at asset.logseq.com,
-# which is wrong for a local Electron bundle, and the packaged electron.js is a
-# dev loader that reads .shadow-cljs/builds/electron/dev/out/cljs-runtime. The
-# Windows 0.1 build is a compile build too — see docs/BUILD.md.
-step "compile :app + :electron"
-( cd "$APP_DIR" && clojure -M:cljs compile app electron )
+# --- 3. static/ runtime deps + Electron ------------------------------------
+# static/package.json now exists (gulp copied it). Its deps are the app's
+# Electron runtime + the forge/electron/rebuild toolchain; the `electron`
+# package's postinstall downloads the Electron binary, and `install-app-deps`
+# (electron-builder, a postinstall here) rebuilds better-sqlite3 against
+# Electron's ABI.
+step "static/ deps + Electron $ELECTRON_VERSION"
+( cd "$APP_DIR/static" && yarn install --frozen-lockfile )
 
-# --- 4. native addon for the Electron ABI ---------------------------------
+# --- 4. compile ClojureScript ---------------------------------------------
+# Default `compile` (not `release`): the :app :release asset-path points at a
+# CDN, and the packaged electron.js is a dev loader that reads
+# .shadow-cljs/builds/electron/dev/out/cljs-runtime. The Windows 0.1 build is
+# a compile build too (docs/BUILD.md). Set KIP_CLJS=release to try optimized.
+step "cljs $CLJS_MODE :app + :electron"
+( cd "$APP_DIR" && clojure -M:cljs "$CLJS_MODE" app electron )
+
+# --- 5. belt-and-suspenders: better-sqlite3 for the Electron ABI ----------
+# static/'s postinstall (install-app-deps) usually handles this; re-run to be sure.
 step "rebuild better-sqlite3 for Electron $ELECTRON_VERSION"
-( cd "$APP_DIR/static" && npx "@electron/rebuild@4.0.1" -v "$ELECTRON_VERSION" -f --only better-sqlite3 )
+( cd "$APP_DIR/static" && npx --yes "@electron/rebuild@4.0.1" -v "$ELECTRON_VERSION" -f --only better-sqlite3 )
 
-# --- 5. assemble out/Kip-linux-x64/ --------------------------------------
+# --- 6. assemble out/Kip-linux-x64/ -------------------------------------
 step "assemble $OUT"
 DIST="$APP_DIR/static/node_modules/electron/dist"
-[[ -d "$DIST" ]] || { echo "electron dist missing at $DIST — run 'yarn' in app/ first"; exit 1; }
+[[ -d "$DIST" ]] || { echo "FATAL: electron dist missing at $DIST"; exit 1; }
 
 rm -rf "$OUT"
 mkdir -p "$OUT"
 cp -a "$DIST"/. "$OUT"/
-mv "$OUT/electron" "$OUT/kip"                       # the main binary
+mv "$OUT/electron" "$OUT/kip"
 chmod +x "$OUT/kip"
-rm -f "$OUT/resources/default_app.asar"             # so Electron loads resources/app
+rm -f "$OUT/resources/default_app.asar"
 
 APP="$OUT/resources/app"
 mkdir -p "$APP"
@@ -78,21 +93,22 @@ rsync -a --delete \
   --exclude='/node_modules/@electron/' \
   --exclude='/node_modules/electron-forge/' \
   --exclude='/node_modules/electron-builder/' \
+  --exclude='/node_modules/app-builder-bin/' \
   --exclude='/node_modules/typescript/' \
   --exclude='/node_modules/webpack/' \
   "$APP_DIR/static/" "$APP/"
 
-# electron.js is the shadow-cljs dev loader: it reads
-# <resources>/.shadow-cljs/builds/electron/dev/out/cljs-runtime at runtime.
-step "copy electron cljs-runtime"
-RT="$OUT/resources/.shadow-cljs/builds/electron/dev/out"
-mkdir -p "$RT"
-cp -a "$APP_DIR/.shadow-cljs/builds/electron/dev/out/cljs-runtime" "$RT/"
+# the dev electron.js loader reads <resources>/.shadow-cljs/.../cljs-runtime
+if [[ "$CLJS_MODE" == "compile" ]]; then
+  step "copy electron cljs-runtime (compile build)"
+  RT="$OUT/resources/.shadow-cljs/builds/electron/dev/out"
+  mkdir -p "$RT"
+  cp -a "$APP_DIR/.shadow-cljs/builds/electron/dev/out/cljs-runtime" "$RT/"
+fi
 
-# stamp the version from version.cljs
 VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$APP_DIR/src/main/frontend/version.cljs" | head -1)"
-node -e "const p='$APP/package.json',j=require(p);j.version='$VERSION';require('fs').writeFileSync(p,JSON.stringify(j,null,2))"
+node -e "const p='$APP/package.json',j=require(p);j.version='$VERSION';require('fs').writeFileSync(p,JSON.stringify(j,null,2)+'\n')"
 
-step "done — $OUT  (Kip $VERSION)"
-echo "run it:   $OUT/kip"
-echo "install:  app/packaging/linux/install.sh"
+step "done — $OUT  (Kip $VERSION, cljs:$CLJS_MODE)"
+echo "run:      $OUT/kip"
+echo "install:  bash $here/install.sh"

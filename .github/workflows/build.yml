@@ -1,0 +1,140 @@
+name: build
+
+# Builds runnable Kip app folders for Windows + Linux and uploads them as
+# artifacts. On a v* tag it also attaches them to a GitHub Release.
+#
+# Needs the retrieval-layer repo (JWE24-code/kip, private) checked out as a
+# sibling of app/ — set a fine-grained PAT with read access to it as the
+# KIP_SCRIPTS_TOKEN repository secret.
+#
+# electron-forge is NOT used (its packager is flaky on modern Node); each job
+# runs the platform's packaging/ script, which hand-assembles the folder the
+# same way docs/BUILD.md describes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      cljs_mode:
+        description: "cljs build (compile = safe, release = optimized/experimental)"
+        type: choice
+        options: [compile, release]
+        default: compile
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write   # for the Release on a tag
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows-x64
+            run: pwsh app/packaging/windows/build.ps1
+            folder: app/out/Kip-win32-x64
+          - os: ubuntu-latest
+            name: linux-x64
+            run: bash app/packaging/linux/build.sh
+            folder: app/out/Kip-linux-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      KIP_CLJS: ${{ github.event.inputs.cljs_mode || 'compile' }}
+
+    steps:
+      - name: Checkout kip-app
+        uses: actions/checkout@v4
+        with:
+          path: app
+          fetch-depth: 1
+
+      - name: Checkout kip (retrieval layer)
+        uses: actions/checkout@v4
+        with:
+          repository: JWE24-code/kip
+          token: ${{ secrets.KIP_SCRIPTS_TOKEN }}
+          path: _kip
+          fetch-depth: 1
+
+      - name: Place scripts/ next to app/
+        shell: bash
+        run: mv _kip/scripts ./scripts && rm -rf _kip
+
+      - name: Free disk space (linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /usr/local/.ghcup || true
+          df -h /
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: DeLaGuardo/setup-clojure@13
+        with:
+          cli: latest
+          github-token: ${{ github.token }}
+
+      - name: Enable Yarn
+        shell: bash
+        run: corepack enable || npm i -g yarn
+
+      - name: Build + assemble
+        shell: bash
+        run: ${{ matrix.run }}
+
+      - name: Package (linux)
+        if: runner.os == 'Linux'
+        run: |
+          v=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' app/src/main/frontend/version.cljs | head -1)
+          tar -C app/out -czf "Kip-$v-${{ matrix.name }}.tar.gz" Kip-linux-x64
+          echo "ASSET=Kip-$v-${{ matrix.name }}.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Package (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $v = (Select-String app/src/main/frontend/version.cljs -Pattern '\d+\.\d+\.\d+').Matches[0].Value
+          $asset = "Kip-$v-${{ matrix.name }}.zip"
+          Compress-Archive -Path app/out/Kip-win32-x64/* -DestinationPath $asset -CompressionLevel Optimal
+          "ASSET=$asset" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Smoke test (linux — the bundled retrieval layer runs under Electron-as-Node)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p /tmp/coop/.roost
+          ELECTRON_RUN_AS_NODE=1 KIP_COOP_ROOT=/tmp/coop \
+            app/out/Kip-linux-x64/kip app/out/Kip-linux-x64/resources/app/scripts/reminders.js list --json
+          ELECTRON_RUN_AS_NODE=1 KIP_COOP_ROOT=/tmp/coop \
+            app/out/Kip-linux-x64/kip app/out/Kip-linux-x64/resources/app/scripts/skills-list.js | head -c 200
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ env.ASSET }}
+          if-no-files-found: error
+
+      - name: Attach to Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" --notes "Automated build." --repo "${{ github.repository }}" 2>/dev/null || true
+      - name: Upload asset to Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: gh release upload "${{ github.ref_name }}" "${{ env.ASSET }}" --clobber --repo "${{ github.repository }}"
