@@ -39,7 +39,7 @@ if (-not (Test-Path "$ROOT\scripts")) { throw "no scripts\ next to app\ (checkou
 # --- 1. app deps -------------------------------------------------------------
 if ($env:SKIP_DEPS -ne '1') {
   Step 'app deps (app\)'
-  Push-Location $APP_DIR; yarn install --frozen-lockfile; Pop-Location
+  Push-Location $APP_DIR; yarn install --frozen-lockfile --network-timeout 600000; Pop-Location
   if ($LASTEXITCODE) { throw 'yarn (app) failed' }
 }
 
@@ -52,8 +52,10 @@ Pop-Location
 if ($LASTEXITCODE) { throw 'gulp build failed' }
 
 # --- 3. static\ runtime deps + Electron ----------------------------------
+# NOT --frozen-lockfile: static\package.json is regenerated from
+# resources\package.json each build and the committed static\yarn.lock can lag it.
 Step "static\ deps + Electron $ELECTRON_VERSION"
-Push-Location "$APP_DIR\static"; yarn install --frozen-lockfile; Pop-Location
+Push-Location "$APP_DIR\static"; yarn install --network-timeout 600000; Pop-Location
 if ($LASTEXITCODE) { throw 'yarn (static) failed' }
 
 # --- 4. compile ClojureScript ------------------------------------------

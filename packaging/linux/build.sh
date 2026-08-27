@@ -35,7 +35,7 @@ step () { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 # --- 1. app deps ---------------------------------------------------------------
 if [[ "${SKIP_DEPS:-}" != "1" ]]; then
   step "app deps (app/)"
-  ( cd "$APP_DIR" && yarn install --frozen-lockfile )
+  ( cd "$APP_DIR" && yarn install --frozen-lockfile --network-timeout 600000 )
 fi
 
 # --- 2. gulp: clean static/, sync resources + assets + bundled scripts + css --
@@ -52,8 +52,10 @@ step "gulp build"
 # package's postinstall downloads the Electron binary, and `install-app-deps`
 # (electron-builder, a postinstall here) rebuilds better-sqlite3 against
 # Electron's ABI.
+# NOT --frozen-lockfile: static/package.json is regenerated from
+# resources/package.json each build and the committed static/yarn.lock can lag it.
 step "static/ deps + Electron $ELECTRON_VERSION"
-( cd "$APP_DIR/static" && yarn install --frozen-lockfile )
+( cd "$APP_DIR/static" && yarn install --network-timeout 600000 )
 
 # --- 4. compile ClojureScript ---------------------------------------------
 # Default `compile` (not `release`): the :app :release asset-path points at a
