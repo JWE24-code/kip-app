@@ -605,7 +605,9 @@
   area. mod+shift+p does the same (see :ui/toggle-peck-mode)."
   [peck-mode?]
   [:div.kip-mode-switch
-   {:style {:position "sticky" :top 0 :zIndex 10
+   ;; zIndex 2: above scrolled content, but below Logseq's dropdown menus
+   ;; (--ls-z-index-level-1 = 9) — otherwise this bar covers the header "…" menu.
+   {:style {:position "sticky" :top 0 :zIndex 2
             :display "flex" :justifyContent "center"
             :padding "0.5rem 0"
             :background "var(--ls-primary-background-color)"
