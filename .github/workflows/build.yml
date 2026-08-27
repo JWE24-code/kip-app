@@ -35,7 +35,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
+          # windows-2022, not -latest: -latest ships VS 18 which node-gyp
+          # (11.x) doesn't recognise ("unknown version undefined"), so the
+          # better-sqlite3 native rebuild for the Electron ABI can't compile.
+          - os: windows-2022
             name: windows-x64
             run: pwsh app/packaging/windows/build.ps1
             folder: app/out/Kip-win32-x64
