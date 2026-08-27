@@ -28,10 +28,14 @@ $OUT     = "$APP_DIR\out\Kip-win32-x64"
 $CLJS    = if ($env:KIP_CLJS) { $env:KIP_CLJS } else { 'compile' }
 
 function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
-function RC($args) {
-  & robocopy @args | Out-Null
-  if ($LASTEXITCODE -ge 8) { throw "robocopy failed ($LASTEXITCODE): $($args -join ' ')" }
+function RC {
+  param([Parameter(Mandatory)][string]$Src,
+        [Parameter(Mandatory)][string]$Dst,
+        [string[]]$Flags = @())
+  & robocopy $Src $Dst @Flags /NFL /NDL /NJH /NJS /NP | Out-Null
+  $code = $LASTEXITCODE
   $global:LASTEXITCODE = 0
+  if ($code -ge 8) { throw "robocopy '$Src' -> '$Dst' failed (exit $code)" }
 }
 
 if (-not (Test-Path "$ROOT\scripts")) { throw "no scripts\ next to app\ (checkout the kip repo there)" }
@@ -87,32 +91,33 @@ if (-not (Test-Path "$DIST\electron.exe")) { throw "electron dist missing at $DI
 
 if (Test-Path $OUT) { Remove-Item $OUT -Recurse -Force }
 New-Item -ItemType Directory -Force $OUT | Out-Null
-RC @($DIST, $OUT, '/E', '/NFL', '/NDL', '/NJH', '/NJS', '/NP')
+RC "$DIST" "$OUT" @('/E')
 Rename-Item "$OUT\electron.exe" 'Kip.exe'
 Remove-Item "$OUT\resources\default_app.asar" -Force -ErrorAction SilentlyContinue
 
 $APP = "$OUT\resources\app"
 New-Item -ItemType Directory -Force $APP | Out-Null
-RC @("$APP_DIR\static", $APP, '/MIR', '/XF', '*.map',
-     '/XD',
-       "$APP_DIR\static\out",
-       "$APP_DIR\static\.shadow-cljs",
-       "$APP_DIR\static\node_modules\electron",
-       "$APP_DIR\static\node_modules\@electron-forge",
-       "$APP_DIR\static\node_modules\@electron",
-       "$APP_DIR\static\node_modules\electron-forge",
-       "$APP_DIR\static\node_modules\electron-builder",
-       "$APP_DIR\static\node_modules\app-builder-bin",
-       "$APP_DIR\static\node_modules\typescript",
-       "$APP_DIR\static\node_modules\webpack",
-     '/NFL', '/NDL', '/NJH', '/NJS', '/NP')
+RC "$APP_DIR\static" "$APP" @(
+  '/MIR', '/XF', '*.map',
+  '/XD',
+    "$APP_DIR\static\out",
+    "$APP_DIR\static\.shadow-cljs",
+    "$APP_DIR\static\node_modules\electron",
+    "$APP_DIR\static\node_modules\@electron-forge",
+    "$APP_DIR\static\node_modules\@electron",
+    "$APP_DIR\static\node_modules\electron-forge",
+    "$APP_DIR\static\node_modules\electron-builder",
+    "$APP_DIR\static\node_modules\app-builder-bin",
+    "$APP_DIR\static\node_modules\typescript",
+    "$APP_DIR\static\node_modules\webpack"
+)
 Remove-Item "$APP\tests.js","$APP\gen-malli-kondo-config.js" -Force -ErrorAction SilentlyContinue
 
 if ($CLJS -eq 'compile') {
   Step 'copy electron cljs-runtime (compile build)'
   $RT = "$OUT\resources\.shadow-cljs\builds\electron\dev\out\cljs-runtime"
   New-Item -ItemType Directory -Force (Split-Path $RT) | Out-Null
-  RC @("$APP_DIR\.shadow-cljs\builds\electron\dev\out\cljs-runtime", $RT, '/E', '/NFL', '/NDL', '/NJH', '/NJS', '/NP')
+  RC "$APP_DIR\.shadow-cljs\builds\electron\dev\out\cljs-runtime" "$RT" @('/E')
 }
 
 $VERSION = (Select-String -Path "$APP_DIR\src\main\frontend\version.cljs" -Pattern '\d+\.\d+\.\d+').Matches[0].Value
