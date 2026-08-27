@@ -52,11 +52,21 @@ Pop-Location
 if ($LASTEXITCODE) { throw 'gulp build failed' }
 
 # --- 3. static\ runtime deps + Electron ----------------------------------
+# --ignore-scripts: skip every install/postinstall — several static\ deps
+# (electron-deeplink, canvas, exe-icon-extractor) run node-gyp on install and
+# fail on a bare CI runner (their bundled node-pre-gyp can't spawn under Node
+# 22, or need VS detection that doesn't work). We don't need their native
+# parts: electron-deeplink's binding is macOS-only, canvas is optional, and
+# better-sqlite3 is rebuilt explicitly below. Electron's own binary download
+# (its postinstall) is re-run by hand.
 # NOT --frozen-lockfile: static\package.json is regenerated from
 # resources\package.json each build and the committed static\yarn.lock can lag it.
-Step "static\ deps + Electron $ELECTRON_VERSION"
-Push-Location "$APP_DIR\static"; yarn install --network-timeout 600000; Pop-Location
+Step "static\ deps"
+Push-Location "$APP_DIR\static"; yarn install --ignore-scripts --network-timeout 600000; Pop-Location
 if ($LASTEXITCODE) { throw 'yarn (static) failed' }
+Step "download Electron $ELECTRON_VERSION"
+Push-Location "$APP_DIR\static"; node node_modules/electron/install.js; Pop-Location
+if ($LASTEXITCODE) { throw 'electron download failed' }
 
 # --- 4. compile ClojureScript ------------------------------------------
 Step "cljs $CLJS :app + :electron"

@@ -52,10 +52,19 @@ step "gulp build"
 # package's postinstall downloads the Electron binary, and `install-app-deps`
 # (electron-builder, a postinstall here) rebuilds better-sqlite3 against
 # Electron's ABI.
+# --ignore-scripts: skip every install/postinstall — several static/ deps
+# (electron-deeplink, canvas, exe-icon-extractor) run node-gyp on install and
+# fail on a bare CI runner (their bundled node-pre-gyp can't spawn under Node
+# 22, or need a toolchain we don't have). We don't need their native parts:
+# electron-deeplink's binding is macOS-only, canvas is optional, and
+# better-sqlite3 is rebuilt explicitly below. Electron's own binary download
+# (its postinstall) is re-run by hand.
 # NOT --frozen-lockfile: static/package.json is regenerated from
 # resources/package.json each build and the committed static/yarn.lock can lag it.
-step "static/ deps + Electron $ELECTRON_VERSION"
-( cd "$APP_DIR/static" && yarn install --network-timeout 600000 )
+step "static/ deps"
+( cd "$APP_DIR/static" && yarn install --ignore-scripts --network-timeout 600000 )
+step "download Electron $ELECTRON_VERSION"
+( cd "$APP_DIR/static" && node node_modules/electron/install.js )
 
 # --- 4. compile ClojureScript ---------------------------------------------
 # Default `compile` (not `release`): the :app :release asset-path points at a
