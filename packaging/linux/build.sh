@@ -61,7 +61,7 @@ step "static/ deps + Electron $ELECTRON_VERSION"
 # .shadow-cljs/builds/electron/dev/out/cljs-runtime. The Windows 0.1 build is
 # a compile build too (docs/BUILD.md). Set KIP_CLJS=release to try optimized.
 step "cljs $CLJS_MODE :app + :electron"
-( cd "$APP_DIR" && clojure -M:cljs "$CLJS_MODE" app electron )
+( cd "$APP_DIR" && clojure -J-Xmx5g -M:cljs "$CLJS_MODE" app electron )
 
 # --- 5. belt-and-suspenders: better-sqlite3 for the Electron ABI ----------
 # static/'s postinstall (install-app-deps) usually handles this; re-run to be sure.

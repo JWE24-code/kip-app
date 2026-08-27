@@ -58,7 +58,7 @@ if ($LASTEXITCODE) { throw 'yarn (static) failed' }
 
 # --- 4. compile ClojureScript ------------------------------------------
 Step "cljs $CLJS :app + :electron"
-Push-Location $APP_DIR; clojure -M:cljs $CLJS app electron; Pop-Location
+Push-Location $APP_DIR; clojure -J-Xmx5g -M:cljs $CLJS app electron; Pop-Location
 if ($LASTEXITCODE) { throw "cljs $CLJS failed" }
 
 # --- 5. better-sqlite3 for the Electron ABI ---------------------------

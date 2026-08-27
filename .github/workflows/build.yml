@@ -75,7 +75,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - uses: actions/setup-java@v4
         with:
@@ -87,9 +87,9 @@ jobs:
           cli: latest
           github-token: ${{ github.token }}
 
-      - name: Enable Yarn
+      - name: Install Yarn 1 (classic — this repo's yarn.lock is v1)
         shell: bash
-        run: corepack enable || npm i -g yarn
+        run: npm install -g yarn@1.22.22
 
       - name: Build + assemble
         shell: bash
