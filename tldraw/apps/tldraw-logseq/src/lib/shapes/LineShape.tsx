@@ -179,7 +179,8 @@ export class LineShape extends TLLineShape<LineShapeProps> {
             start.point,
             end.point,
             decorations?.start,
-            decorations?.end
+            decorations?.end,
+            !!start.bindingId && !!end.bindingId
           )}
           strokeDasharray={isLocked ? '8 2' : 'undefined'}
         />
@@ -228,6 +229,7 @@ export class LineShape extends TLLineShape<LineShapeProps> {
           end={end.point}
           decorationStart={decorations?.start}
           decorationEnd={decorations?.end}
+          curved={!!start.bindingId && !!end.bindingId}
         />
         {preview && (
           <>

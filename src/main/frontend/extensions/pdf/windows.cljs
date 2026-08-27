@@ -88,7 +88,7 @@
                       theme-mode (:ui/theme @state/state)]
                   (set! (.-href base) js/location.href)
                   (.appendChild (.-head doc) base)
-                  (set! (.-title doc) (or (:filename pdf-current) "Logseq"))
+                  (set! (.-title doc) (or (:filename pdf-current) "Kip"))
                   (set! (.-dataset doc-el) -theme (str theme-mode))
                   (resolve-classes! doc)
                   (resolve-styles! doc)

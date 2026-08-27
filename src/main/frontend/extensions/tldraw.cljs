@@ -10,6 +10,7 @@
             [frontend.db :as db]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.mindmap :as mindmap]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.history :as history]
@@ -166,6 +167,9 @@
         :on-blur (fn [e]
                    (when (#{"INPUT" "TEXTAREA"} (.-tagName (gobj/get e "target")))
                      (state/clear-edit!)))
+        ;; keyboard mindmap mode — Tab/Enter/arrows over a single selected node.
+        ;; No-op (and passes the event through) unless mindmap conditions hold.
+        :on-key-down mindmap/handle-key-down
         ;; wheel -> overscroll may cause browser navigation
         :on-wheel util/stop-propagation}
 

@@ -4,10 +4,10 @@
     <img src="https://user-images.githubusercontent.com/25513724/220608753-f33db466-af72-4611-b603-411440c15ed0.png?sanatize=true" height="173"/></a>
 </p>
 
-<h1 align="center"> Logseq OG </h1>
+<h1 align="center"> Kip </h1>
 
 <h4 align="center">
-    A privacy-first, open-source platform for knowledge management and collaboration
+    A chicken/farm-metaphor knowledge base, built on a fork of <a href="https://github.com/logseq/og">logseq/og</a>
 </h4>
 
 <div align="center">

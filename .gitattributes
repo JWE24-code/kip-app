@@ -1,0 +1,6 @@
+# Kip: keep shell scripts + the .desktop entry LF regardless of platform —
+# they run on Linux (packaging/linux/) and CRLF breaks shebangs / desktop parsing.
+packaging/linux/*.sh   text eol=lf
+packaging/linux/kip.sh text eol=lf
+packaging/linux/kip.desktop text eol=lf
+packaging/linux/PKGBUILD    text eol=lf

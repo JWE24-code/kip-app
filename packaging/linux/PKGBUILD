@@ -1,0 +1,46 @@
+# Maintainer: you
+#
+# System package for Kip, built from this local repo checkout (Kip isn't
+# published anywhere). Run makepkg from this directory:
+#
+#   cd app/packaging/linux && makepkg -si
+#
+# Installs to /opt/kip with a /usr/bin/kip launcher. For a no-root install
+# into ~/.local instead, use ./install.sh.
+
+pkgname=kip
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Pecking-first knowledge base — a Logseq fork with an LLM retrieval layer"
+arch=('x86_64')
+url="https://github.com/logseq/og"
+license=('AGPL3')
+depends=('gtk3' 'nss' 'alsa-lib' 'libxss' 'libnotify')
+makedepends=('nodejs' 'npm' 'yarn' 'jdk-openjdk' 'clojure' 'rsync' 'git')
+options=('!strip' '!debug')
+
+# repo root = three levels up from this PKGBUILD (app/packaging/linux/)
+_repo="$(cd "$startdir/../../.." && pwd)"
+
+pkgver() {
+  grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$_repo/app/src/main/frontend/version.cljs" | head -1
+}
+
+build() {
+  cd "$_repo/app"
+  bash packaging/linux/build.sh
+}
+
+package() {
+  install -d "$pkgdir/opt/kip"
+  cp -a "$_repo/app/out/Kip-linux-x64/." "$pkgdir/opt/kip/"
+
+  install -Dm755 "$_repo/app/packaging/linux/kip.sh" "$pkgdir/usr/bin/kip"
+  sed -i 's|/opt/kip|/opt/kip|' "$pkgdir/usr/bin/kip"
+
+  install -Dm644 "$_repo/app/packaging/linux/kip.desktop" "$pkgdir/usr/share/applications/kip.desktop"
+  install -Dm644 "$pkgdir/opt/kip/resources/app/icon.png" \
+                 "$pkgdir/usr/share/icons/hicolor/512x512/apps/kip.png" 2>/dev/null || \
+  install -Dm644 "$pkgdir/opt/kip/resources/app/icons/logseq.png" \
+                 "$pkgdir/usr/share/icons/hicolor/512x512/apps/kip.png"
+}

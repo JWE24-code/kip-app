@@ -112,6 +112,10 @@
                                               true)
      :ui/scrolling?                         false
      :document/mode?                        document-mode?
+     ;; Kip is pecking-first: the app lands in Peck, and Documents (the normal
+     ;; editor/journal view) is a mode you toggle into with mod+shift+p. Not
+     ;; persisted — every launch starts in Peck.
+     :ui/peck-mode?                         true
 
      :config                                {}
      :block/component-editing-mode?         false
@@ -1506,6 +1510,18 @@ Similar to re-frame subscriptions"
   (let [mode (document-mode?)]
     (set-state! :document/mode? (not mode))
     (storage/set :document/mode? (not mode))))
+
+(defn peck-mode?
+  []
+  (get @state :ui/peck-mode?))
+
+(defn set-peck-mode!
+  [value]
+  (set-state! :ui/peck-mode? (boolean value)))
+
+(defn toggle-peck-mode!
+  []
+  (set-state! :ui/peck-mode? (not (peck-mode?))))
 
 (defn shortcut-tooltip-enabled?
   []

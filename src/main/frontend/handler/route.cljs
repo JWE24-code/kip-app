@@ -103,7 +103,7 @@
   [name path-params]
   (case name
     :home
-    "Logseq"
+    "Kip"
     :whiteboards
     (t :whiteboards)
     :repos
@@ -135,7 +135,7 @@
           "Page no longer exists!!")
         (let [page (db/pull [:block/name (util/page-name-sanity-lc name)])]
           (or (util/get-page-original-name page)
-              "Logseq"))))
+              "Kip"))))
     :whiteboard
     (let [name (:name path-params)
           block? (util/uuid-string? name)]
@@ -154,8 +154,8 @@
     :settings
     "Settings"
     :import
-    "Import data into Logseq"
-    "Logseq"))
+    "Import data into Kip"
+    "Kip"))
 
 (defn update-page-title!
   [route]
@@ -179,6 +179,9 @@
   [route]
   (let [route route]
     (swap! state/state assoc :route-match route)
+    ;; Kip is pecking-first: :home *is* the Peck screen, and opening any other
+    ;; route (a page, a whiteboard, a citation click) drops you into Documents.
+    (state/set-peck-mode! (= :home (get-in route [:data :name])))
     (update-page-title! route)
     (update-page-label! route)
     (if-let [anchor (get-in route [:query-params :anchor])]

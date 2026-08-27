@@ -2,6 +2,7 @@
   (:require [cljs-drag-n-drop.core :as dnd]
             [clojure.string :as string]
             [frontend.version :refer [version]]
+            [frontend.components.chat :as chat]
             [frontend.components.find-in-page :as find-in-page]
             [frontend.components.header :as header]
             [frontend.components.journal :as journal]
@@ -303,33 +304,40 @@
   (and (util/sm-breakpoint?)
        (state/toggle-left-sidebar!)))
 
-(defn create-dropdown
-  []
-  (ui/dropdown-with-links
-   (fn [{:keys [toggle-fn]}]
-     [:button#create-button
-      {:on-click toggle-fn}
-      [:<>
-       (ui/icon "plus" {:font? "true"})
-       [:span.mx-1 (t :left-side-bar/create)]]])
-   (->>
-    [{:title (t :left-side-bar/new-page)
-      :class "new-page-link"
-      :options {:on-click #(do (close-sidebar-on-mobile!)
-                               (state/pub-event! [:go/search]))
-                :shortcut (ui/keyboard-shortcut-from-config :go/search)}
-      :icon (ui/type-icon {:name "new-page"
-                           :class "highlight"
-                           :extension? true})}
-     {:title (t :left-side-bar/new-whiteboard)
-      :class "new-whiteboard-link"
-      :options {:on-click #(do (close-sidebar-on-mobile!)
-                               (whiteboard-handler/create-new-whiteboard-and-redirect!))
-                :shortcut (ui/keyboard-shortcut-from-config :editor/new-whiteboard)}
-      :icon (ui/type-icon {:name "new-whiteboard"
-                           :class "highlight"
-                           :extension? true})}])
-   {}))
+(rum/defcs new-page-modal
+  < rum/reactive
+  (rum/local "" ::title)
+  [state]
+  (let [*title (get state ::title)
+        submit! (fn []
+                  (let [title (string/trim @*title)]
+                    (when-not (string/blank? title)
+                      (state/close-modal!)
+                      ;; :create-first-block? false -> the page opens empty
+                      ;; (a "Click here to edit…" placeholder) rather than a
+                      ;; pre-inserted empty bullet.
+                      (page-handler/create! title {:redirect? true
+                                                   :create-first-block? false}))))]
+    [:div.w-full.mx-auto {:class "md:max-w-[480px]"}
+     [:h2#modal-headline.text-xl.mb-3 (t :left-side-bar/new-page)]
+     [:input.form-input.w-full.text-sm
+      {:auto-focus true
+       :placeholder "Page title…"
+       :value @*title
+       :on-change #(reset! *title (util/evalue %))
+       :on-key-down (fn [e]
+                      (when (= "Enter" (.-key e))
+                        (.preventDefault e)
+                        (submit!)))}]
+     [:div.mt-3.flex.justify-end
+      (ui/button {:on-click submit!
+                  :disabled (string/blank? (string/trim @*title))}
+                 "Create")]]))
+
+(defn show-new-page-modal!
+  [_e]
+  (close-sidebar-on-mobile!)
+  (state/set-modal! new-page-modal))
 
 (rum/defc ^:large-vars/cleanup-todo sidebar-nav
   [route-match close-modal-fn left-sidebar-open? enable-whiteboards? srs-open?
@@ -416,43 +424,53 @@
         (repo/repos-dropdown)
 
         [:div.nav-header.flex.flex-col.mt-2
-         (let [page (:page default-home)]
-           (if (and page (not (state/enable-journals? (state/get-current-repo))))
-             (sidebar-item
-              {:class "home-nav"
-               :title page
-               :on-click-handler route-handler/redirect-to-home!
-               :active (and (not srs-open?)
-                            (= route-name :page)
-                            (= page (get-in route-match [:path-params :name])))
-               :icon "home"
-               :shortcut :go/home})
-             (sidebar-item
-              {:class "journals-nav"
-               :active (and (not srs-open?)
-                            (or (= route-name :all-journals) (= route-name :home)))
-               :title (t :left-side-bar/journals)
-               :on-click-handler (fn [e]
-                                   (if (gobj/get e "shiftKey")
-                                     (route-handler/sidebar-journals!)
-                                     (route-handler/go-to-journals!)))
-               :icon "calendar"
-               :shortcut :go/journals})))
-
-         (when enable-whiteboards?
+         (nav-content-item
+          "Grains"
+          {:class "grains-nav"}
+          [:<>
            (sidebar-item
-            {:class "whiteboard"
-             :title (t :right-side-bar/whiteboards)
-             :href (rfe/href :whiteboards)
-             :on-click-handler (fn [_e] (whiteboard-handler/onboarding-show))
-             :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
-             :icon "whiteboard"
-             :icon-extension? true
-             :shortcut :go/whiteboards}))
+            {:class "new-page-nav"
+             :title (t :left-side-bar/new-page)
+             :on-click-handler show-new-page-modal!
+             :icon "file-plus"})
 
-         (when (state/enable-flashcards? (state/get-current-repo))
-           [:div.flashcards-nav
-            (flashcards srs-open?)])
+           (let [page (:page default-home)]
+             (if (and page (not (state/enable-journals? (state/get-current-repo))))
+               (sidebar-item
+                {:class "home-nav"
+                 :title page
+                 :on-click-handler route-handler/redirect-to-home!
+                 :active (and (not srs-open?)
+                              (= route-name :page)
+                              (= page (get-in route-match [:path-params :name])))
+                 :icon "home"
+                 :shortcut :go/home})
+               (sidebar-item
+                {:class "journals-nav"
+                 :active (and (not srs-open?)
+                              (or (= route-name :all-journals) (= route-name :home)))
+                 :title (t :left-side-bar/journals)
+                 :on-click-handler (fn [e]
+                                     (if (gobj/get e "shiftKey")
+                                       (route-handler/sidebar-journals!)
+                                       (route-handler/go-to-journals!)))
+                 :icon "calendar"
+                 :shortcut :go/journals})))
+
+           (when enable-whiteboards?
+             (sidebar-item
+              {:class "whiteboard"
+               :title (t :right-side-bar/whiteboards)
+               :href (rfe/href :whiteboards)
+               :on-click-handler (fn [_e] (whiteboard-handler/onboarding-show))
+               :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
+               :icon "whiteboard"
+               :icon-extension? true
+               :shortcut :go/whiteboards}))
+
+           (when (state/enable-flashcards? (state/get-current-repo))
+             [:div.flashcards-nav
+              (flashcards srs-open?)])])
 
          (sidebar-item
           {:class "graph-view-nav"
@@ -474,19 +492,7 @@
         (favorites t)
 
         (when (not config/publishing?)
-          (recent-pages t))]
-
-       [:footer.px-2 {:class "create"}
-        (when-not config/publishing?
-          (if enable-whiteboards?
-            (create-dropdown)
-            [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.new-page-link
-             {:on-click (fn []
-                          (and (util/sm-breakpoint?)
-                               (state/toggle-left-sidebar!))
-                          (state/pub-event! [:go/search]))}
-             (ui/icon "circle-plus" {:style {:font-size 20}})
-             [:span.flex-1 (t :right-side-bar/new-page)]]))]]]
+          (recent-pages t))]]]
      [:span.shade-mask
       (cond-> {:on-click close-fn}
         (number? offset-ratio)
@@ -594,6 +600,29 @@
     {:style {:bottom (+ @util/keyboard-height 45)}}
     (footer/audio-record-cp)]])
 
+(rum/defc peck-mode-switch < rum/static
+  "The [ Peck | Documents ] channel switch — sticky at the top of the content
+  area. mod+shift+p does the same (see :ui/toggle-peck-mode)."
+  [peck-mode?]
+  [:div.kip-mode-switch
+   {:style {:position "sticky" :top 0 :zIndex 10
+            :display "flex" :justifyContent "center"
+            :padding "0.5rem 0"
+            :background "var(--ls-primary-background-color)"
+            :borderBottom "1px solid var(--ls-border-color)"}}
+   [:div {:style {:display "inline-flex" :borderRadius "7px" :overflow "hidden"
+                  :border "1px solid var(--ls-border-color)" :fontSize "0.8rem"}}
+    (for [[mode label] [[true "Peck"] [false "Documents"]]]
+      (let [on? (= (boolean mode) (boolean peck-mode?))]
+        [:button.kip-mode-switch-btn
+         {:key (str mode)
+          :on-click #(state/set-peck-mode! mode)
+          :style {:padding "0.3rem 0.95rem" :border "none" :cursor "pointer"
+                  :fontWeight (if on? 600 400)
+                  :color (if on? "var(--ls-active-primary-color)" "var(--ls-secondary-text-color)")
+                  :background (if on? "var(--ls-tertiary-background-color)" "transparent")}}
+         label]))]])
+
 (rum/defc main <
   {:did-mount (fn [state]
                 (when-let [element (gdom/getElement "app-container")]
@@ -612,12 +641,22 @@
                    (when-let [el (gdom/getElement "app-container")]
                      (dnd/unsubscribe! el :upload-files))
                    state)}
-  [{:keys [route-match margin-less-pages? route-name indexeddb-support? db-restoring? main-content show-action-bar? show-recording-bar?]}]
+  [{:keys [route-match margin-less-pages? route-name indexeddb-support? db-restoring? main-content raw-peck-mode? show-action-bar? show-recording-bar?]}]
   (let [left-sidebar-open?   (state/sub :ui/left-sidebar-open?)
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
                                   (not config/publishing?)
                                   (= :home route-name))
-        margin-less-pages?   (or (and (mobile-util/native-platform?) onboarding-and-home?) margin-less-pages?)]
+        margin-less-pages?   (or (and (mobile-util/native-platform?) onboarding-and-home?) margin-less-pages?)
+        ;; Kip is pecking-first: Peck fills the centre unless you toggle into
+        ;; Documents (mod+shift+p / the switch). Electron + a real graph only.
+        ;; raw-peck-mode? is subscribed in the reactive parent so a toggle
+        ;; re-renders this subtree.
+        peck-available?      (and (util/electron?)
+                                  (not (mobile-util/native-platform?))
+                                  (state/get-current-repo)
+                                  (not onboarding-and-home?)
+                                  (not margin-less-pages?))
+        peck-mode?           (and peck-available? raw-peck-mode?)]
     [:div#main-container.cp__sidebar-main-layout.flex-1.flex
      {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])}
 
@@ -636,13 +675,21 @@
       [:div.cp__sidebar-main-content
        {:data-is-margin-less-pages margin-less-pages?
         :data-is-full-width        (or margin-less-pages?
-                                       (contains? #{:all-files :all-pages :my-publishing} route-name))}
+                                       (contains? #{:all-files :all-pages :my-publishing} route-name))
+        ;; Peck fills the remaining height exactly (switch bar + Peck, no
+        ;; viewport-math guess) so the panel itself never gets a stray scroll.
+        :style                     (when peck-mode?
+                                     {:display "flex" :flex-direction "column"
+                                      :min-height 0 :overflow "hidden"})}
 
        (when show-recording-bar?
          (recording-bar))
 
        (mobile-bar)
        (footer/footer)
+
+       (when peck-available?
+         (peck-mode-switch peck-mode?))
 
        (when (and (not (mobile-util/native-platform?))
                   (contains? #{:page :home} route-name))
@@ -656,6 +703,9 @@
          [:div.mt-20
           [:div.ls-center
            (ui/loading)]]
+
+         peck-mode?
+         (chat/peck-main)
 
          :else
          [:div
@@ -742,9 +792,14 @@
          (seq latest-journals)
          (journal/journals latest-journals)
 
-         ;; FIXME: why will this happen?
+         ;; Kip is pecking-first — the :home route is normally the Peck view
+         ;; (see peck-mode? in `main`). This branch only shows in Documents mode
+         ;; with an empty graph.
          :else
-         [:div])])))
+         [:div.text-sm.opacity-50.text-center {:style {:padding "3rem 1rem"}}
+          "No journals yet. Press "
+          [:code (if util/mac? "⌘1" "Ctrl+1")]
+          " for Peck, or drop a file in the graph's eggs/ folder and run Hatch."])])))
 
 (defn- hide-context-menu-and-clear-selection
   [e]
@@ -845,7 +900,7 @@
          [:span.flex.items-center.pr-2.opacity-40 (ui/icon icon {:size 20})]
          [:strong.font-normal title]]))]
    [:div.ft.pl-11.pb-3
-    [:span.opacity.text-xs.opacity-30 "Logseq " version]]])
+    [:span.opacity.text-xs.opacity-30 "Kip " version]]])
 
 (rum/defc help-button < rum/reactive
   []
@@ -970,6 +1025,7 @@
                :light?              light?
                :db-restoring?       db-restoring?
                :main-content        main-content
+               :raw-peck-mode?      (state/sub :ui/peck-mode?)
                :show-action-bar?    show-action-bar?
                :show-recording-bar? show-recording-bar?})]
 

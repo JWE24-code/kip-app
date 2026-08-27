@@ -2,16 +2,30 @@ const path = require('path')
 const fs = require('fs')
 
 module.exports = {
+  // electron-deeplink runs `node-gyp rebuild` unconditionally on every platform,
+  // but its native binding is only loaded on macOS (pure-JS stub elsewhere). On
+  // Windows without an MSVC toolchain that rebuild fails and blocks launch, so
+  // skip it — no behavior change on Windows/Linux. See repo README.
+  rebuildConfig: {
+    ignoreModules: ['electron-deeplink']
+  },
   packagerConfig: {
-    name: 'Logseq-OG',
+    name: 'Kip',
     icon: './icons/logseq_big_sur.icns',
     buildVersion: "92",
-    appBundleId: "com.logseq.logseq-og",
+    appBundleId: "app.kip",
+    // Kip's coop-maintenance scripts (electron.wiki spawns them via
+    // ELECTRON_RUN_AS_NODE) ship at <app>/scripts, gulp-synced into
+    // static/scripts with a pure-JS node_modules. `prune: false` keeps that
+    // nested node_modules — the dependency-graph pruner would strip it.
+    // (The 0.1 build was assembled by hand; see BUILD.md — electron-forge's
+    // packager currently aborts silently on this machine's Node.)
+    prune: false,
     protocols: [
       {
-        "protocol": "logseq-og",
-        "name": "logseq-og",
-        "schemes": "logseq-og"
+        "protocol": "kip",
+        "name": "kip",
+        "schemes": "kip"
       }
     ],
     osxSign: {
@@ -32,7 +46,7 @@ module.exports = {
     {
       'name': '@electron-forge/maker-squirrel',
       'config': {
-        'name': 'Logseq-OG',
+        'name': 'Kip',
         'setupIcon': './icons/logseq.ico',
         'loadingGif': './icons/installing.gif',
         'certificateFile': process.env.CODE_SIGN_CERTIFICATE_FILE,
@@ -40,43 +54,17 @@ module.exports = {
         "rfc3161TimeStampServer": "http://timestamp.digicert.com"
       }
     },
-    {
-      'name': '@electron-forge/maker-wix',
-      'config': {
-        name: 'Logseq-OG',
-        icon: path.join(__dirname, './icons/logseq.ico'),
-        language: 1033,
-        manufacturer: 'Logseq',
-        appUserModelId: 'com.logseq.logseq-og',
-        upgradeCode: "fefe66fc-d1dd-445e-aa76-12c593d13a4d",
-        ui: {
-          enabled: false,
-          chooseDirectory: true,
-          images: {
-            banner: path.join(__dirname, './windows/banner.jpg'),
-            background: path.join(__dirname, './windows/background.jpg')
-          },
-        },
-        // Standard WiX template appends the unsightly "(Machine - WSI)" to the name, so use our own template
-        beforeCreate: (msiCreator) => {
-          return new Promise((resolve, reject) => {
-            fs.readFile(path.join(__dirname,"./windows/wix.xml"), "utf8" , (err, content) => {
-                if (err) {
-                    reject (err);
-                }
-                msiCreator.wixTemplate = content;
-                resolve();
-            });
-          });
-        }
-      }
-    },
+    // WiX MSI maker removed for the 0.1 local build: its transitive native dep
+    // (@bitdisaster/exe-icon-extractor) needs an MSVC toolchain to build here,
+    // and `electron-forge package` (the runnable-folder target) never runs
+    // makers anyway. To build an MSI later: `yarn add -D @electron-forge/maker-wix`
+    // on a machine with the WiX Toolset + MSVC, and restore this block from git.
     {
       name: '@electron-forge/maker-dmg',
       config: {
         format: 'ULFO',
         icon: './icons/logseq_big_sur.icns',
-        name: 'Logseq-OG'
+        name: 'Kip'
       }
     },
     {
@@ -88,7 +76,7 @@ module.exports = {
       name: 'electron-forge-maker-appimage',
       platforms: ['linux'],
       config: {
-        mimeType: ["x-scheme-handler/logseq-og"]
+        mimeType: ["x-scheme-handler/kip"]
       }
     }
   ],

@@ -6,6 +6,8 @@
             [frontend.components.assets :as assets]
             [frontend.components.conversion :as conversion-component]
             [frontend.components.file-sync :as fs]
+            [frontend.components.llm-settings :as llm-settings]
+            [frontend.components.skills-settings :as skills-settings]
             [frontend.components.plugins :as plugins]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
@@ -1166,6 +1168,12 @@
                (when (util/electron?)
                  [:version-control "git" (t :settings-page/tab-version-control) (ui/icon "history")])
 
+               (when (util/electron?)
+                 [:llm "llm" (t :settings-page/tab-llm) (ui/icon "message-2")])
+
+               (when (util/electron?)
+                 [:skills "skills" (t :settings-page/tab-skills) (ui/icon "tool")])
+
                ;; (when (util/electron?)
                ;;   [:assets "assets" (t :settings-page/tab-assets) (ui/icon "box")])
 
@@ -1210,6 +1218,12 @@
 
          :version-control
          (settings-git)
+
+         :llm
+         (llm-settings/settings-content)
+
+         :skills
+         (skills-settings/settings-content)
 
          :assets
          (assets/settings-content)

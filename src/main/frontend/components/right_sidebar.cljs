@@ -2,6 +2,10 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.components.block :as block]
+            [frontend.components.chat :as chat]
+            [frontend.components.exports :as exports]
+            [frontend.components.reminders :as reminders]
+            [frontend.components.telemetry :as telemetry]
             [frontend.components.onboarding :as onboarding]
             [frontend.components.page :as page]
             [frontend.components.shortcut-help :as shortcut-help]
@@ -180,6 +184,22 @@
     :shortcut-settings
     [[:.flex.items-center (ui/icon "command" {:class "text-md mr-2"}) (t :help/shortcuts)]
      (shortcut-settings)]
+
+    :chat
+    [[:.flex.items-center (ui/icon "message-2" {:class "text-md mr-2"}) "Peck"]
+     (chat/chat-panel)]
+
+    :telemetry
+    [[:.flex.items-center (ui/icon "activity" {:class "text-md mr-2"}) "Hatch telemetry"]
+     (telemetry/telemetry-panel)]
+
+    :exports
+    [[:.flex.items-center (ui/icon "files" {:class "text-md mr-2"}) "Exports"]
+     (exports/exports-panel)]
+
+    :reminders
+    [[:.flex.items-center (ui/icon "bell" {:class "text-md mr-2"}) "Reminders"]
+     (reminders/reminders-panel)]
 
     ["" [:span]]))
 
@@ -434,10 +454,11 @@
       {:on-drag-over util/stop}
       [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center
        [:div.cp__right-sidebar-settings.hide-scrollbar.gap-1 {:key "right-sidebar-settings"}
-        [:div.text-sm
-         [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                                     (state/sidebar-add-block! repo "contents" :contents))}
-          (t :right-side-bar/contents)]]
+        (when (util/electron?)
+          [:div.text-sm
+           [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+                                                                       (state/sidebar-add-block! repo "exports" :exports))}
+            (t :right-side-bar/exports)]])
 
         [:div.text-sm
          [:button.button.cp__right-sidebar-settings-btn {:on-click (fn []
@@ -471,9 +492,11 @@
 (rum/defcs sidebar < rum/reactive
   [state]
   (let [blocks (state/sub-right-sidebar-blocks)
-        blocks (if (empty? blocks)
-                 [[(state/get-current-repo) "contents" :contents nil]]
-                 blocks)
+        default-block [(state/get-current-repo)
+                       (if (util/electron?) "exports" "contents")
+                       (if (util/electron?) :exports :contents)
+                       nil]
+        blocks (if (empty? blocks) [default-block] blocks)
         sidebar-open? (state/sub :ui/sidebar-open?)
         width (state/sub :ui/sidebar-width)
         repo (state/sub :git/current-repo)]

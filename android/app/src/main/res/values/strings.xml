@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Logseq OG</string>
-    <string name="title_activity_main">Logseq OG</string>
+    <string name="app_name">Kip</string>
+    <string name="title_activity_main">Kip</string>
     <string name="package_name">com.logseq.og</string>
-    <string name="custom_url_scheme">logseq-og</string>
+    <string name="custom_url_scheme">kip</string>
 </resources>

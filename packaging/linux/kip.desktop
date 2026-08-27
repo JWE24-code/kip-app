@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Kip
+GenericName=Pecking-first knowledge base
+Comment=Ask your nest, or tell it something — a Logseq fork with an LLM retrieval layer
+Exec=kip %U
+Icon=kip
+Terminal=false
+Categories=Office;Utility;
+StartupWMClass=Kip
+MimeType=x-scheme-handler/kip;
+Keywords=notes;wiki;logseq;llm;peck;

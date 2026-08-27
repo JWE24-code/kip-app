@@ -2,7 +2,7 @@ import type { Decoration } from '@tldraw/core'
 import Vec from '@tldraw/vec'
 import * as React from 'react'
 import { Arrowhead } from './ArrowHead'
-import { getStraightArrowHeadPoints } from './arrowHelpers'
+import { getCurveControlPoints, getCurvedArrowPath, getStraightArrowHeadPoints } from './arrowHelpers'
 import type { SizeLevel } from '../'
 
 interface ShapeStyles {
@@ -19,6 +19,8 @@ interface ArrowSvgProps {
   decorationStart: Decoration | undefined
   decorationEnd: Decoration | undefined
   scaleLevel?: SizeLevel
+  /** Draw a smooth mindmap S-curve instead of a straight segment. */
+  curved?: boolean
 }
 
 const levelToScale = {
@@ -37,26 +39,31 @@ export const Arrow = React.memo(function StraightArrow({
   decorationStart,
   decorationEnd,
   scaleLevel,
+  curved,
 }: ArrowSvgProps) {
   const arrowDist = Vec.dist(start, end)
   if (arrowDist < 2) return null
   const { strokeWidth } = style
   const sw = 1 + (strokeWidth * levelToScale[scaleLevel ?? 'md']) / 10
-  // Path between start and end points
-  const path = 'M' + Vec.toFixed(start) + 'L' + Vec.toFixed(end)
-  // Arrowheads
+  // Path between start and end points — a smooth S-curve for a bound
+  // connector, a straight segment otherwise.
+  const ctrl = curved ? getCurveControlPoints(start, end) : null
+  const path = ctrl ? getCurvedArrowPath(start, end) : 'M' + Vec.toFixed(start) + 'L' + Vec.toFixed(end)
+  // Arrowheads point along the curve's end tangents (toward the near control
+  // point) when curved, along the chord otherwise.
   const arrowHeadLength = Math.min(arrowDist / 3, strokeWidth * levelToScale[scaleLevel ?? 'md'])
   const startArrowHead = decorationStart
-    ? getStraightArrowHeadPoints(start, end, arrowHeadLength)
+    ? getStraightArrowHeadPoints(start, ctrl ? ctrl[0] : end, arrowHeadLength)
     : null
   const endArrowHead = decorationEnd
-    ? getStraightArrowHeadPoints(end, start, arrowHeadLength)
+    ? getStraightArrowHeadPoints(end, ctrl ? ctrl[1] : start, arrowHeadLength)
     : null
   return (
     <>
       <path className="tl-stroke-hitarea" d={path} />
       <path
         d={path}
+        fill="none"
         strokeWidth={sw}
         stroke={style.stroke}
         strokeLinecap="round"

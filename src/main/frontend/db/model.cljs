@@ -135,6 +135,21 @@
     (->> (d/datoms db :avet :block/original-name)
          (map :v))))
 
+(defn get-pages-by-file-prefix
+  "Set of lowercased :block/name for every page whose backing file path starts
+  with `prefix` (e.g. \"nest/\"). Used to scope the graph view to a subtree."
+  [repo prefix]
+  (when-let [db (conn/get-db repo)]
+    (->> (d/q '[:find ?name ?path
+                :where
+                [?page :block/name ?name]
+                [?page :block/file ?file]
+                [?file :file/path ?path]]
+              db)
+         (keep (fn [[name path]]
+                 (when (and path (string/starts-with? path prefix)) name)))
+         set)))
+
 (defn get-pages-with-file
   "Return full file entity for calling file renaming"
   [repo]

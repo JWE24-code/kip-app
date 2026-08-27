@@ -18,13 +18,14 @@
             ["electron-deeplink" :refer [Deeplink]]
             [electron.state :as state]
             [electron.git :as git]
+            [electron.reminders :as reminders]
             [electron.window :as win]
             [electron.exceptions :as exceptions]
             ["/electron/utils" :as js-utils]
             [logseq.publishing.export :as publish-export]))
 
 ;; Keep same as main/frontend.util.url
-(defonce LSP_SCHEME "logseq-og")
+(defonce LSP_SCHEME "kip")
 (defonce FILE_LSP_SCHEME "lsp")
 (defonce FILE_ASSETS_SCHEME "assets")
 (defonce LSP_PROTOCOL (str FILE_LSP_SCHEME "://"))
@@ -39,11 +40,11 @@
 ;; Handle creating/removing shortcuts on Windows when installing/uninstalling.
 (when (js/require "electron-squirrel-startup") (.quit app))
 
-(defn setup-updater! [^js win]
-  ;; manual/auto updater
-  (when-not linux?
-    (init-updater {:repo   "logseq/logseq"
-                   :win    win})))
+(defn setup-updater! [^js _win]
+  ;; Kip is a personal fork with no release feed — the auto-updater is
+  ;; disabled. (Upstream pointed init-updater at logseq/logseq, which would
+  ;; offer to "update" Kip to stock Logseq.)
+  nil)
 
 (defn open-url-handler
   "win - the main window instance (first renderer process)
@@ -167,7 +168,7 @@
 
 (defn- set-app-menu! []
   (let [about-fn (fn []
-                   (.showMessageBox dialog (clj->js {:title "Logseq OG"
+                   (.showMessageBox dialog (clj->js {:title "Kip"
                                                      :icon (node-path/join js/__dirname "icons/logseq.png")
                                                      :message (str "Version " updater/electron-version)})))
         template (if mac?
@@ -216,7 +217,7 @@
                           :submenu [{:label "Official Documentation"
                                      :click #(.openExternal shell "https://docs.logseq.com/")}
                                     {:role "about"
-                                     :label "About Logseq"
+                                     :label "About Kip"
                                      :click about-fn}]}))
         ;; Enable Cmd/Ctrl+= Zoom In
         template (conj template
@@ -281,7 +282,7 @@
              (let [t0 (setup-interceptor! app)
                    ^js win (win/create-main-window!)
                    _ (reset! *win win)]
-               (logger/info (str "Logseq App(" (.getVersion app) ") Starting... "))
+               (logger/info (str "Kip App(" (.getVersion app) ") Starting... "))
 
                (utils/<restore-proxy-settings)
 
@@ -292,6 +293,8 @@
                (search/open-dbs!)
 
                (git/configure-auto-commit!)
+
+               (reminders/start-scheduler!)
 
                (vreset! *setup-fn
                         (fn []

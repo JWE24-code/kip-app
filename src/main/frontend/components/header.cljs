@@ -1,11 +1,13 @@
 (ns frontend.components.header
   (:require [cljs-bean.core :as bean]
             [frontend.components.export :as export]
+            [frontend.components.ingest :as ingest]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
             [frontend.components.server :as server]
             [frontend.components.right-sidebar :as sidebar]
             [frontend.components.svg :as svg]
+            [frontend.components.wiki-status :as wiki-status]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.handler :as handler]
@@ -117,6 +119,36 @@
          {:title (t :import)
           :options {:href (rfe/href :import)}
           :icon (ui/icon "file-upload")})
+
+       (when (and current-repo (util/electron?))
+         {:title "Coop status"
+          :options {:on-click wiki-status/show-coop-status-modal!}
+          :icon (ui/icon "list-check")})
+
+       (when (and current-repo (util/electron?))
+         {:title "Peck"
+          :options {:on-click #(state/sidebar-add-block! current-repo "chat" :chat)}
+          :icon (ui/icon "message-2")})
+
+       (when (and current-repo (util/electron?))
+         {:title "Hatch sources"
+          :options {:on-click ingest/show-hatch-modal!}
+          :icon (ui/icon "file-import")})
+
+       (when (and current-repo (util/electron?))
+         {:title "Hatch telemetry"
+          :options {:on-click #(state/sidebar-add-block! current-repo "telemetry" :telemetry)}
+          :icon (ui/icon "activity")})
+
+       (when (and current-repo (util/electron?))
+         {:title "Exports"
+          :options {:on-click #(state/sidebar-add-block! current-repo "exports" :exports)}
+          :icon (ui/icon "files")})
+
+       (when (and current-repo (util/electron?))
+         {:title "Reminders"
+          :options {:on-click #(state/sidebar-add-block! current-repo "reminders" :reminders)}
+          :icon (ui/icon "bell")})
 
        (when-not config/publishing?
          {:title [:div.flex-row.flex.justify-between.items-center

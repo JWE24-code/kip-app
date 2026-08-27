@@ -40,7 +40,9 @@ export class BoxShape extends TLBoxShape<BoxShapeProps> {
     type: 'box',
     point: [0, 0],
     size: [100, 100],
-    borderRadius: 2,
+    // Rounder corners for a softer, mindmap-style card. Existing boxes keep
+    // whatever value they were saved with; this only affects new ones.
+    borderRadius: 8,
     stroke: '',
     fill: '',
     noFill: false,

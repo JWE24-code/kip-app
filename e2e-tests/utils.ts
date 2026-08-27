@@ -156,11 +156,11 @@ export async function loadLocalGraph(page: Page, path: string): Promise<void> {
   })
 
   const title = await page.title()
-  if (title === "Import data into Logseq" || title === "Add another repo") {
+  if (title === "Import data into Logseq" || title === "Import data into Kip" || title === "Add another repo") {
     await page.click('a.button >> text=Skip')
   }
 
-  await page.waitForFunction('window.document.title === "Logseq"')
+  await page.waitForFunction('["Logseq", "Kip"].includes(window.document.title)')
   await page.waitForTimeout(500)
 
   // If there is an error notification from a previous test graph being deleted,

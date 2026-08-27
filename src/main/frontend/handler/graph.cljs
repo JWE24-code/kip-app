@@ -82,15 +82,21 @@
      :links links}))
 
 (defn build-global-graph
+  "Scoped to the nest/ subtree — the LLM-maintained entity/concept/source
+  pages and the [[wikilinks]] between them. journals/, pages/, eggs/ and
+  clucks/ files are all parsed into the DB as pages too, but excluded from
+  this view."
   [theme {:keys [journal? orphan-pages? builtin-pages? excluded-pages?]}]
   (let [dark? (= "dark" theme)
         current-page (or (:block/name (db/get-current-page)) "")]
     (when-let [repo (state/get-current-repo)]
-      (let [relation (db/get-pages-relation repo journal?)
-            tagged-pages (db/get-all-tagged-pages repo)
-            namespaces (db/get-all-namespace-relation repo)
+      (let [wiki? (db/get-pages-by-file-prefix repo "nest/")
+            wiki-link? (fn [[a b]] (and (contains? wiki? a) (contains? wiki? b)))
+            relation (filter wiki-link? (db/get-pages-relation repo journal?))
+            tagged-pages (filter wiki-link? (db/get-all-tagged-pages repo))
+            namespaces (filter wiki-link? (db/get-all-namespace-relation repo))
             tags (set (map second tagged-pages))
-            full-pages (db/get-all-pages repo)
+            full-pages (filter #(contains? wiki? (:block/name %)) (db/get-all-pages repo))
             all-pages (map db/get-original-name full-pages)
             page-name->original-name (zipmap (map :block/name full-pages) all-pages)
             pages-after-journal-filter (if-not journal?

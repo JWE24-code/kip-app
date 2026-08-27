@@ -15,6 +15,20 @@ const sourcePath = path.join(__dirname, 'src/main/frontend')
 const resourceFilePath = path.join(resourcesPath, '**')
 const outputFilePath = path.join(outputPath, '**')
 
+// Kip's coop-maintenance scripts live in ../scripts (a sibling of app/). The
+// in-app Peck/Hatch/Groom features spawn them (electron.wiki), so they must
+// ride along inside the package — synced to static/scripts, which becomes
+// <app>/scripts once packaged. Source (*.js + lib/ + skills/ — SKILL.md and
+// templates included) only; their deps are installed into static/scripts/
+// node_modules from scripts/package.json by syncScripts.
+const scriptsSrcPath = path.join(__dirname, '..', 'scripts')
+const scriptsGlob = [
+  path.join(scriptsSrcPath, '*.js'),
+  path.join(scriptsSrcPath, 'lib', '**', '*.js'),
+  path.join(scriptsSrcPath, 'skills', '**', '*'),
+  path.join(scriptsSrcPath, 'package.json')
+]
+
 const css = {
   watchCSS () {
     return cp.spawn(`yarn css:watch`, {
@@ -90,6 +104,35 @@ const common = {
 
   keepSyncResourceFile () {
     return gulp.watch(resourceFilePath, { ignoreInitial: true }, common.syncResourceFile)
+  },
+
+  syncScripts (...params) {
+    const dest = path.join(outputPath, 'scripts')
+    return gulp.series(
+      // nodir: skills/**/* matches directories too; skip them (dest is created by the files).
+      // All skill files that ship are text (SKILL.md, *.js, *.json); docx/pptx
+      // templates are user-supplied in the coop, not bundled here — so no
+      // { encoding: false } needed. Add it if a binary asset is ever vendored.
+      () => gulp.src(scriptsGlob, { base: scriptsSrcPath, nodir: true }).pipe(gulp.dest(dest)),
+      (cb) => {
+        // Pure-JS runtime deps (gray-matter/dotenv/@anthropic-ai/edn-data) —
+        // better-sqlite3 is deliberately NOT here; the bundled scripts resolve
+        // it from the app's own (Electron-ABI) node_modules. Re-install when the
+        // tree is missing OR package.json changed since the last install (a new
+        // dependency was added), otherwise reuse it.
+        const lock = path.join(dest, 'node_modules', '.package-lock.json')
+        const stale = !fs.existsSync(lock) ||
+          fs.statSync(path.join(dest, 'package.json')).mtimeMs > fs.statSync(lock).mtimeMs
+        if (stale) {
+          cp.execSync('npm install --omit=dev --no-audit --no-fund --loglevel=error', { cwd: dest, stdio: 'inherit' })
+        }
+        cb()
+      }
+    )(...params)
+  },
+
+  keepSyncScripts () {
+    return gulp.watch(scriptsGlob, { ignoreInitial: true }, common.syncScripts)
   },
 
   syncAllStatic () {
@@ -200,6 +243,26 @@ exports.electronMaker = async () => {
 
 exports.cap = common.runCapWithLocalDevServerEntry
 exports.clean = common.clean
-exports.watch = gulp.series(common.syncResourceFile, common.syncAssetFiles, common.syncAllStatic,
-  gulp.parallel(common.keepSyncResourceFile, css.watchCSS))
-exports.build = gulp.series(common.clean, common.syncResourceFile, common.syncAssetFiles, css.buildCSS)
+exports.watch = gulp.series(common.syncResourceFile, common.syncAssetFiles, common.syncAllStatic, common.syncScripts,
+  gulp.parallel(common.keepSyncResourceFile, common.keepSyncScripts, css.watchCSS))
+exports.build = gulp.series(common.clean, common.syncResourceFile, common.syncAssetFiles, common.syncScripts, css.buildCSS)
+
+// Like electronMaker but produces an unpackaged, directly-runnable app folder
+// (static/out/Kip-win32-x64/) instead of an installer — for local testing.
+exports.electronPackage = async () => {
+  cp.execSync('yarn cljs:release-electron', { stdio: 'inherit' })
+
+  const pkgPath = path.join(outputPath, 'package.json')
+  const pkg = require(pkgPath)
+  const version = fs.readFileSync(path.join(__dirname, 'src/main/frontend/version.cljs'))
+    .toString().match(/[0-9.]{3,}/)[0]
+  if (!version) throw new Error('release version error in src/**/*/version.cljs')
+  pkg.version = version
+  fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2))
+
+  if (!fs.existsSync(path.join(outputPath, 'node_modules'))) {
+    cp.execSync('yarn', { cwd: outputPath, stdio: 'inherit' })
+  }
+
+  cp.execSync('npx electron-forge package', { cwd: outputPath, stdio: 'inherit' })
+}

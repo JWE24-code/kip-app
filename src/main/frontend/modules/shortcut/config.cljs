@@ -361,7 +361,7 @@
    :ui/toggle-brackets                      {:binding "mod+c mod+b"
                                              :fn      config-handler/toggle-ui-show-brackets!}
 
-   :go/search                               {:binding "mod+k"
+   :go/search                               {:binding ["mod+k" "mod+2"]
                                              :fn      #(search :global)}
    :command-palette/toggle                  {:binding "mod+shift+p"
                                              :fn      #(search :commands)}
@@ -471,6 +471,9 @@
 
    :ui/toggle-document-mode                 {:binding "t d"
                                              :fn      state/toggle-document-mode!}
+
+   :ui/toggle-peck-mode                     {:binding "mod+1"
+                                             :fn      state/toggle-peck-mode!}
 
    :ui/toggle-settings                      {:binding (if mac? ["t s" "mod+,"] "t s")
                                              :fn      ui-handler/toggle-settings-modal!}
@@ -688,6 +691,7 @@
             :editor/undo
             :editor/redo
             :ui/toggle-brackets
+            :ui/toggle-peck-mode
             :go/search
             :go/search-in-page
             :command-palette/toggle
@@ -849,6 +853,7 @@
       :editor/toggle-undo-redo-mode
       :editor/toggle-number-list
       :ui/toggle-wide-mode
+      :ui/toggle-peck-mode
       :ui/toggle-document-mode
       :ui/toggle-brackets
       :ui/toggle-theme

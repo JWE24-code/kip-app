@@ -56,7 +56,7 @@ base.beforeAll(async () => {
     cwd: "./static",
     args: ["electron.js"],
     locale: 'en',
-    timeout: 10_000, // should be enough for the app to start
+    timeout: 60_000, // first cold launch on a dev box can be slow
   })
   context = electronApp.context()
   await context.tracing.start({ screenshots: true, snapshots: true });
@@ -114,7 +114,7 @@ base.beforeAll(async () => {
 
   // render app
   await page.waitForFunction('window.document.title !== "Loading"')
-  expect(await page.title()).toMatch(/^Logseq.*?/)
+  expect(await page.title()).toMatch(/^(Logseq|Kip).*?/)
   await openLeftSidebar(page)
 })
 

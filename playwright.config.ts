@@ -8,6 +8,10 @@ const config: PlaywrightTestConfig = {
   // The number of retries before marking a test as failed.
   maxFailures: 1,
 
+  // Per-test / per-hook budget. The default 30s isn't enough for a cold
+  // Electron launch + graph parse on a slower dev machine.
+  timeout: 120_000,
+
   // The number of Logseq instances to run in parallel.
   // NOTE: must be 1 for now, otherwise tests will fail.
   workers: 1,

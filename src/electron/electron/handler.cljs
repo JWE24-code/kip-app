@@ -20,6 +20,8 @@
             [electron.find-in-page :as find]
             [electron.fs-watcher :as watcher]
             [electron.git :as git]
+            [electron.llm :as llm]
+            [electron.skills :as skills]
             [electron.logger :as logger]
             [electron.plugin :as plugin]
             [electron.search :as search]
@@ -27,6 +29,7 @@
             [electron.shell :as shell]
             [electron.state :as state]
             [electron.utils :as utils]
+            [electron.wiki :as wiki]
             [electron.window :as win]
             [goog.functions :refer [debounce]]
             [logseq.common.graph :as common-graph]
@@ -493,6 +496,93 @@
       (utils/send-to-renderer window "notification"
                               {:type    "error"
                                :payload (.-message e)}))))
+
+(defmethod handle :getLlmConfig [_ [_ vault-root]]
+  (llm/get-llm-config! vault-root))
+
+(defmethod handle :saveLlmConfig [_ [_ vault-root config]]
+  (llm/save-llm-config! vault-root config))
+
+(defmethod handle :testLlmConnection [_ [_ candidate]]
+  (llm/test-llm-connection! candidate))
+
+(defmethod handle :skillsList [_ [_ vault-root]]
+  (skills/list! vault-root))
+
+(defmethod handle :setSkillEnabled [_ [_ vault-root name enabled]]
+  (skills/set-enabled! vault-root name enabled))
+
+(defmethod handle :getSearchConfig [_ [_ vault-root]]
+  (skills/get-search-config! vault-root))
+
+(defmethod handle :saveSearchConfig [_ [_ vault-root config]]
+  (skills/save-search-config! vault-root config))
+
+(defmethod handle :testSearch [_ [_ vault-root query candidate]]
+  (skills/test-search! vault-root query candidate))
+
+(defmethod handle :wikiRecentLog [_ [_ vault-root]]
+  (wiki/recent-clucks! vault-root))
+
+(defmethod handle :wikiLint [_ [_ vault-root]]
+  (wiki/groom! vault-root))
+
+(defmethod handle :wikiGroomDeep [_ [_ vault-root]]
+  (wiki/groom-deep! vault-root))
+
+(defmethod handle :wikiGroomProgress [_ [_ vault-root]]
+  (wiki/groom-progress! vault-root))
+
+(defmethod handle :wikiGroomMetrics [_ [_ vault-root]]
+  (wiki/groom-metrics! vault-root))
+
+(defmethod handle :wikiIngestPreview [_ [_ vault-root]]
+  (wiki/hatch-preview! vault-root))
+
+(defmethod handle :wikiIngestBatch [_ [_ vault-root limit trace? classic?]]
+  (wiki/hatch-batch! vault-root limit trace? classic?))
+
+(defmethod handle :wikiIngestProgress [_ [_ vault-root]]
+  (wiki/hatch-progress! vault-root))
+
+(defmethod handle :wikiIngestMetrics [_ [_ vault-root]]
+  (wiki/hatch-metrics! vault-root))
+
+(defmethod handle :wikiChat [_ [_ vault-root question trace?]]
+  (wiki/peck! vault-root question (boolean trace?)))
+
+(defmethod handle :wikiChatProgress [_ [_ vault-root]]
+  (wiki/peck-progress! vault-root))
+
+(defmethod handle :wikiSkills [_ [_ vault-root]]
+  (wiki/skills-list! vault-root))
+
+(defmethod handle :wikiRemindersList [_ [_ vault-root]]
+  (wiki/reminders-list! vault-root))
+
+(defmethod handle :wikiRemindersAdd [_ [_ vault-root text]]
+  (wiki/reminders-add! vault-root text))
+
+(defmethod handle :wikiRemindersCancel [_ [_ vault-root id]]
+  (wiki/reminders-cancel! vault-root id))
+
+(defmethod handle :wikiRemindersMute [_ [_ vault-root id on?]]
+  (wiki/reminders-mute! vault-root id on?))
+
+(defmethod handle :wikiExportsList [_ [_ vault-root]]
+  (wiki/exports-list! vault-root))
+
+(defmethod handle :wikiExportOpen [_ [_ vault-root filename]]
+  (wiki/export-open! vault-root filename))
+
+(defmethod handle :wikiExportReveal [_ [_ vault-root filename]]
+  (wiki/export-reveal! vault-root filename))
+
+(defmethod handle :wikiExportSaveAs [_ [_ vault-root filename]]
+  (wiki/export-save-as! vault-root filename))
+
+(defmethod handle :wikiExportTrash [_ [_ vault-root filename]]
+  (wiki/export-trash! vault-root filename))
 
 (defmethod handle :gitCommitAll [_ [_ message]]
   (git/add-all-and-commit! message))

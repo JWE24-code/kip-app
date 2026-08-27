@@ -11,6 +11,7 @@
             [frontend.fs.watcher-handler :as watcher-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-sync :as file-sync-handler]
+            [frontend.components.reminders :as reminders]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
@@ -68,6 +69,16 @@
                          type (keyword type)
                          comp [:div (str payload)]]
                      (notification/show! comp type false))))
+
+  (safe-api-call "reminder-fired"
+                 ;; The main-process reminders scheduler (electron.reminders)
+                 ;; just fired a reminder — surface the Reminders panel, and
+                 ;; play a chime unless this reminder was muted.
+                 (fn [data]
+                   (let [{:keys [sound]} (bean/->clj data)]
+                     (when-let [repo (state/get-current-repo)]
+                       (state/sidebar-add-block! repo "reminders" :reminders))
+                     (when sound (reminders/ding!)))))
 
   (safe-api-call "graphUnlinked"
                  (fn [data]
