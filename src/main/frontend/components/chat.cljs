@@ -123,7 +123,7 @@
       [:div.inline-block.bg-gray-04.rounded.px-3.py-2.text-sm text]]
 
      :error
-     [:div.text-sm.text-red-500 (str "Error: " text)]
+     (llm-banner/error-view text)
 
      :learned
      [:div.text-sm.rounded.px-3.py-2 {:class "bg-gray-03 border-l-2 border-gray-11"}

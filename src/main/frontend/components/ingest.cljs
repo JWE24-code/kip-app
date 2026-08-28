@@ -169,7 +169,7 @@
      (llm-banner/provider-banner)
 
      (when @*error
-       [:div.text-sm.text-red-500.my-2 (str "Error: " @*error)])
+       [:div.my-2 (llm-banner/error-view @*error)])
 
      (cond
        (and @*busy? (nil? preview))
