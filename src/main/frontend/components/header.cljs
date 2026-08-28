@@ -1,6 +1,5 @@
 (ns frontend.components.header
   (:require [cljs-bean.core :as bean]
-            [frontend.components.export :as export]
             [frontend.components.ingest :as ingest]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
@@ -12,7 +11,6 @@
             [frontend.context.i18n :refer [t]]
             [frontend.handler :as handler]
             [frontend.handler.update :as update-handler]
-            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.web.nfs :as nfs]
             [frontend.mobile.util :as mobile-util]
@@ -80,35 +78,10 @@
           :options {:on-click state/open-settings!}
           :icon (ui/icon "settings")})
 
-       (when config/lsp-enabled?
-         {:title (t :plugins)
-          :options {:on-click #(plugin-handler/goto-plugins-dashboard!)}
-          :icon (ui/icon "apps")})
-
-       (when config/lsp-enabled?
-         {:title (t :themes)
-          :options {:on-click #(plugins/open-select-theme!)}
-          :icon (ui/icon "palette")})
-
-       (when current-repo
-         {:title (t :export-graph)
-          :options {:on-click #(state/set-modal! export/export)}
-          :icon (ui/icon "database-export")})
-
-       (when (and current-repo (state/enable-editing?))
-         {:title (t :import)
-          :options {:href (rfe/href :import)}
-          :icon (ui/icon "file-upload")})
-
        (when (and current-repo (util/electron?))
          {:title "Coop status"
           :options {:on-click wiki-status/show-coop-status-modal!}
           :icon (ui/icon "list-check")})
-
-       (when (and current-repo (util/electron?))
-         {:title "Peck"
-          :options {:on-click #(state/sidebar-add-block! current-repo "chat" :chat)}
-          :icon (ui/icon "message-2")})
 
        (when (and current-repo (util/electron?))
          {:title "Hatch sources"
