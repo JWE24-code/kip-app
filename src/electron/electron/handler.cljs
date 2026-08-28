@@ -516,6 +516,9 @@
 (defmethod handle :setSkillEnabled [_ [_ vault-root name enabled]]
   (skills/set-enabled! vault-root name enabled))
 
+(defmethod handle :setSkillApproval [_ [_ vault-root name decision]]
+  (skills/set-approval! vault-root name decision))
+
 (defmethod handle :getSearchConfig [_ [_ vault-root]]
   (skills/get-search-config! vault-root))
 

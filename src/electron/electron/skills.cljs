@@ -29,6 +29,14 @@
   [vault-root name enabled]
   (.setSkillEnabled skills-lib (or vault-root js/undefined) name (boolean enabled)))
 
+(defn set-approval!
+  "Records a review decision for a user skill in skills.json \"approved\".
+  `decision` is \"always\", \"never\", or nil (forget). Built-ins ignore it.
+  Returns {name approval}."
+  [vault-root name decision]
+  (.setSkillApproval skills-lib (or vault-root js/undefined) name
+                     (if (contains? #{"always" "never"} decision) decision js/undefined)))
+
 (defn get-search-config!
   "{backend braveApiKey tavilyApiKey} — backend defaults to \"duckduckgo\"."
   [vault-root]

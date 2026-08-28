@@ -6,6 +6,7 @@
   skills.js has no native deps). Everything lives in
   <graph>/.henhouse/skills.json, so every call passes the open graph's directory."
   (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.components.coop-glossary :as glossary]
             [frontend.config :as config]
@@ -41,6 +42,16 @@
   (-> (ipc/ipc "setSkillEnabled" (vault-root) name enabled?)
       (p/catch (fn [_]
                  (swap! *skills (fn [ss] (mapv #(if (= (:name %) name) (assoc % :enabled (not enabled?)) %) ss)))))))
+
+(defn- set-approval!
+  "decision: \"always\" | \"never\" | nil. Refreshes the whole list from the
+  reply so an approval change also flips discoverability."
+  [*skills name decision]
+  (swap! *skills (fn [ss] (mapv #(if (= (:name %) name) (assoc % :approval (or decision "pending")) %) ss)))
+  (-> (ipc/ipc "setSkillApproval" (vault-root) name decision)
+      (p/then (fn [_]
+                (-> (ipc/ipc "skillsList" (vault-root))
+                    (p/then (fn [r] (reset! *skills (vec (bean/->clj r))))))))))
 
 (defn- save-search!
   [*search *saving? *save-msg]
@@ -93,17 +104,41 @@
         [:h2.text-lg.font-medium.mt-1.mb-2 "Skills"]
         [:div.text-xs.opacity-60.mb-3
          "Small programs Peck can run while answering a question. Toggle one off to "
-         "stop offering it. Config lives in " (glossary/term "henhouse" ".henhouse/skills.json") "."]
+         "stop offering it. Config lives in " (glossary/term "henhouse" ".henhouse/skills.json") ". "
+         "A skill you add yourself under " (glossary/term "henhouse" ".henhouse/skills/")
+         " runs with your privileges — approve it once before Peck can use it."]
 
         [:div.mb-6
-         (for [{:keys [name description source enabled]} @*skills]
-           [:div.flex.items-start.justify-between.py-2.border-b.border-gray-100
-            {:key name :style {:border-color "var(--ls-border-color)"}}
-            [:div.pr-3
-             [:div.text-sm.font-medium name
-              [:span.text-xs.opacity-40.ml-2 source]]
-             [:div.text-xs.opacity-60 description]]
-            (ui/toggle enabled #(toggle-skill! *skills name (not enabled)) true)])]
+         (for [{:keys [name description source enabled approval network permissions]} @*skills]
+           (let [pending? (= approval "pending")
+                 blocked? (= approval "never")]
+             [:div.py-2.border-b.border-gray-100
+              {:key name :style {:border-color "var(--ls-border-color)"}}
+              [:div.flex.items-start.justify-between
+               [:div.pr-3
+                [:div.text-sm.font-medium name
+                 [:span.text-xs.opacity-40.ml-2 source]
+                 (when blocked? [:span.text-xs.text-red-500.ml-2 "blocked"])]
+                [:div.text-xs.opacity-60 description]]
+               (cond
+                 pending?
+                 [:div.flex.gap-2.flex-none
+                  (ui/button {:variant :outline :size :sm :on-click #(set-approval! *skills name "always")} "Approve")
+                  (ui/button {:variant :ghost :size :sm :on-click #(set-approval! *skills name "never")} "Block")]
+                 blocked?
+                 (ui/button {:variant :outline :size :sm :on-click #(set-approval! *skills name "always")} "Approve")
+                 :else
+                 (ui/toggle enabled #(toggle-skill! *skills name (not enabled)) true))]
+              (when (and (= source "user") (or pending? (seq permissions) network))
+                [:div.text-xs.opacity-60.mt-1.ml-0
+                 (when pending? [:span.text-amber-600 "Custom skill — needs approval. "])
+                 "Declares: "
+                 (->> (concat (when network ["network access"]) permissions)
+                      (map #(str %))
+                      (string/join ", ")
+                      (#(if (string/blank? %) "nothing (still full access — nothing is enforced)" %)))
+                 (when (= approval "always")
+                   [:a.underline.ml-2 {:on-click #(set-approval! *skills name nil)} "revoke"])])]))]
 
         [:h2.text-lg.font-medium.mt-4.mb-2 "Web search"]
         [:div.text-xs.opacity-60.mb-3
