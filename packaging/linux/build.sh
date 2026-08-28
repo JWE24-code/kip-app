@@ -67,12 +67,20 @@ step "download Electron $ELECTRON_VERSION"
 ( cd "$APP_DIR/static" && node node_modules/electron/install.js )
 
 # --- 4. compile ClojureScript ---------------------------------------------
-# Default `compile` (not `release`): the :app :release asset-path points at a
-# CDN, and the packaged electron.js is a dev loader that reads
-# .shadow-cljs/builds/electron/dev/out/cljs-runtime. The Windows 0.1 build is
-# a compile build too (docs/BUILD.md). Set KIP_CLJS=release to try optimized.
+# compile: unminified, and the packaged electron.js is a dev loader that reads
+#   .shadow-cljs/builds/electron/dev/out/cljs-runtime (copied in below).
+# release: optimized + self-contained electron.js. --debug matches upstream
+#   Logseq's known-good CI incantation. The :app :release :asset-path is a CDN,
+#   but electron.html <script defer>-preloads every split module
+#   (main/code-editor/excalidraw/tldraw) so shadow.loader/load never fetches —
+#   if a release build ever shows broken whiteboards/excalidraw, add
+#   `--config-merge '{:release {:asset-path "./js"}}'` here.
 step "cljs $CLJS_MODE :app + :electron"
-( cd "$APP_DIR" && clojure -J-Xmx5g -M:cljs "$CLJS_MODE" app electron )
+if [[ "$CLJS_MODE" == "release" ]]; then
+  ( cd "$APP_DIR" && clojure -J-Xmx5g -M:cljs release app electron --debug )
+else
+  ( cd "$APP_DIR" && clojure -J-Xmx5g -M:cljs compile app electron )
+fi
 
 # --- 5. belt-and-suspenders: better-sqlite3 for the Electron ABI ----------
 # static/'s postinstall (install-app-deps) usually handles this; re-run to be sure.

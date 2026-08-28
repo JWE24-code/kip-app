@@ -73,8 +73,15 @@ Push-Location "$APP_DIR\static"; node node_modules/electron/install.js; Pop-Loca
 if ($LASTEXITCODE) { throw 'electron download failed' }
 
 # --- 4. compile ClojureScript ------------------------------------------
+# see packaging/linux/build.sh for the compile-vs-release rationale.
 Step "cljs $CLJS :app + :electron"
-Push-Location $APP_DIR; clojure -J-Xmx5g -M:cljs $CLJS app electron; Pop-Location
+Push-Location $APP_DIR
+if ($CLJS -eq 'release') {
+  clojure -J-Xmx5g -M:cljs release app electron --debug
+} else {
+  clojure -J-Xmx5g -M:cljs compile app electron
+}
+Pop-Location
 if ($LASTEXITCODE) { throw "cljs $CLJS failed" }
 
 # --- 5. better-sqlite3 for the Electron ABI ---------------------------

@@ -35,10 +35,12 @@
 (def ^:private *messages (rum/cursor-in *peck-session [:messages]))
 (def ^:private *input (rum/cursor-in *peck-session [:input]))
 
+;; Generic on purpose — these render in the empty state, so they must not
+;; reference anything from the user's own nest.
 (def ^:private example-prompts
-  ["What do I know about zero trust?"
+  ["What do I know about our onboarding process?"
    "Summarize this week's journals"
-   "The CDO of GroupSOC is …"])
+   "I have a meeting with Acme on Friday at 15:00"])
 
 (defn- vault-root [] (config/get-repo-dir (state/get-current-repo)))
 
