@@ -65,7 +65,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
-      KIP_CLJS: ${{ github.event.inputs.cljs_mode || 'compile' }}
+      # manual runs: the dropdown (default compile, fast). v* tags: always
+      # release (optimized) — validated on CI 2026-08-28.
+      KIP_CLJS: ${{ github.event.inputs.cljs_mode || (startsWith(github.ref, 'refs/tags/v') && 'release' || 'compile') }}
 
     steps:
       - name: Checkout kip-app
