@@ -3,6 +3,32 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [0.2.2] — 2026-08-28
+
+De-Logseq'd the first-run experience and a batch of polish.
+
+- **The demo graph is Kip's now** — the unsaved graph you land in before
+  opening a folder used to seed Logseq's own tutorial. It's a Kip welcome
+  journal: the slogan, the farm metaphor, hatch / peck / groom, the coop
+  folders, and a first-five-minutes checklist, with a "The Nest" page
+  linked from it.
+- **Settings cleanup** — removed the inherited Logseq account, Logseq Sync
+  and local-git version-control UI; Kip has no account backend of its own.
+  Also removed the `mod+g c` git-commit shortcut.
+- **Egg + slogan** — the Peck home screen shows an egg (matching the
+  website) and "Don't browse your notes. Peck them. Get answers." The
+  onboarding screen carries the slogan too.
+- **Welcome card** — a one-time card on the first open of a coop: the
+  metaphor in three lines and a shortcut into Settings → LLM.
+- **Paste text as a source** — a "Paste text…" button in Hatch saves
+  pasted text into `eggs/` as a Markdown file, hatchable like any other.
+- **Metaphor tooltips** — `eggs` / `nest` / `clucks` / `roost` /
+  `henhouse` carry hover glosses throughout the UI, with a one-line legend
+  in Coop status.
+- **Citations peek** — clicking a `[[page]]` citation in a Peck answer
+  opens it in the right sidebar instead of switching to Documents;
+  cmd/ctrl-click still opens Documents.
+
 ## [0.2.1] — 2026-08-28
 
 More onboarding polish, plus a way to know when a new build exists. (The
