@@ -31,7 +31,9 @@ De-Logseq'd the first-run experience and a batch of polish.
 - **Trimmed the "…" menu** — dropped the leftover Logseq entries (plugins,
   themes, export graph, import) and the redundant Peck entry.
 - Opening Hatch with no folder open now explains itself instead of
-  erroring.
+  erroring — and Hatch / Peck / Groom now refuse to run against the
+  in-memory demo graph (or a graph whose folder has gone missing)
+  instead of failing deep in a script with a cryptic path error.
 - **Windows builds are code-signed** (self-signed for now) — the binary
   carries a publisher identity; SmartScreen still warns until there's a
   real certificate.
