@@ -3,7 +3,9 @@
   the farm metaphor, the Peck/Documents toggle, and a button into Settings →
   LLM. Dismissal is permanent per coop (a localStorage flag), so this never
   interrupts twice."
-  (:require [frontend.state :as state]
+  (:require [frontend.components.coop-glossary :as glossary]
+            [frontend.components.kip-brand :as brand]
+            [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
             [rum.core :as rum]
@@ -18,9 +20,6 @@
 (defn mark-seen! []
   (storage/set (seen-key) true))
 
-(def ^:private chick
-  "  \\\\\n  (o>\n\\_//)\n \\_/_)\n  _|_")
-
 (rum/defc welcome-card
   [close-fn]
   (let [done! (fn [] (mark-seen!) (close-fn))]
@@ -29,11 +28,12 @@
       [:pre.font-mono.text-sm.mb-3
        {:aria-hidden "true"
         :style {:color "var(--ls-active-primary-color, #10b981)" :margin 0 :line-height 1.3}}
-       chick]
-      [:h2#modal-headline.text-xl.mb-2 "Welcome to Kip"]]
+       brand/egg-ascii]
+      [:h2#modal-headline.text-xl.mb-1 "Welcome to Kip"]
+      [:div.text-xs.opacity-60.mb-2 brand/slogan]]
      [:div.text-sm.opacity-80.space-y-2.my-3
-      [:p "Drop documents into " [:code "eggs/"] " and Kip hatches them into "
-       [:code "nest/"] " — a cross-linked wiki of entity, concept and source pages."]
+      [:p "Drop documents into " (glossary/term "eggs/") " and Kip hatches them into "
+       (glossary/term "nest/") " — a cross-linked wiki of entity, concept and source pages."]
       [:p "Then " [:b "peck"] " it: ask a question and get an answer that cites the "
        [:code "[[pages]]"] " it came from, or tell Kip a fact to file away."]
       [:p "You're in Peck now. Press " [:kbd.px-1.border.rounded "Ctrl/⌘ + 1"]
