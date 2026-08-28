@@ -259,6 +259,34 @@
                                               #(and (= ".md" (string/lower-case (.extname node-path %)))
                                                     (not= "index.md" (.basename node-path %))))})))))
 
+(defn- md-file? [p]
+  (= ".md" (string/lower-case (.extname node-path p))))
+
+(defn- metrics-at
+  "The ms-epoch :at from a .roost/<file>-metrics.json, or nil."
+  [vault-root file]
+  (try
+    (.-at (js/JSON.parse (fs/readFileSync (roost-file vault-root file) "utf8")))
+    (catch :default _ nil)))
+
+(defn coop-summary!
+  "A read-only snapshot of the open coop for the 'Your coop' panel: sources in
+  eggs/, nest pages by type, and the last hatch / last groom times (ms epoch,
+  nil if never). Plain fs reads — no subprocess."
+  [vault-root]
+  (p/create
+   (fn [resolve* _reject]
+     (if (string/blank? vault-root)
+       (resolve* #js {})
+       (let [nest (.join node-path vault-root "nest")]
+         (resolve* #js {:eggs        (count-files (.join node-path vault-root "eggs")
+                                                  #(contains? egg-extensions (string/lower-case (.extname node-path %))))
+                        :entities    (count-files (.join node-path nest "entities") md-file?)
+                        :concepts    (count-files (.join node-path nest "concepts") md-file?)
+                        :sources     (count-files (.join node-path nest "sources") md-file?)
+                        :lastHatchAt (metrics-at vault-root "hatch-metrics.json")
+                        :lastGroomAt (metrics-at vault-root "groom-metrics.json")}))))))
+
 (defn peck!
   "Runs the Peck workflow for `question` without filing the answer back.
   Resolves to {:answer :citedSlugs :candidateSlugs :steps}. `steps` is what

@@ -26,6 +26,16 @@
       (p/then (fn [result] (reset! *recent-clucks (bean/->clj result))))
       (p/catch (fn [error] (reset! *recent-clucks {:error (str error)})))))
 
+(defn- fetch-coop-summary! [*summary]
+  (-> (ipc/ipc "wikiCoopSummary" (vault-root))
+      (p/then (fn [r] (reset! *summary (bean/->clj r))))
+      (p/catch (fn [_] (reset! *summary {})))))
+
+(defn- fetch-pending! [*pending]
+  (-> (ipc/ipc "wikiIngestPreview" (vault-root))
+      (p/then (fn [r] (reset! *pending (count (:pending (bean/->clj r))))))
+      (p/catch (fn [_] (reset! *pending nil)))))
+
 (defn- fetch-deep-last! [*deep-last]
   (-> (ipc/ipc "wikiGroomMetrics" (vault-root))
       (p/then (fn [m] (reset! *deep-last (:at (bean/->clj m)))))
@@ -115,6 +125,28 @@
        [:div.mt-2
         (ui/button {:variant :outline :size :sm :on-click #(open-report! (:reportPath report))} "Open report file")])]))
 
+;; The "Your coop" block at the top of Coop status — read-only counts + when
+;; things last ran. `summary` from wikiCoopSummary; `pending` a count or nil.
+(rum/defc coop-overview < rum/static
+  [summary pending]
+  (let [{:keys [eggs entities concepts sources lastHatchAt lastGroomAt]} summary
+        nest-total (+ (or entities 0) (or concepts 0) (or sources 0))]
+    [:div.mb-4
+     [:h3.text-lg.font-medium.mb-1 "Your coop"]
+     [:div.text-sm.opacity-80.space-y-0.5
+      [:div (str (or eggs 0) " source " (if (= 1 eggs) "file" "files") " in ")
+       [:code "eggs/"]
+       (when (and pending (pos? pending))
+         [:span " · "
+          [:a.underline {:on-click #(state/pub-event! [:modal/show-hatch])}
+           (str pending " not yet hatched — hatch now")]])]
+      [:div (str nest-total " nest " (if (= 1 nest-total) "page" "pages"))
+       (when (pos? nest-total)
+         (str " (" entities " entity, " concepts " concept, " sources " source)"))]
+      [:div.text-xs.opacity-60
+       "Last hatch: " (if lastHatchAt (telemetry/ago lastHatchAt) "never")
+       "  ·  Last groom: " (if lastGroomAt (telemetry/ago lastGroomAt) "never")]]]))
+
 (rum/defcs coop-status-modal < rum/reactive
   (rum/local nil ::recent-clucks)
   (rum/local nil ::groom-report)
@@ -123,9 +155,13 @@
   (rum/local nil ::deep-progress)
   (rum/local nil ::deep-poll-id)
   (rum/local nil ::deep-last)
+  (rum/local nil ::coop-summary)
+  (rum/local nil ::pending)
   {:will-mount (fn [state]
                  (fetch-recent-clucks! (get state ::recent-clucks))
                  (fetch-deep-last! (get state ::deep-last))
+                 (fetch-coop-summary! (get state ::coop-summary))
+                 (fetch-pending! (get state ::pending))
                  state)
    :will-unmount (fn [state]
                    (when-let [id @(get state ::deep-poll-id)] (js/clearInterval id))
@@ -140,6 +176,9 @@
         deep-prog @*deep-progress]
     [:div.w-full.mx-auto {:class "md:max-w-[600px]"}
      [:h2#modal-headline.text-xl.mb-3 "Coop status"]
+
+     (when-let [s @(get state ::coop-summary)]
+       (coop-overview s @(get state ::pending)))
 
      [:div.mb-4
       [:h3.text-lg.font-medium.mb-1 "Recent clucks"]
