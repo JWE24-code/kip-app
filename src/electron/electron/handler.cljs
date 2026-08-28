@@ -551,6 +551,9 @@
 (defmethod handle :wikiAddEgg [_ [_ vault-root filename content]]
   (wiki/add-egg! vault-root filename content))
 
+(defmethod handle :wikiCoopCounts [_ [_ vault-root]]
+  (wiki/coop-counts! vault-root))
+
 (defmethod handle :wikiChat [_ [_ vault-root question trace?]]
   (wiki/peck! vault-root question (boolean trace?)))
 

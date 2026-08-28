@@ -8,6 +8,7 @@
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.config :as config]
+            [frontend.handler.coop :as coop]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [promesa.core :as p]
@@ -59,6 +60,7 @@
 
                         ok
                         (do (notify-added! name)
+                            (coop/refresh-counts!)
                             (when on-added (on-added name)))
 
                         (= reason "no-graph")

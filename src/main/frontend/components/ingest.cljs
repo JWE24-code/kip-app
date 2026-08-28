@@ -17,6 +17,7 @@
             [frontend.components.llm-banner :as llm-banner]
             [frontend.components.telemetry :as telemetry]
             [frontend.config :as config]
+            [frontend.handler.coop :as coop]
             [frontend.handler.llm :as llm-handler]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -60,7 +61,8 @@
                   (swap! *done (fn [d] {:hatched (into (:hatched d) hatched)
                                         :failed  (into (:failed d) failed)}))
                   (reset! *remaining remaining)
-                  (reset! *metrics metrics))))
+                  (reset! *metrics metrics)
+                  (coop/refresh-counts!))))
       (p/catch (fn [e] (reset! *error (str e))))
       (p/finally (fn []
                    (stop-poll! *progress *poll-id)

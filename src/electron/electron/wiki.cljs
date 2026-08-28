@@ -234,6 +234,31 @@
          (log-error (str "add-egg! " filename ": " (.-message e)))
          (resolve* #js {:ok false :reason (.-message e)}))))))
 
+(defn- count-files
+  "Count of files under `dir` (recursively) matching `pred` (a fn of the
+  relative path). 0 when the folder doesn't exist."
+  [dir pred]
+  (try
+    (->> (fs/readdirSync dir #js {:recursive true})
+         (filter pred)
+         count)
+    (catch :default _ 0)))
+
+(defn coop-counts!
+  "Cheap fs read for the first-run checklist: how many source files sit in
+  eggs/ and how many pages exist under nest/ (index.md, which is generated,
+  doesn't count). Both 0 before the folders are created. No subprocess."
+  [vault-root]
+  (p/create
+   (fn [resolve* _reject]
+     (if (string/blank? vault-root)
+       (resolve* #js {:eggs 0 :nestPages 0})
+       (resolve* #js {:eggs      (count-files (.join node-path vault-root "eggs")
+                                              #(contains? egg-extensions (string/lower-case (.extname node-path %))))
+                      :nestPages (count-files (.join node-path vault-root "nest")
+                                              #(and (= ".md" (string/lower-case (.extname node-path %)))
+                                                    (not= "index.md" (.basename node-path %))))})))))
+
 (defn peck!
   "Runs the Peck workflow for `question` without filing the answer back.
   Resolves to {:answer :citedSlugs :candidateSlugs :steps}. `steps` is what
