@@ -15,6 +15,7 @@
             [electron.ipc :as ipc]
             [frontend.components.drop-source :as drop-source]
             [frontend.components.llm-banner :as llm-banner]
+            [frontend.components.paste-source :as paste-source]
             [frontend.components.telemetry :as telemetry]
             [frontend.config :as config]
             [frontend.handler.coop :as coop]
@@ -125,6 +126,7 @@
   (rum/local nil ::metrics)
   (rum/local false ::trace?)
   (rum/local false ::classic?)
+  (rum/local false ::paste?)
   {:will-mount   (fn [state]
                    (load-preview! (get state ::preview) (get state ::error) (get state ::busy?))
                    (llm-handler/refresh!)
@@ -142,6 +144,7 @@
         *metrics   (get state ::metrics)
         *trace?    (get state ::trace?)
         *classic?  (get state ::classic?)
+        *paste?    (get state ::paste?)
         ctx        {:*done *done :*remaining *remaining :*error *error :*busy? *busy?
                     :*progress *progress :*poll-id (get state ::poll-id)
                     :*metrics *metrics :*trace? *trace? :*classic? *classic?}
@@ -164,7 +167,17 @@
         (ui/button {:variant :outline :size :sm
                     :on-click #(pick-eggs! *preview *error *busy?)}
                    "Add source…")
+        (ui/button {:variant :outline :size :sm :class "ml-2"
+                    :on-click #(swap! *paste? not)}
+                   "Paste text…")
         [:span.text-xs.opacity-50.ml-2 "or drop a file here"]])
+
+     (when (and @*paste? (not @*busy?))
+       (paste-source/paste-panel
+        {:on-cancel #(reset! *paste? false)
+         :on-saved  (fn [_name]
+                      (reset! *paste? false)
+                      (load-preview! *preview *error *busy?))}))
 
      (llm-banner/provider-banner)
 
