@@ -22,6 +22,7 @@
             [frontend.components.chat :as chat]
             [frontend.components.git :as git-component]
             [frontend.components.ingest :as ingest]
+            [frontend.components.welcome :as welcome]
             [frontend.components.plugins :as plugin]
             [frontend.components.shell :as shell]
             [frontend.components.whiteboard :as whiteboard]
@@ -408,7 +409,8 @@
           _ (js/setTimeout #(mobile/mobile-postinit) 1000)
           ;; FIXME: an ugly implementation for redirecting to page on new window is restored
           _ (repo-handler/graph-ready! repo)
-          _ (fs-watcher/load-graph-files! repo loaded-homepage-files)]))
+          _ (fs-watcher/load-graph-files! repo loaded-homepage-files)]
+    (welcome/maybe-show!)))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
