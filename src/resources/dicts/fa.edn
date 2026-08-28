@@ -1,6 +1,6 @@
 {:accessibility/skip-to-main-content "برو به محتوای اصلی"
- :tutorial/text #resource "tutorials/tutorial-fa.md"
- :tutorial/dummy-notes #resource "tutorials/dummy-notes-fa.md"
+ :tutorial/text #resource "tutorials/tutorial-en.md"
+ :tutorial/dummy-notes #resource "tutorials/dummy-notes-en.md"
  :on-boarding/demo-graph "این یک گراف نمایشی است و تا زمانی که یک پوشه محلی را باز نکنید، تغییرات آن ذخیره نخواهند شد."
  :on-boarding/add-graph "افزودن یک گراف"
  :on-boarding/open-local-dir "باز کردن یک پوشه محلی"

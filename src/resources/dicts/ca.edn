@@ -1,5 +1,5 @@
-{:tutorial/text #resource                           "tutorials/tutorial-ca.md"
- :tutorial/dummy-notes #resource                    "tutorials/dummy-notes-ca.md"
+{:tutorial/text #resource                           "tutorials/tutorial-en.md"
+ :tutorial/dummy-notes #resource                    "tutorials/dummy-notes-en.md"
  :all-files                                         "Llista d'arxius"
  :all-graphs                                        "Llista de grafs"
  :all-journals                                      "Llista de diaris"

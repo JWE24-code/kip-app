@@ -1,6 +1,6 @@
 {:accessibility/skip-to-main-content "Pular para o conteúdo principal"
- :tutorial/text #resource "tutorials/tutorial-pt-br.md"
- :tutorial/dummy-notes #resource "tutorials/dummy-notes-pt-br.md"
+ :tutorial/text #resource "tutorials/tutorial-en.md"
+ :tutorial/dummy-notes #resource "tutorials/dummy-notes-en.md"
  :on-boarding/demo-graph "Este é um grafo de demonstração, as alterações não serão salvas até que você abra uma pasta local."
  :on-boarding/add-graph "Adicionar um grafo"
  :on-boarding/open-local-dir "Abrir um diretório local"

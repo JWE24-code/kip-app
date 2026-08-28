@@ -1,6 +1,6 @@
 {:accessibility/skip-to-main-content               "Přeskočit na hlavní obsah"
- :tutorial/text                                    #resource "tutorials/tutorial-cs.md"
- :tutorial/dummy-notes                             #resource "tutorials/dummy-notes-cs.md"
+ :tutorial/text                                    #resource "tutorials/tutorial-en.md"
+ :tutorial/dummy-notes                             #resource "tutorials/dummy-notes-en.md"
  :on-boarding/demo-graph                           "Toto je ukázkový graf, změny nebudou uloženy, dokud neotevřete místní adresář."
  :on-boarding/add-graph                            "Přidat graf"
  :on-boarding/open-local-dir                       "Otevřete místní adresář"

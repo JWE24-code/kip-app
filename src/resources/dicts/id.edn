@@ -1,6 +1,6 @@
 {:accessibility/skip-to-main-content "Lompat ke konten utama"
- :tutorial/text #resource "tutorials/tutorial-id.md"
- :tutorial/dummy-notes #resource "tutorials/dummy-notes-id.md"
+ :tutorial/text #resource "tutorials/tutorial-en.md"
+ :tutorial/dummy-notes #resource "tutorials/dummy-notes-en.md"
  :on-boarding/demo-graph "Ini adalah grafik demo, perubahan tidak akan disimpan sampai Anda membuka folder lokal."
  :on-boarding/add-graph "Tambahkan grafik"
  :on-boarding/open-local-dir "Buka direktori lokal"

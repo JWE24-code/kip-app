@@ -52,12 +52,12 @@
  :on-boarding/importing-roam-desc "Import a JSON Export of your Roam graph"
  :on-boarding/importing-lsq-desc "Import an EDN or a JSON Export of your Logseq graph"
  :on-boarding/importing-opml-desc " Import OPML files"
- :on-boarding/main-title (fn [] ["Welcome to " [:strong "Kip!"]])
- :on-boarding/main-desc "First you need to choose a folder where Kip will store your thoughts, ideas, notes."
+ :on-boarding/main-title (fn [] ["Welcome to " [:strong "Kip"] " — don't browse your notes, peck them."])
+ :on-boarding/main-desc "Pick a folder for your graph. Kip keeps everything there as plain files: your notes, and the wiki it hatches from documents you drop in."
  :on-boarding/section-btn-title "Choose a folder"
  :on-boarding/section-btn-desc "Open existing directory or Create a new one"
  :on-boarding/section-title "How Kip saves your work"
- :on-boarding/section-desc "Inside the directory you choose, Kip will create 4 folders."
+ :on-boarding/section-desc "Inside the folder you choose, Kip keeps your pages as plain files. When you hatch your first source it also adds the coop — eggs/, nest/, clucks/ and the rest."
  :on-boarding/section-tip-1 "Each page is a file stored only on your {1}."
  :on-boarding/section-tip-2 "You may choose to sync it later."
  :on-boarding/section-assets "Graphics & Documents"
