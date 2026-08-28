@@ -19,6 +19,7 @@
             [frontend.config :as config]
             [frontend.handler.coop :as coop]
             [frontend.handler.llm :as llm-handler]
+            [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.util :as util]
             [promesa.core :as p]
@@ -37,6 +38,26 @@
       (p/then (fn [r] (reset! *preview (bean/->clj r))))
       (p/catch (fn [e] (reset! *error (str e))))
       (p/finally (fn [] (reset! *busy? false)))))
+
+(defn- pick-eggs! [*preview *error *busy?]
+  (-> (ipc/ipc "wikiPickEggs" (vault-root))
+      (p/then (fn [r]
+                (let [{:keys [canceled added duplicates rejected]} (bean/->clj r)]
+                  (when-not canceled
+                    (when (seq added)
+                      (notification/show!
+                       (str "Added " (string/join ", " added) " to eggs/.") :success true))
+                    (when (seq duplicates)
+                      (notification/show!
+                       (str (string/join ", " duplicates) " already in your coop.") :info true))
+                    (when (seq rejected)
+                      (notification/show!
+                       (str "Skipped " (count rejected) " file(s) — Kip reads Markdown and text only.")
+                       :warning true))
+                    (when (or (seq added) (seq duplicates))
+                      (coop/refresh-counts!)
+                      (load-preview! *preview *error *busy?))))))
+      (p/catch (fn [e] (notification/show! (str "Couldn't add sources: " e) :error true)))))
 
 (defn- start-poll! [*progress *poll-id]
   (let [tick #(-> (ipc/ipc "wikiIngestProgress" (vault-root))
@@ -137,6 +158,13 @@
       "Turns new or changed files in " [:code "eggs/"] ", " [:code "journals/"] " and "
       [:code "pages/"] " into nest pages — no per-file review. Runs in batches of "
       (str batch-size) "."]
+
+     (when-not @*busy?
+       [:div.mb-3
+        (ui/button {:variant :outline :size :sm
+                    :on-click #(pick-eggs! *preview *error *busy?)}
+                   "Add source…")
+        [:span.text-xs.opacity-50.ml-2 "or drop a file here"]])
 
      (llm-banner/provider-banner)
 
