@@ -73,9 +73,26 @@
   (reset! *poll-id nil)
   (reset! *progress nil))
 
-(defn- run-batch! [{:keys [*done *remaining *error *busy? *progress *poll-id *metrics *trace? *classic?]}]
+(defn- check-recovery!
+  "Read the last hatch-progress.json; if a run stopped without finishing (an
+  error, or fewer done than total), stash {:done :total :error} in *recovery
+  and put the error where the modal already shows it. What finished is on disk
+  — a re-run skips it by content hash. `from-error` is the rejection string
+  when this is called right after a failed batch."
+  [*recovery *error from-error]
+  (-> (ipc/ipc "wikiIngestProgress" (vault-root))
+      (p/then (fn [r]
+                (let [{:keys [done total running] :as p} (bean/->clj r)
+                      err (or from-error (:error p))]
+                  (when (and p (not running) (or err (and (number? total) (< (or done 0) total))))
+                    (reset! *recovery {:done (or done 0) :total total})
+                    (when (and err (nil? @*error)) (reset! *error err))))))
+      (p/catch (fn [_] (when from-error (reset! *recovery {})))))) ;; no progress file — still flag it
+
+(defn- run-batch! [{:keys [*preview *done *remaining *error *busy? *progress *poll-id *metrics *trace? *classic? *recovery]}]
   (reset! *busy? true)
   (reset! *error nil)
+  (reset! *recovery nil)
   (reset! *progress nil)
   (start-poll! *progress *poll-id)
   (-> (ipc/ipc "wikiIngestBatch" (vault-root) batch-size (boolean @*trace?) (boolean @*classic?))
@@ -86,7 +103,10 @@
                   (reset! *remaining remaining)
                   (reset! *metrics metrics)
                   (coop/refresh-counts!))))
-      (p/catch (fn [e] (reset! *error (str e))))
+      (p/catch (fn [e]
+                 (reset! *error (str e))
+                 (check-recovery! *recovery *error (str e))
+                 (load-preview! *preview *error *busy?)))
       (p/finally (fn []
                    (stop-poll! *progress *poll-id)
                    (reset! *busy? false)))))
@@ -128,8 +148,10 @@
   (rum/local false ::trace?)
   (rum/local false ::classic?)
   (rum/local false ::paste?)
+  (rum/local nil ::recovery)
   {:will-mount   (fn [state]
                    (load-preview! (get state ::preview) (get state ::error) (get state ::busy?))
+                   (check-recovery! (get state ::recovery) (get state ::error) nil)
                    (llm-handler/refresh!)
                    state)
    :will-unmount (fn [state]
@@ -146,10 +168,12 @@
         *trace?    (get state ::trace?)
         *classic?  (get state ::classic?)
         *paste?    (get state ::paste?)
-        ctx        {:*done *done :*remaining *remaining :*error *error :*busy? *busy?
+        *recovery  (get state ::recovery)
+        ctx        {:*preview *preview :*done *done :*remaining *remaining :*error *error :*busy? *busy?
                     :*progress *progress :*poll-id (get state ::poll-id)
-                    :*metrics *metrics :*trace? *trace? :*classic? *classic?}
+                    :*metrics *metrics :*trace? *trace? :*classic? *classic? :*recovery *recovery}
         preview    @*preview
+        recovery   @*recovery
         done       @*done
         remaining  @*remaining
         started?   (or (seq (:hatched done)) (seq (:failed done)) (some? remaining))
@@ -184,6 +208,17 @@
 
      (when @*error
        [:div.my-2 (llm-banner/error-view @*error)])
+
+     (when (and recovery (not @*busy?))
+       [:div.my-2.p-3.rounded.border.border-amber-500.text-sm
+        {:class "bg-amber-500/10"}
+        [:div.font-medium
+         (if-let [{:keys [done total]} (when (:total recovery) recovery)]
+           (str "The last run stopped after " done " of " total " file"
+                (when (not= 1 total) "s") ".")
+           "The last run didn't finish.")]
+        [:div.text-xs.opacity-70.mt-1
+         "What finished is saved — hatching again skips it and picks up the rest."]])
 
      (cond
        (and @*busy? (nil? preview))
