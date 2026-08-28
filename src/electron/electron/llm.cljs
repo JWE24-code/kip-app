@@ -11,8 +11,10 @@
   Node and Electron's bundled Node at once. llm.js itself only touches the
   filesystem and fetch — no native deps — so it stays here."
   (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
             ["path" :as node-path]
-            [electron.wiki :as wiki]))
+            [electron.wiki :as wiki]
+            [promesa.core :as p]))
 
 (def llm-lib (js/require (.join node-path wiki/scripts-dir "lib" "llm.js")))
 
@@ -36,3 +38,36 @@
   to {success true/false, reply/error}."
   [candidate]
   (.testConnection llm-lib (bean/->js candidate)))
+
+(defn probe-local!
+  "GET <base-url>/models — Ollama serves it at its OpenAI-compatible path, as
+  does any OpenAI-compatible local server. Resolves a JS object
+  {ok bool, models [ids], error str}. 3s timeout; a failed probe is not an
+  error the user should see as a stack trace.
+
+  Uses the Node global fetch (no proxy agent) — a localhost endpoint must not
+  be routed through a system HTTP proxy."
+  [base-url]
+  (if (string/blank? base-url)
+    (p/resolved #js {:ok false :error "Set a base URL first."})
+    (-> (js/fetch (str (string/replace base-url #"/+$" "") "/models")
+                  #js {:signal (js/AbortSignal.timeout 3000)})
+        (p/then (fn [^js res]
+                  (if (.-ok res)
+                    (p/then (.json res)
+                            (fn [j]
+                              (let [models (->> (:data (bean/->clj j)) (keep :id) sort vec)]
+                                #js {:ok true :models (clj->js models)})))
+                    #js {:ok false :error (str "Server responded " (.-status res) ".")})))
+        (p/catch (fn [^js e]
+                   ;; global fetch wraps the real network error in e.cause
+                   (let [name (str (.-name e))
+                         code (str (some-> e .-cause .-code))
+                         msg  (str (.-message e))]
+                     #js {:ok false
+                          :error (cond
+                                   (= name "TimeoutError")     "No response — is the server running?"
+                                   (= code "ECONNREFUSED")     "Nothing is listening there — start it (e.g. `ollama serve`)."
+                                   (contains? #{"ENOTFOUND" "EAI_AGAIN"} code) "Can't resolve that host."
+                                   (string/blank? msg)         "Couldn't reach it."
+                                   :else                       msg)}))))))
