@@ -9,7 +9,7 @@
  :on-boarding/new-graph-desc-4 "/pages - 기타 페이지들을 저장합니다."
  :on-boarding/new-graph-desc-5 "/logseq - 사용자 설정과 custom.css, 그리고 몇 가지 메타데이터를 저장합니다."
  :help/start "시작"
- :help/about "Logseq에 대하여"
+ :help/about "Kip에 대하여"
  :help/roadmap "로드맵"
  :help/bug "오류 제보"
  :help/feature "기능 제안"

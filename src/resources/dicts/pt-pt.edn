@@ -16,7 +16,7 @@
  :on-boarding/tour-whiteboard-new "{1} Criar um novo quadro branco"
  :on-boarding/tour-whiteboard-new-description "Existem múltiplas formas de criar um novo quadro branco. Uma delas está sempre aqui mesmo no painel."
  :help/start "Começar a usar"
- :help/about "Sobre o Logseq"
+ :help/about "Sobre o Kip"
  :help/roadmap "Plano de implementação"
  :help/bug "Reportar um erro"
  :help/feature "Pedir uma funcionalidade"

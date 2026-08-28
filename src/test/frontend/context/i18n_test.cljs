@@ -10,11 +10,11 @@
 (deftest translations
   (testing "ui translations"
     (state/set-preferred-language! :en)
-    (is (= "About Logseq"
+    (is (= "About Kip"
            (i18n/t :help/about)))
 
     (state/set-preferred-language! :es)
-    (is (= "Acerca de Logseq"
+    (is (= "Acerca de Kip"
            (i18n/t :help/about))))
 
   (testing "command and category translations"

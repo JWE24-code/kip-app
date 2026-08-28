@@ -79,7 +79,7 @@
  :graph/save-error "Opslaan mislukt"
  :graph/save-success "Opslaan succesvol"
 
- :help/about "Over Logseq"
+ :help/about "Over Kip"
  :help/block-reference "Blok referentie"
  :help/bug "Rapporteer een fout"
  :help/changelog "Verander logboek"
