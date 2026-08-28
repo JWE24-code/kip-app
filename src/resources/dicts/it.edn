@@ -9,7 +9,7 @@
  :on-boarding/new-graph-desc-4 "/pages - contiene le altre pagine"
  :on-boarding/new-graph-desc-5 "/logseq - contiene i dati di configurazione, custom.css, e alcuni metadati."
  :help/start "Per iniziare"
- :help/about "Informazioni su Logseq"
+ :help/about "Informazioni su Kip"
  :help/bug "Segnala un problema"
  :help/feature "Richiedi una funzionalità"
  :help/changelog "Registro delle modifiche"

@@ -16,7 +16,7 @@
  :on-boarding/tour-whiteboard-new "{1} 創建新白板"
  :on-boarding/tour-whiteboard-new-description "除了這裡還有很多方法能創建新白板，詳閱 LogSeq 文件。"
  :help/start "入門"
- :help/about "關於 Logseq"
+ :help/about "關於 Kip"
  :help/roadmap "路線圖"
  :help/bug "問題回報"
  :help/feature "功能建議"

@@ -18,7 +18,7 @@
  :on-boarding/tour-whiteboard-new "{1} Створити нову дошку"
  :on-boarding/tour-whiteboard-new-description "Існує кілька способів створення нової дошки. Один із них завжди тут, на інформаційній панелі."
  :help/start "Починаємо"
- :help/about "Про Logseq"
+ :help/about "Про Kip"
  :help/roadmap "План розробки"
  :help/bug "Повідомлення про помилку"
  :help/feature "Запит функції"

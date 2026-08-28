@@ -191,7 +191,7 @@
  :header/search "Suchen"
  :header/toggle-left-sidebar "Linke Seitenleiste umschalten"
 
- :help/about "Über Logseq"
+ :help/about "Über Kip"
  :help/block-reference "Blockverweis"
  :help/blog "Logseq Blog"
  :help/bug "Fehlerbericht"
