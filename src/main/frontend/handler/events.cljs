@@ -19,6 +19,7 @@
             [frontend.components.diff :as diff]
             [frontend.components.encryption :as encryption]
             [frontend.components.file-sync :as file-sync]
+            [frontend.components.chat :as chat]
             [frontend.components.git :as git-component]
             [frontend.components.ingest :as ingest]
             [frontend.components.plugins :as plugin]
@@ -336,6 +337,11 @@
 
 (defmethod handle :modal/show-hatch [_]
   (state/set-modal! ingest/hatch-modal))
+
+(defmethod handle :peck/prefill [[_ text]]
+  (state/close-modal!)
+  (state/set-peck-mode! true)
+  (chat/prefill! text))
 
 (defmethod handle :modal/show-instruction [_]
   (state/set-modal! capacitor-fs/instruction {:id :instruction

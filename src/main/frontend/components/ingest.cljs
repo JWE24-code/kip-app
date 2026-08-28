@@ -162,11 +162,23 @@
        :else
        [:div
         (when (seq (:hatched done))
-          [:div.mb-3
-           [:h3.text-lg.font-medium.mb-1 (str "Hatched " (count (:hatched done)))]
-           [:ul.list-disc.pl-5
-            (for [[i it] (map-indexed vector (:hatched done))]
-              (rum/with-key (source-line it) i))]])
+          (let [new-slugs (->> (:hatched done)
+                               (mapcat :results)
+                               (filter #(= "create" (:action %)))
+                               (map :slug)
+                               distinct)]
+            [:div.mb-3
+             [:h3.text-lg.font-medium.mb-1 (str "Hatched " (count (:hatched done)))]
+             [:ul.list-disc.pl-5
+              (for [[i it] (map-indexed vector (:hatched done))]
+                (rum/with-key (source-line it) i))]
+             (when (and (not @*busy?) (seq new-slugs))
+               [:div.mt-2
+                (ui/button
+                 {:variant :outline :size :sm
+                  :on-click #(state/pub-event! [:peck/prefill
+                                                (str "What's in [[" (first new-slugs) "]]?")])}
+                 "Ask Kip about them →")])]))
 
         (when (seq (:failed done))
           [:div.mb-3

@@ -39,6 +39,12 @@
 (def ^:private *messages (rum/cursor-in *peck-session [:messages]))
 (def ^:private *input (rum/cursor-in *peck-session [:input]))
 
+(defn prefill!
+  "Drop `text` into the Peck input, ready for the user to send or edit. Used by
+  the post-hatch 'Ask Kip about them' CTA (see :peck/prefill in events)."
+  [text]
+  (swap! *peck-session assoc :input text))
+
 ;; Generic on purpose — these render in the empty state, so they must not
 ;; reference anything from the user's own nest.
 (def ^:private example-prompts
