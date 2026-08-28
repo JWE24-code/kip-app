@@ -154,6 +154,27 @@
                       trace? (conj "--trace")
                       classic? (conj "--classic"))))
 
+(defn hatch-propose-next!
+  "\"Review before writing\": propose pages for the next pending source (past
+  `skip` in the current batch of `limit`) without writing anything. Resolves
+  to {:done true} when there's nothing left, otherwise {:source :relPath :kind
+  :remaining :plan [{:slug :title :type :action :summary}]} (or {:whiteboard
+  true} for a board — no plan to pick from). The full plan is stashed at
+  <coop>/.roost/hatch-plan.json for hatch-commit-next!."
+  [vault-root limit skip classic?]
+  (run-node-script! (script "hatch-all.js") vault-root
+                    (cond-> ["--propose-next" "--limit" (str limit) "--skip" (str skip)]
+                      classic? (conj "--classic"))))
+
+(defn hatch-commit-next!
+  "Commit the plan stashed by hatch-propose-next!, keeping only the pages whose
+  slug is in `keep-slugs` (a vector; nil = keep all). Resolves to {:source
+  :results [...] :skipped [...]} / {:source :keptNone true} / {:source :error}."
+  [vault-root keep-slugs]
+  (run-node-script! (script "hatch-all.js") vault-root
+                    (cond-> ["--commit-next"]
+                      (some? keep-slugs) (conj "--keep" (js/JSON.stringify (clj->js keep-slugs))))))
+
 (defn hatch-progress!
   "Reads <coop>/.roost/hatch-progress.json, written continuously by
   hatch-all.js during a batch. Resolves to {:done :total :current :running

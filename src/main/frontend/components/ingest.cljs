@@ -111,6 +111,59 @@
                    (stop-poll! *progress *poll-id)
                    (reset! *busy? false)))))
 
+;; --- "Review before writing" mode ----------------------------------------
+;; One file at a time: propose its pages (LLM), let the user keep/skip each,
+;; then commit. hatch-all.js --propose-next / --commit-next; the plan is
+;; stashed in .roost/hatch-plan.json between the two. `skip` steps past files
+;; that failed to propose (a committed file just drops out of the pending
+;; scan, so it usually stays 0).
+
+(declare review-next!)
+
+(defn- review-record! [*done proposal res]
+  (let [{:keys [source results error keptNone skipped]} res]
+    (swap! *done (fn [d]
+                   (cond
+                     error   (update d :failed conj {:source source :error error})
+                     keptNone d
+                     :else   (update d :hatched conj {:source source :kind (:kind proposal)
+                                                      :results results :skipped (or skipped [])}))))))
+
+(defn- review-commit! [{:keys [*rp *done] :as ctx} keep-all?]
+  (let [{:keys [proposal keeps]} @*rp
+        keep-slugs (when-not keep-all?
+                     (vec (filter keeps (map :slug (:plan proposal)))))]
+    (swap! *rp assoc :phase :committing)
+    (-> (ipc/ipc "wikiIngestCommitNext" (vault-root)
+                 (when-not keep-all? (clj->js (or keep-slugs []))))
+        (p/then (fn [r]
+                  (review-record! *done proposal (bean/->clj r))
+                  (coop/refresh-counts!)))
+        (p/catch (fn [e]
+                   (swap! *done update :failed conj {:source (:source proposal) :error (str e)})))
+        (p/finally (fn [] (review-next! ctx))))))
+
+(defn- review-next! [{:keys [*rp *classic? *preview *error *busy?] :as ctx}]
+  (swap! *rp assoc :phase :proposing :proposal nil :error nil)
+  (-> (ipc/ipc "wikiIngestProposeNext" (vault-root) batch-size (get @*rp :skip 0) (boolean @*classic?))
+      (p/then (fn [r]
+                (let [{:keys [done whiteboard plan] :as res} (bean/->clj r)]
+                  (cond
+                    done       (do (swap! *rp assoc :phase :done)
+                                   (load-preview! *preview *error *busy?))
+                    whiteboard (do (swap! *rp assoc :proposal res) (review-commit! ctx true))
+                    :else      (swap! *rp assoc
+                                      :phase :reviewing
+                                      :proposal res
+                                      :keeps (set (map :slug plan)))))))
+      (p/catch (fn [e]
+                 (swap! *rp assoc :phase :reviewing :proposal nil :error (str e))))))
+
+(defn- review-start! [ctx]
+  (reset! (:*done ctx) {:hatched [] :failed []})
+  (reset! (:*rp ctx) {:skip 0})
+  (review-next! ctx))
+
 (defn- per-file
   "The {:source :ms :ok} rows perf-report wants, from the modal's done state."
   [done]
@@ -135,6 +188,58 @@
    [:input {:type "checkbox" :checked checked? :on-change on-change}]
    label])
 
+(rum/defc review-panel
+  "The per-file plan review shown while ::rp is active. `rp` is its state map."
+  [rp {:keys [*rp] :as ctx}]
+  (let [{:keys [phase proposal keeps error]} rp
+        {:keys [source relPath plan remaining]} proposal]
+    [:div.my-2
+     (case phase
+       :proposing  [:div.text-sm.opacity-70 "Proposing pages for " [:span.font-medium (or source "the next file")] "…"]
+       :committing [:div.text-sm.opacity-70 "Writing…"]
+       :reviewing
+       [:div
+        (if error
+          [:div
+           [:div.my-1 (llm-banner/error-view error)]
+           [:div.flex.gap-2.mt-2
+            (ui/button {:variant :outline :size :sm
+                        :on-click #(do (swap! *rp update :skip inc) (review-next! ctx))}
+                       "Skip this file →")
+            (ui/button {:variant :ghost :size :sm :on-click #(reset! *rp {:skip 0 :phase :done})}
+                       "Stop review")]]
+          [:div
+           [:div.text-sm.mb-1
+            [:span.font-medium source]
+            (when relPath [:span.text-xs.opacity-50.ml-1 (str "(" relPath ")")])
+            (when (and (number? remaining) (pos? remaining))
+              [:span.text-xs.opacity-50.ml-1 (str "· " remaining " more after this")])]
+           (if (empty? plan)
+             [:div.text-sm.opacity-70.my-2 "No pages proposed for this file."]
+             [:ul.my-1
+              (for [{:keys [slug title type action summary]} plan]
+                [:li.text-sm.py-1 {:key slug}
+                 [:label.flex.items-start.gap-2.cursor-pointer
+                  [:input.mt-1 {:type "checkbox"
+                                :checked (boolean (keeps slug))
+                                :on-change #(swap! *rp update :keeps
+                                                   (fn [ks] ((if (keeps slug) disj conj) (or ks #{}) slug)))}]
+                  [:span
+                   [:span.font-medium title]
+                   [:span.text-xs.opacity-50.ml-1 (str "[" type " · " action "]")]
+                   (when-not (string/blank? summary)
+                     [:div.text-xs.opacity-60 summary])]]])])
+           [:div.flex.gap-2.mt-2
+            (ui/button {:size :sm :disabled (or (empty? plan) (empty? keeps))
+                        :on-click #(review-commit! ctx false)}
+                       (str "Write " (count keeps) (if (= 1 (count keeps)) " page" " pages") " →"))
+            (ui/button {:variant :outline :size :sm
+                        :on-click #(do (swap! *rp assoc :keeps #{}) (review-commit! ctx false))}
+                       "Skip this file")
+            (ui/button {:variant :ghost :size :sm :on-click #(reset! *rp {:skip 0 :phase :done})}
+                       "Stop")]])]
+       nil)]))
+
 (rum/defcs hatch-modal
   < rum/reactive
   (rum/local nil ::preview)
@@ -149,6 +254,8 @@
   (rum/local false ::classic?)
   (rum/local false ::paste?)
   (rum/local nil ::recovery)
+  (rum/local false ::review?)
+  (rum/local nil ::rp)
   {:will-mount   (fn [state]
                    (when-not (config/demo-graph?)
                      (load-preview! (get state ::preview) (get state ::error) (get state ::busy?))
@@ -170,14 +277,19 @@
         *classic?  (get state ::classic?)
         *paste?    (get state ::paste?)
         *recovery  (get state ::recovery)
+        *review?   (get state ::review?)
+        *rp        (get state ::rp)
         ctx        {:*preview *preview :*done *done :*remaining *remaining :*error *error :*busy? *busy?
                     :*progress *progress :*poll-id (get state ::poll-id)
-                    :*metrics *metrics :*trace? *trace? :*classic? *classic? :*recovery *recovery}
+                    :*metrics *metrics :*trace? *trace? :*classic? *classic?
+                    :*recovery *recovery :*rp *rp}
         preview    @*preview
         recovery   @*recovery
         done       @*done
         remaining  @*remaining
         demo?      (config/demo-graph?)
+        rp         @*rp
+        reviewing? (and rp (not= :done (:phase rp)))
         started?   (or (seq (:hatched done)) (seq (:failed done)) (some? remaining))
         pending-n  (if started? (or remaining 0) (count (:pending preview)))]
     (drop-source/drop-zone
@@ -229,6 +341,9 @@
          "What finished is saved — hatching again skips it and picks up the rest."]])
 
      (cond
+       reviewing?
+       (review-panel rp ctx)
+
        (and @*busy? (nil? preview))
        [:div.text-sm.opacity-60.my-2 "Scanning sources…"]
 
@@ -287,14 +402,17 @@
               [:ul.list-disc.pl-5.mt-1 {:class "max-h-40 overflow-y-auto"}
                (for [[i {:keys [source kind kb]}] (map-indexed vector (:pending preview))]
                  [:li.text-xs.opacity-70 {:key i} (str "[" kind "] " source " (" kb " KB)")])]])
+           (checkbox-row "Review each source's pages before writing" @*review? #(swap! *review? not))
            (checkbox-row "Record LLM activity (thinking + timings)" @*trace? #(swap! *trace? not))
            (checkbox-row "Classic mode — one LLM call per page (slower; for comparison)" @*classic? #(swap! *classic? not))
            (ui/button
-            {:on-click #(run-batch! ctx)
+            {:on-click #(if @*review? (review-start! ctx) (run-batch! ctx))
              :disabled @*busy?}
-            (str (if started? "Hatch next " "Start — hatch ")
-                 (min batch-size pending-n)
-                 (when started? (str " (" pending-n " left)"))))])
+            (if @*review?
+              (str "Review " (min batch-size pending-n) " file" (when (not= 1 (min batch-size pending-n)) "s") " →")
+              (str (if started? "Hatch next " "Start — hatch ")
+                   (min batch-size pending-n)
+                   (when started? (str " (" pending-n " left)")))))])
 
         (when (and (not @*busy?) @*metrics)
           [:details.mt-3.text-sm

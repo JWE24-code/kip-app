@@ -546,6 +546,12 @@
 (defmethod handle :wikiIngestBatch [_ [_ vault-root limit trace? classic?]]
   (wiki/hatch-batch! vault-root limit trace? classic?))
 
+(defmethod handle :wikiIngestProposeNext [_ [_ vault-root limit skip classic?]]
+  (wiki/hatch-propose-next! vault-root limit skip classic?))
+
+(defmethod handle :wikiIngestCommitNext [_ [_ vault-root keep-slugs]]
+  (wiki/hatch-commit-next! vault-root keep-slugs))
+
 (defmethod handle :wikiIngestProgress [_ [_ vault-root]]
   (wiki/hatch-progress! vault-root))
 
