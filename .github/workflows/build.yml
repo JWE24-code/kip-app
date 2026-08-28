@@ -1,19 +1,27 @@
 name: build
 
-# Builds runnable Kip app folders for Windows + Linux and uploads them as
-# artifacts. On a v* tag it also attaches them to a GitHub Release.
+# Runnable Kip app folders for Linux + Windows, uploaded as artifacts. On a
+# v* tag it also attaches them to a GitHub Release.
 #
-# Needs the retrieval-layer repo (JWE24-code/kip, private) checked out as a
-# sibling of app/ — set a fine-grained PAT with read access to it as the
-# KIP_SCRIPTS_TOKEN repository secret.
+# Free-tier conscious:
+#   * manual runs default to Linux only (1x minutes); pick "windows" or "both".
+#   * a v* tag always builds both and makes a Release.
+#   * artifacts kept 5 days (private storage is only 500 MB free — the electron
+#     runtime makes each ~90 MB).
+#   * ~/.m2 + the yarn cache are cached (separate 10 GB budget, free).
 #
-# electron-forge is NOT used (its packager is flaky on modern Node); each job
-# runs the platform's packaging/ script, which hand-assembles the folder the
-# same way docs/BUILD.md describes.
+# Needs: repo secret KIP_SCRIPTS_TOKEN = a PAT with Contents:read on
+# JWE24-code/kip (checked out as a sibling of app/). electron-forge is NOT
+# used — the packaging/ scripts hand-assemble (see docs/BUILD.md).
 
 on:
   workflow_dispatch:
     inputs:
+      platform:
+        description: "Which platform(s) to build"
+        type: choice
+        options: [linux, windows, both]
+        default: linux
       cljs_mode:
         description: "cljs build (compile = safe, release = optimized/experimental)"
         type: choice
@@ -30,22 +38,30 @@ permissions:
   contents: write   # for the Release on a tag
 
 jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - id: m
+        shell: bash
+        run: |
+          plat='${{ github.event.inputs.platform || 'linux' }}'
+          [ '${{ startsWith(github.ref, 'refs/tags/v') }}' = 'true' ] && plat=both
+          lin='{"os":"ubuntu-latest","name":"linux-x64","script":"bash app/packaging/linux/build.sh"}'
+          win='{"os":"windows-2022","name":"windows-x64","script":"pwsh app/packaging/windows/build.ps1"}'
+          case "$plat" in
+            linux)   inc="[$lin]" ;;
+            windows) inc="[$win]" ;;
+            both)    inc="[$lin,$win]" ;;
+          esac
+          echo "matrix={\"include\":$inc}" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: setup
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          # windows-2022, not -latest: -latest ships VS 18 which node-gyp
-          # (11.x) doesn't recognise ("unknown version undefined"), so the
-          # better-sqlite3 native rebuild for the Electron ABI can't compile.
-          - os: windows-2022
-            name: windows-x64
-            run: pwsh app/packaging/windows/build.ps1
-            folder: app/out/Kip-win32-x64
-          - os: ubuntu-latest
-            name: linux-x64
-            run: bash app/packaging/linux/build.sh
-            folder: app/out/Kip-linux-x64
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
@@ -72,9 +88,7 @@ jobs:
 
       - name: Free disk space (linux)
         if: runner.os == 'Linux'
-        run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /usr/local/.ghcup || true
-          df -h /
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /usr/local/.ghcup || true
 
       - uses: actions/setup-node@v5
         with:
@@ -90,29 +104,43 @@ jobs:
           cli: latest
           github-token: ${{ github.token }}
 
+      - name: Cache Maven / Clojure deps
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: m2-${{ runner.os }}-${{ hashFiles('app/deps.edn') }}
+          restore-keys: m2-${{ runner.os }}-
+
+      - name: Cache Yarn downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/yarn
+            ~/AppData/Local/Yarn/Cache
+          key: yarn-${{ runner.os }}-${{ hashFiles('app/yarn.lock', 'app/resources/package.json') }}
+          restore-keys: yarn-${{ runner.os }}-
+
       - name: Install Yarn 1 (classic — this repo's yarn.lock is v1)
         shell: bash
         run: npm install -g yarn@1.22.22
 
       - name: Build + assemble
         shell: bash
-        run: ${{ matrix.run }}
+        run: ${{ matrix.script }}
 
-      - name: Package (linux)
-        if: runner.os == 'Linux'
+      - name: Package
+        shell: bash
         run: |
           v=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' app/src/main/frontend/version.cljs | head -1)
-          tar -C app/out -czf "Kip-$v-${{ matrix.name }}.tar.gz" Kip-linux-x64
-          echo "ASSET=Kip-$v-${{ matrix.name }}.tar.gz" >> "$GITHUB_ENV"
-
-      - name: Package (windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $v = (Select-String app/src/main/frontend/version.cljs -Pattern '\d+\.\d+\.\d+').Matches[0].Value
-          $asset = "Kip-$v-${{ matrix.name }}.zip"
-          Compress-Archive -Path app/out/Kip-win32-x64/* -DestinationPath $asset -CompressionLevel Optimal
-          "ASSET=$asset" | Out-File -FilePath $env:GITHUB_ENV -Append
+          ws="$PWD"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            asset="Kip-$v-${{ matrix.name }}.zip"
+            ( cd app/out/Kip-win32-x64 && 7z a -mx=5 "$ws/$asset" . >/dev/null )
+          else
+            asset="Kip-$v-${{ matrix.name }}.tar.gz"
+            tar -C app/out -czf "$asset" Kip-linux-x64
+          fi
+          echo "ASSET=$asset" >> "$GITHUB_ENV"
 
       - name: Smoke test (linux — the bundled retrieval layer runs under Electron-as-Node)
         if: runner.os == 'Linux'
@@ -121,24 +149,21 @@ jobs:
           mkdir -p /tmp/coop/.roost
           ELECTRON_RUN_AS_NODE=1 KIP_COOP_ROOT=/tmp/coop \
             app/out/Kip-linux-x64/kip app/out/Kip-linux-x64/resources/app/scripts/reminders.js list --json
-          ELECTRON_RUN_AS_NODE=1 KIP_COOP_ROOT=/tmp/coop \
-            app/out/Kip-linux-x64/kip app/out/Kip-linux-x64/resources/app/scripts/skills-list.js | head -c 200
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
           path: ${{ env.ASSET }}
           if-no-files-found: error
+          retention-days: 5
+          compression-level: 0   # the asset is already compressed
 
       - name: Attach to Release (tags only)
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
-        run: gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" --notes "Automated build." --repo "${{ github.repository }}" 2>/dev/null || true
-      - name: Upload asset to Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: gh release upload "${{ github.ref_name }}" "${{ env.ASSET }}" --clobber --repo "${{ github.repository }}"
+        run: |
+          gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" \
+            --notes "Automated build." --repo "${{ github.repository }}" 2>/dev/null || true
+          gh release upload "${{ github.ref_name }}" "${{ env.ASSET }}" --clobber --repo "${{ github.repository }}"
