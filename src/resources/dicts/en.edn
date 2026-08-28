@@ -841,7 +841,6 @@
   :ui/install-plugins-from-file    "Install plugins from plugins.edn"
   :editor/toggle-open-blocks       "Toggle open blocks (collapse or expand all blocks)"
   :ui/clear-all-notifications      "Clear all notifications"
-  :git/commit                      "Create git commit with message"
   :dev/show-block-data             "(Dev) Show block data"
   :dev/show-block-ast              "(Dev) Show block AST"
   :dev/show-page-data              "(Dev) Show page data"

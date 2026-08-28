@@ -5,7 +5,6 @@
             [frontend.colors :as colors]
             [frontend.components.assets :as assets]
             [frontend.components.conversion :as conversion-component]
-            [frontend.components.file-sync :as fs]
             [frontend.components.llm-settings :as llm-settings]
             [frontend.components.skills-settings :as skills-settings]
             [frontend.components.plugins :as plugins]
@@ -16,7 +15,6 @@
             [frontend.db :as db]
             [frontend.dicts :as dicts]
             [frontend.handler.config :as config-handler]
-            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
@@ -32,10 +30,8 @@
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
-            [frontend.util :refer [classnames web-platform?] :as util]
+            [frontend.util :refer [classnames] :as util]
             [frontend.version :refer [version]]
-            [goog.object :as gobj]
-            [goog.string :as gstring]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
@@ -75,7 +71,7 @@
 
        [:a.text-sm.fade-link.underline.inline
         {:target "_blank"
-         :href "https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md"}
+         :href "https://github.com/JWE24-code/kip-app/blob/version/file/CHANGELOG.md"}
         (t :settings-page/changelog)]]]
 
      (when (and (util/electron?) (not checking?) (some? newer?))
@@ -200,63 +196,6 @@
                    #(when (js/confirm (t :relaunch-confirm-to-work))
                       (js/logseq.api.relaunch))))
          true)]]]))
-
-(rum/defcs switch-git-auto-commit-row < rum/reactive
-  [state t]
-  (let [enabled? (state/get-git-auto-commit-enabled?)]
-    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-     [:label.block.text-sm.font-medium.leading-5.opacity-70
-      (t :settings-page/git-switcher-label)]
-     [:div
-      [:div.rounded-md.sm:max-w-xs
-       (ui/toggle
-         enabled?
-         (fn []
-           (state/set-state! [:electron/user-cfgs :git/disable-auto-commit?] enabled?)
-           (p/do!
-            (ipc/ipc :userAppCfgs :git/disable-auto-commit? enabled?)
-            (ipc/ipc :setGitAutoCommit)))
-         true)]]]))
-
-(rum/defcs switch-git-commit-on-close-row < rum/reactive
-  [state t]
-  (let [enabled? (state/get-git-commit-on-close-enabled?)]
-    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-     [:label.block.text-sm.font-medium.leading-5.opacity-70
-      (t :settings-page/git-commit-on-close)]
-     [:div
-      [:div.rounded-md.sm:max-w-xs
-       (ui/toggle
-         enabled?
-         (fn []
-           (state/set-state! [:electron/user-cfgs :git/commit-on-close?] (not enabled?))
-           (ipc/ipc :userAppCfgs :git/commit-on-close? (not enabled?)))
-         true)]]]))
-
-(rum/defcs git-auto-commit-seconds < rum/reactive
-  [state t]
-  (let [secs (or (state/sub [:electron/user-cfgs :git/auto-commit-seconds]) 60)]
-    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-     [:label.block.text-sm.font-medium.leading-5.opacity-70
-      (t :settings-page/git-commit-delay)]
-     [:div.mt-1.sm:mt-0.sm:col-span-2
-      [:div.max-w-lg.rounded-md.sm:max-w-xs
-       [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
-        {:default-value secs
-         :on-blur       (fn [event]
-                          (let [value (-> (util/evalue event)
-                                          util/safe-parse-int)]
-                            (if (and (number? value)
-                                     (< 0 value (inc 86400)))
-                              (p/do!
-                                (state/set-state! [:electron/user-cfgs :git/auto-commit-seconds] value)
-                                (ipc/ipc :userAppCfgs :git/auto-commit-seconds value)
-                                (ipc/ipc :setGitAutoCommit))
-                              (when-let [elem (gobj/get event "target")]
-                                (notification/show!
-                                 [:div "Invalid value! Must be a number between 1 and 86400"]
-                                 :warning true)
-                                (gobj/set elem "value" secs)))))}]]]]))
 
 (rum/defc app-auto-update-row < rum/reactive [t]
   (let [enabled? (state/sub [:electron/user-cfgs :auto-update])
@@ -524,15 +463,6 @@
          (state/close-settings!)
          (route-handler/redirect! {:to :zotero-setting})))]]])
 
-(defn auto-push-row [_t current-repo enable-git-auto-push?]
-  (when (and current-repo (string/starts-with? current-repo "https://"))
-    (toggle "enable_git_auto_push"
-            "Enable Git auto push"
-            enable-git-auto-push?
-            (fn []
-              (let [value (not enable-git-auto-push?)]
-                (config-handler/set-config! :git-auto-push value))))))
-
 (defn usage-diagnostics-row [t instrument-disabled?]
   (toggle "usage-diagnostics"
           (t :settings-page/disable-sentry)
@@ -686,7 +616,7 @@
      (when current-repo (edit-export-css))]))
 
 (rum/defcs settings-editor < rum/reactive
-  [_state current-repo]
+  [_state _current-repo]
   (let [preferred-format (state/get-preferred-format)
         preferred-date-format (state/get-date-formatter)
         preferred-workflow (state/get-preferred-workflow)
@@ -698,8 +628,7 @@
         auto-expand-block-refs? (state/auto-expand-block-refs?)
         enable-tooltip? (state/enable-tooltip?)
         enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
-        show-brackets? (state/show-brackets?)
-        enable-git-auto-push? (state/enable-git-auto-push? current-repo)]
+        show-brackets? (state/show-brackets?)]
 
     [:div.panel-wrap.is-editor
      (file-format-row t preferred-format)
@@ -718,29 +647,7 @@
      (when-not (or (util/mobile?) (mobile-util/native-platform?))
        (tooltip-row t enable-tooltip?))
      (timetracking-row t enable-timetracking?)
-     (enable-all-pages-public-row t enable-all-pages-public?)
-     (auto-push-row t current-repo enable-git-auto-push?)]))
-
-(rum/defc settings-git
-  []
-  [:div.panel-wrap
-   [:div.text-sm.my-4
-    (ui/admonition
-     :tip
-     [:p (t :settings-page/git-tip)])
-    [:span.text-sm.opacity-50.my-4
-     (t :settings-page/git-desc-1)]
-    [:br] [:br]
-    [:span.text-sm.opacity-50.my-4
-     (t :settings-page/git-desc-2)]
-    [:a {:href "https://git-scm.com/" :target "_blank"}
-     "Git"]
-    [:span.text-sm.opacity-50.my-4
-     (t :settings-page/git-desc-3)]]
-   [:br]
-   (switch-git-auto-commit-row t)
-   (switch-git-commit-on-close-row t)
-   (git-auto-commit-seconds t)])
+     (enable-all-pages-public-row t enable-all-pages-public?)]))
 
 (rum/defc settings-advanced < rum/reactive
   [current-repo]
@@ -760,37 +667,6 @@
        :warning
        [:p (t :settings-page/clear-cache-warning)])]))
 
-(rum/defc sync-enabled-switcher
-  [enabled?]
-  (ui/toggle enabled?
-             (fn []
-               (file-sync-handler/set-sync-enabled! (not enabled?)))
-             true))
-
-(rum/defc sync-diff-merge-enabled-switcher
-  [enabled?]
-  (ui/toggle enabled?
-             (fn []
-               (file-sync-handler/set-sync-diff-merge-enabled! (not enabled?)))
-             true))
-
-(defn sync-switcher-row [enabled?]
-  (row-with-button-action
-   {:left-label (t :settings-page/sync)
-    :action (sync-enabled-switcher enabled?)}))
-
-(defn sync-diff-merge-switcher-row [enabled?]
-  (row-with-button-action
-   {:left-label (str (t :settings-page/sync-diff-merge) " (Experimental!)") ;; Not included in i18n to avoid outdating translations
-    :action (sync-diff-merge-enabled-switcher enabled?)
-    :desc (ui/tippy {:html        [:div
-                                   [:div (t :settings-page/sync-diff-merge-desc)]
-                                   [:div (t :settings-page/sync-diff-merge-warn)]]
-                     :class       "tippy-hover ml-2"
-                     :interactive true
-                     :disabled    false}
-                    (svg/info))}))
-
 (rum/defc whiteboards-enabled-switcher
   [enabled?]
   (ui/toggle enabled?
@@ -804,205 +680,12 @@
    {:left-label (t :settings-page/enable-whiteboards)
     :action (whiteboards-enabled-switcher enabled?)}))
 
-(rum/defc settings-account-usage-description [pro-account? graph-usage]
-  (let [count-usage (count graph-usage)
-        count-limit (if pro-account? 10 1)
-        count-percent (js/Math.round (/ count-usage count-limit 0.01))
-        storage-usage (->> (map :used-gbs graph-usage)
-                           (reduce + 0))
-        storage-usage-formatted (cond
-                                  (zero? storage-usage) "0.0"
-                                  (< storage-usage 0.01) "Less than 0.01"
-                                  :else (gstring/format "%.2f" storage-usage))
-        ;; TODO: check logic on this. What are the rules around storage limits?
-        ;; do we, and should we be able to, give individual users more storage?
-        ;; should that be on a per graph or per user basis?
-        default-storage-limit (if pro-account? 10 0.05)
-        storage-limit (->> (range 0 count-limit)
-                           (map #(get-in graph-usage [% :limit-gbs] default-storage-limit))
-                           (reduce + 0))
-        storage-percent (/ storage-usage storage-limit 0.01)
-        storage-percent-formatted (gstring/format "%.1f" storage-percent)]
-    [:div.text-sm
-     (when pro-account?
-       [:<>
-        (gstring/format "%s of %s synced graphs " count-usage count-limit)
-        [:strong.text-white (gstring/format "(%s%%)" count-percent)]
-        ", "])
-     (gstring/format "%sGB of %sGB total storage " storage-usage-formatted storage-limit)
-     [:strong.text-white (gstring/format "(%s%%)" storage-percent-formatted)]]))
-     ; storage-usage-formatted "GB of " storage-limit "GB total storage"
-     ; [:strong.text-white " (" storage-percent-formatted "%)"]]))
-
-
-(rum/defc settings-account-usage-graphs [_pro-account? graph-usage]
-  (when (< 0 (count graph-usage))
-   [:div.grid.gap-3 {:style {:grid-template-columns (str "repeat(" (count graph-usage) ", 1fr)")}}
-    (for [{:keys [name used-percent]} graph-usage
-          :let [color (if (<= 100 used-percent) "bg-red-500" "bg-blue-500")]]
-     [:div.rounded-full.w-full.h-2 {:class "bg-black/50"
-                                    :tooltip name}
-      [:div.rounded-full.h-2 {:class color
-                              :style {:width (str used-percent "%")
-                                      :min-width "0.5rem"
-                                      :max-width "100%"}}]])]))
-
-(rum/defc ^:large-vars/cleanup-todo settings-account < rum/reactive
-  []
-  (let [current-graph-uuid (state/sub-current-file-sync-graph-uuid)
-        graph-usage (state/get-remote-graph-usage)
-        current-graph-is-remote? ((set (map :uuid graph-usage)) current-graph-uuid)
-        logged-in? (user-handler/logged-in?)
-        user-info (state/get-user-info)
-        paid-user? (#{"active" "on_trial" "cancelled"} (:LemonStatus user-info))
-        gift-user? (some #{"pro"} (:UserGroups user-info))
-        pro-account? (or paid-user? gift-user?)
-        expiration-date (some-> user-info :LemonEndsAt date/parse-iso)
-        renewal-date (some-> user-info :LemonRenewsAt date/parse-iso)
-        has-subscribed? (some? (:LemonStatus user-info))]
-    [:div.panel-wrap.is-features.mb-8
-     [:div.mt-1.sm:mt-0.sm:col-span-2
-      (cond
-        logged-in?
-        [:div.grid.grid-cols-3.gap-8.pt-2
-         [:div "Current plan"]
-         [:div.col-span-2
-          [:div {:class "w-full bg-gray-500/10 rounded-lg p-4 flex flex-col gap-4"}
-           [:div.flex.gap-4.items-center
-            (if pro-account?
-              [:div.flex-1 "Pro"]
-              [:div.flex-1 "Free"])
-            (cond
-              has-subscribed?
-              (ui/button "Manage plan" {:class "p-1 h-8 justify-center"
-                                        :disabled true
-                                        :icon "upload"})
-                                         ; :on-click user-handler/upgrade})
-              (not pro-account?)
-              (ui/button "Upgrade plan" {:class "p-1 h-8 justify-center"
-                                         :icon "upload"
-                                         :on-click user-handler/upgrade})
-              :else nil)]
-           (settings-account-usage-graphs pro-account? graph-usage)
-           (settings-account-usage-description pro-account? graph-usage)
-           (if current-graph-is-remote?
-             (ui/button "Deactivate syncing" {:class "p-1 h-8 justify-center"
-                                              :disabled true
-                                              :background "gray"
-                                              :icon "cloud-off"})
-             (ui/button "Activate syncing" {:class "p-1 h-8 justify-center"
-                                            :background "blue"
-                                            :icon "cloud"
-                                            :on-click #(fs/maybe-onboarding-show :sync-initiate)}))]]
-         (when has-subscribed?
-          [:<>
-           [:div "Billing"]
-           [:div.col-span-2.flex.flex-col.gap-4
-            (cond
-              ;; If there is no expiration date, print the renewal date
-              (and renewal-date (nil? expiration-date))
-              [:div
-               [:strong.font-semibold "Next billing date: "
-                (date/get-locale-string renewal-date)]]
-              ;; If the expiration date is in the future, word it as such
-              (< (js/Date.) expiration-date)
-              [:div
-               [:strong.font-semibold "Pro plan expires on: "
-                (date/get-locale-string expiration-date)]]
-              ;; Otherwise, ind
-              :else
-              [:div
-               [:strong.font-semibold "Pro plan expired on: "
-                (date/get-locale-string expiration-date)]])
-
-            [:div (ui/button "Open invoices" {:class "w-full h-8 p-1 justify-center"
-                                              :disabled true
-                                              :background "gray"
-                                              :icon "receipt"})]]])
-         [:div "Profile"]
-         [:div.col-span-2.grid.grid-cols-2.gap-4
-          [:div.flex.flex-col.gap-2.box-border {:class "basis-1/2"}
-           [:label.text-sm.font-semibold "First name"]
-           [:input.rounded.border.px-2.py-1.box-border {:class "border-blue-500 bg-black/25 w-full"}]]
-          [:div.flex.flex-col.gap-2 {:class "basis-1/2"}
-           [:label.text-sm.font-semibold "Last name"]
-           [:input.rounded.border.px-2.py-1.box-border {:class "border-blue-500 bg-black/25 w-full"}]]
-          [:div.flex-1.flex.flex-col.gap-2.col-span-2
-           [:label.text-sm.font-semibold "Username"]
-           [:input.rounded.border.px-2.py-1.box-border {:class "border-blue-500 bg-black/25"
-                                                        :value (user-handler/email)}]]]
-         [:div "Authentication"]
-         [:div.col-span-2
-          [:div.grid.grid-cols-2.gap-4
-           [:div (ui/button (t :logout) {:class "p-1 h-8 justify-center w-full"
-                                         :background "gray"
-                                         :icon "logout"
-                                         :on-click user-handler/logout})]
-           [:div (ui/button "Reset password" {:class "p-1 h-8 justify-center w-full"
-                                              :disabled true
-                                              :background "gray"
-                                              :icon "key"
-                                              :on-click user-handler/logout})]
-           [:div.col-span-2 (ui/button "Delete Account" {:class "p-1 h-8 justify-center w-full"
-                                                         :disabled true
-                                                         :background "red"})]]]]
-
-        (not logged-in?)
-        [:div.grid.grid-cols-3.gap-8.pt-2
-         [:div "Authentication"]
-         [:div.col-span-2.flex.flex-wrap.gap-4
-          [:div.w-full.text-white "With a Logseq account, you can access cloud-based services like Logseq Sync and alpha/beta features."]
-          [:div.flex-1 (ui/button "Sign up" {:class "h-8 w-full text-center justify-center"
-                                             :on-click (fn []
-                                                         (state/close-settings!)
-                                                         (state/pub-event! [:user/login]))})]
-          [:div.flex-1 (ui/button (t :login) {:icon "login"
-                                              :class "h-8 w-full text-center justify-center"
-                                              :background "gray"
-                                              :on-click (fn []
-                                                          (state/close-settings!)
-                                                          (state/pub-event! [:user/login]))})]]
-         [:div.col-span-3.flex.flex-col.gap-4 {:class "bg-black/20 p-4 rounded-lg"}
-          [:div.flex.w-full.items-center
-           [:div {:class "w-1/2 text-lg"}
-            "Discover the power of "
-            [:strong {:class "text-white/80"} "Logseq Sync"]]
-           [:div {:class "w-1/2 bg-gradient-to-r from-white/10 to-transparent p-3 rounded-lg flex items-center gap-2 px-5 ml-5"}
-            [:div.w-3.h-3.rounded-full.bg-green-500]
-            "Synced"]]
-          [:div.flex.w-full.gap-4
-           [:div {:class "w-1/2 bg-black/50 rounded-lg p-4 pt-10 relative flex flex-col gap-4"}
-            [:div.absolute.top-0.left-4.bg-gray-700.uppercase.px-2.py-1.rounded-b-lg.font-bold.text-xs "Free"]
-            [:div
-             [:strong.text-white.text-xl.font-normal "$0"]]
-            [:div.text-white.font-bold {:class "h-[2.5rem] "} "Get started with basic syncing"]
-            [:ul.text-xs.list-none.m-0.flex.flex-col.gap-0.5
-             [:li "Unlimited unsynced graphs"]
-             [:li "1 synced graph (up to 50MB, notes only)"]
-             [:li "No asset syncing"]
-             [:li "Access to core Logseq features"]]]
-           [:div {:class "w-1/2 bg-black/50 rounded-lg p-4 pt-10 relative flex flex-col gap-4"}
-            [:div.absolute.top-0.left-4.bg-blue-700.uppercase.px-2.py-1.rounded-b-lg.font-bold.text-xs "Pro"]
-            [:div
-             [:strong.text-white.text-xl.font-normal "$10"]
-             [:span.text-xs.font-base {:class "ml-0.5"} "/ month"]]
-            [:div.text-white.font-bold {:class "h-[2.5rem]"} "Unlock advanced syncing and more"]
-            [:ul.text-xs.list-none.m-0.flex.flex-col.gap-0.5
-             [:li "Unlimited unsynced graphs"]
-             [:li "10 synced graphs (up to 5GB each)"]
-             [:li "Sync assets up to 100MB per file"]
-             [:li "Early access to alpha/beta features"]
-             [:li "Upcoming cloud-based features, including Logseq Publish"]]]]]])]]))
-
 (rum/defc settings-features < rum/reactive
   []
   (let [current-repo (state/get-current-repo)
         enable-journals? (state/enable-journals? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
-        enable-sync? (state/enable-sync?)
-        enable-sync-diff-merge? (state/enable-sync-diff-merge?)
-        enable-whiteboards? (state/enable-whiteboards? current-repo)
-        logged-in? (user-handler/logged-in?)]
+        enable-whiteboards? (state/enable-whiteboards? current-repo)]
     [:div.panel-wrap.is-features.mb-8
      (journal-row enable-journals?)
      (when (not enable-journals?)
@@ -1024,53 +707,10 @@
      (when (util/electron?)
        (http-server-switcher-row))
      (flashcards-switcher-row enable-flashcards?)
-     (zotero-settings-row)
-     (when-not web-platform?
-       [:div.mt-1.sm:mt-0.sm:col-span-2
-        [:hr]
-        (if logged-in?
-          [:div
-           (user-handler/email)
-           [:p (ui/button (t :logout) {:class "p-1"
-                                       :icon "logout"
-                                       :on-click user-handler/logout})]]
-          [:div
-           (ui/button (t :login) {:class "p-1"
-                                  :icon "login"
-                                  :on-click (fn []
-                                              (state/close-settings!)
-                                              (state/pub-event! [:user/login]))})
-           [:p.text-sm.opacity-50 (t :settings-page/login-prompt)]])])
-
-     (when-not web-platform?
-       [:<>
-        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-         [:label.flex.font-medium.leading-5.self-start.mt-1
-          (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/beta-features)]]
-        [:div.flex.flex-col.gap-4
-         {:class (when-not user-handler/alpha-or-beta-user? "opacity-50 pointer-events-none cursor-not-allowed")}
-         (sync-switcher-row enable-sync?)
-         (when enable-sync?
-           (sync-diff-merge-switcher-row enable-sync-diff-merge?))
-         [:div.text-sm
-          (t :settings-page/sync-desc-1)
-          [:a.mx-1 {:href "https://blog.logseq.com/how-to-setup-and-use-logseq-sync/"
-                    :target "_blank"}
-           (t :settings-page/sync-desc-2)]
-          (t :settings-page/sync-desc-3)]]])]))
-
-     ;; (when-not web-platform?
-     ;;   [:<>
-     ;;    [:hr]
-;;    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-     ;;     [:label.flex.font-medium.leading-5.self-start.mt-1 (ui/icon  (if logged-in? "lock-open" "lock") {:class "mr-1"}) (t :settings-page/alpha-features)]]
-     ;;    [:div.flex.flex-col.gap-4
-     ;;     {:class (when-not user-handler/alpha-user? "opacity-50 pointer-events-none cursor-not-allowed")}
-     ;;     ;; features
-     ;;     ]])
+     (zotero-settings-row)]))
 
 
-(def DEFAULT-ACTIVE-TAB-STATE (if config/ENABLE-SETTINGS-ACCOUNT-TAB [:account :account] [:general :general]))
+(def DEFAULT-ACTIVE-TAB-STATE [:general :general])
 
 (rum/defc settings-effect
   < rum/static
@@ -1121,14 +761,9 @@
         [:h1.cp__settings-modal-title (t :settings)]]
        [:ul.settings-menu
         (for [[label id text icon]
-              [(when config/ENABLE-SETTINGS-ACCOUNT-TAB
-                [:account "account" (t :settings-page/tab-account) (ui/icon "user-circle")])
-               [:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
+              [[:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
                [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
                [:keymap "keymap" (t :settings-page/tab-keymap) (ui/icon "keyboard")]
-
-               (when (util/electron?)
-                 [:version-control "git" (t :settings-page/tab-version-control) (ui/icon "history")])
 
                (when (util/electron?)
                  [:llm "llm" (t :settings-page/tab-llm) (ui/icon "message-2")])
@@ -1166,9 +801,6 @@
            (reset! *active [label label])
            nil)
 
-         :account
-         (settings-account)
-
          :general
          (settings-general current-repo)
 
@@ -1177,9 +809,6 @@
 
          :keymap
          (shortcut/shortcut-keymap-x)
-
-         :version-control
-         (settings-git)
 
          :llm
          (llm-settings/settings-content)

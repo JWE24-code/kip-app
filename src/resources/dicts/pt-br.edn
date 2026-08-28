@@ -727,7 +727,6 @@
  :command.editor/up "Mover cursor para cima / Selecionar para cima"
  :command.editor/zoom-in "Dar zoom no bloco em edição / Avançar caso contrário"
  :command.editor/zoom-out "Dar zoom out no bloco em edição / Retroceder caso contrário"
- :command.git/commit "Criar commit git com mensagem"
  :command.go/all-graphs "Ir para todos os grafos"
  :command.go/all-pages "Ir para todas as páginas"
  :command.go/backward "Retroceder"

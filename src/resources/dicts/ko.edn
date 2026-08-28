@@ -334,7 +334,6 @@
  :command.editor/replace-block-reference-at-point        "블록 참조를 해당 콘텐츠로 변경"
  :command.editor/paste-text-in-one-block-at-point        "현재 위치에 텍스트를 붙여넣기"
  :command.ui/toggle-help                  "도움말 토글"
- :command.git/commit                      "커밋"
  :command.go/search                       "검색으로 이동"
  :command.go/backward                     "뒤로 이동"
  :command.go/forward                      "앞으로 이동"

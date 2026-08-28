@@ -1,6 +1,5 @@
 (ns frontend.modules.shortcut.config
   (:require [clojure.string :as str]
-            [frontend.components.commit :as commit]
             [frontend.extensions.srs.handler :as srs]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.handler.config :as config-handler]
@@ -542,10 +541,6 @@
    :ui/accent-colors-picker                 {:binding "c c"
                                              :fn      #(state/pub-event! [:modal/toggle-accent-colors-modal])}
 
-   :git/commit                              {:binding  "mod+g c"
-                                             :inactive (not (util/electron?))
-                                             :fn       commit/show-commit-modal!}
-
    :dev/show-block-data                     {:binding  []
                                              :inactive (not (state/developer-mode?))
                                              :fn       :frontend.handler.common.developer/show-block-data}
@@ -738,7 +733,6 @@
             :ui/install-plugins-from-file
             :editor/toggle-open-blocks
             :ui/clear-all-notifications
-            :git/commit
             :sidebar/close-top
             :dev/show-block-data
             :dev/show-block-ast
@@ -927,7 +921,6 @@
       :date-picker/prev-week
       :date-picker/next-week
       :date-picker/complete
-      :git/commit
       :dev/show-block-data
       :dev/show-block-ast
       :dev/show-page-data

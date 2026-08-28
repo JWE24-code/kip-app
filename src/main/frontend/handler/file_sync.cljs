@@ -29,8 +29,10 @@
 
 (defn enable-sync?
   []
-  (or (state/enable-sync?)
-      config/dev?))
+  ;; Logseq Sync is removed in Kip — it has no account backend of its own.
+  ;; Hard-off so every dependent UI affordance (the header login button, the
+  ;; sync indicator, the Settings → Features "beta features" block) disappears.
+  false)
 
 (defn current-graph-sync-on?
   []

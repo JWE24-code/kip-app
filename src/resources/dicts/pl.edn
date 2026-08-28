@@ -336,7 +336,6 @@
  :command.editor/toggle-open-blocks               "Zwiń / Rozwiń otwarte bloki"
  :command.ui/toggle-wide-mode                     "Włącz / wyłącz tryb szeroki"
  :command.ui/goto-plugins                         "Przejdź do dashboardu pluginów"
- :command.git/commit                              "Wykonaj GIT COMMIT z wiadomością"
  :all-whiteboards                                 "Wszystkie tablice"
  :auto-heading                                    "Automatyczne nagłówki"
  :export-copied-to-clipboard                      "Skopiowano do schowka!"

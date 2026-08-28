@@ -83,7 +83,9 @@
    :sub))
 
 (defn logged-in? []
-  (some? (state/get-auth-refresh-token)))
+  ;; Kip has no account system — the Logseq login/sync UI is removed, so nothing
+  ;; ever sets a token. Hard-false keeps every "logged in" branch unreachable.
+  false)
 
 (defn- set-token-to-localstorage!
   ([id-token access-token]
