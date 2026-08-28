@@ -56,3 +56,45 @@
   []
   (let [{:keys [loaded? configured?]} (:kip/llm @state/state)]
     (and loaded? (not configured?))))
+
+(defn humanize-error
+  "Turn a raw LLM error (a string — a rejected IPC message, a `failed` entry's
+  :error, stderr) into {:title :hint :raw}. :title/:hint are nil when nothing
+  matched — callers fall back to showing :raw."
+  [raw]
+  (let [s (str raw)
+        m (condp #(re-find %1 %2) s
+            #"(?i)\((?:401|403)\)|unauthor|invalid.{0,12}api.?key|authentication.?fail|x-api-key"
+            {:title "The provider rejected your API key."
+             :hint  "Check the key in Settings → LLM (and that it matches the selected provider)."}
+
+            #"(?i)\(429\)|rate.?limit|too many requests|quota|insufficient_quota"
+            {:title "The provider is rate-limiting you."
+             :hint  "Wait a minute and try again — or check your plan's usage limits."}
+
+            #"(?i)ECONNREFUSED|fetch failed|ECONNRESET|socket hang up|network error"
+            {:title "Couldn't reach the LLM provider."
+             :hint  "Check your connection. For a local model, make sure the server is running (e.g. `ollama serve`)."}
+
+            #"(?i)ENOTFOUND|EAI_AGAIN|getaddrinfo"
+            {:title "Couldn't resolve the provider's address."
+             :hint  "Check the Base URL in Settings → LLM."}
+
+            #"(?i)ETIMEDOUT|TimeoutError|timed? ?out|request timeout"
+            {:title "The request timed out."
+             :hint  "The provider may be slow or overloaded — try again."}
+
+            #"(?i)_API_KEY is required|_MODEL is required|_BASE_URL is required|no model configured|no provider|provider .{0,10}not"
+            {:title "The LLM provider isn't fully set up."
+             :hint  "Fill in the missing field in Settings → LLM."}
+
+            #"(?i)\(404\)|model.{0,24}(not found|does not exist|no such|unknown|not available|invalid)|does not exist.{0,8}model"
+            {:title "That model isn't available for this provider."
+             :hint  "Pick a valid model in Settings → LLM."}
+
+            #"(?i)\(5\d\d\)|internal server error|service unavailable|overloaded|bad gateway"
+            {:title "The provider had a server error."
+             :hint  "Usually temporary — try again in a moment."}
+
+            nil)]
+    (assoc m :raw s)))

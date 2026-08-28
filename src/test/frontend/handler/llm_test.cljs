@@ -55,3 +55,28 @@
 
 (deftest configured?-unknown-provider
   (is (false? (llm/configured? {:provider "kip" :providers {:kip {:apiKey "" :model ""}}}))))
+
+(deftest humanize-error-classification
+  (are [raw expected-title] (= expected-title (:title (llm/humanize-error raw)))
+    "api.deepseek.com request failed (401): Authentication Fails"  "The provider rejected your API key."
+    "invalid x-api-key"                                            "The provider rejected your API key."
+    "request failed (429): rate limit exceeded"                    "The provider is rate-limiting you."
+    "insufficient_quota"                                           "The provider is rate-limiting you."
+    "fetch failed"                                                 "Couldn't reach the LLM provider."
+    "connect ECONNREFUSED 127.0.0.1:11434"                         "Couldn't reach the LLM provider."
+    "getaddrinfo ENOTFOUND api.example"                            "Couldn't resolve the provider's address."
+    "ETIMEDOUT"                                                    "The request timed out."
+    "ANTHROPIC_API_KEY is required when PROVIDER=anthropic"        "The LLM provider isn't fully set up."
+    "OPENAI_MODEL is required when PROVIDER=openai"                "The LLM provider isn't fully set up."
+    "model gpt-9 does not exist or you do not have access"         "That model isn't available for this provider."
+    "request failed (503): service unavailable"                    "The provider had a server error."))
+
+(deftest humanize-error-unmatched-keeps-raw
+  (let [{:keys [title hint raw]} (llm/humanize-error "something weird\n  at stack")]
+    (is (nil? title))
+    (is (nil? hint))
+    (is (= "something weird\n  at stack" raw))))
+
+(deftest humanize-error-always-has-raw
+  (is (= "api.x request failed (401)" (:raw (llm/humanize-error "api.x request failed (401)"))))
+  (is (= "" (:raw (llm/humanize-error nil)))))

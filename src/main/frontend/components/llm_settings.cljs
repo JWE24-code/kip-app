@@ -7,6 +7,7 @@
   directory."
   (:require [cljs-bean.core :as bean]
             [electron.ipc :as ipc]
+            [frontend.components.llm-banner :as llm-banner]
             [frontend.config :as config]
             [frontend.handler.llm :as llm-handler]
             [frontend.state :as state]
@@ -162,5 +163,6 @@
           [:div.text-sm.my-1 {:class (if (= type :success) "text-green-500" "text-red-500")} text])
 
         (when-let [{:keys [success error]} @*test-result]
-          [:div.text-sm.my-1 {:class (if success "text-green-500" "text-red-500")}
-           (if success "Connection OK." (str "Failed: " error))])])]))
+          (if success
+            [:div.text-sm.my-1.text-green-500 "Connection OK."]
+            [:div.my-1 (llm-banner/error-view error)]))])]))
