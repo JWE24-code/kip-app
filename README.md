@@ -3,7 +3,11 @@
 <p align="center">A pecking-first knowledge base — a fork of
 <a href="https://github.com/logseq/logseq">Logseq</a> with an LLM retrieval layer.</p>
 
-<p align="center"><em>v0.1 — early, rough, and looking for feedback.</em></p>
+<p align="center"><a href="https://jwe24-code.github.io/kip-site/">kip website</a> ·
+<a href="https://github.com/JWE24-code/kip-app/releases">releases</a> ·
+<a href="https://github.com/JWE24-code/kip">retrieval layer</a></p>
+
+<p align="center"><em>Early, rough, and looking for feedback.</em></p>
 
 ---
 
@@ -70,7 +74,7 @@ Choose the **Local** provider (Ollama) to keep everything on your machine.
 disk — keep that folder out of shared/synced locations and out of version
 control.
 
-## Known limitations (v0.1)
+## Known limitations
 
 - Windows + Linux x64 only — no macOS build, no mobile.
 - Unsigned binaries; no auto-update.
@@ -79,7 +83,7 @@ control.
   and Peck don't work.
 - Skills run as Node subprocesses with your privileges (no sandbox). A skill
   you add yourself is like running a shell script.
-- It's a personal project at v0.1 — expect bugs and breaking changes.
+- It's an early personal project — expect bugs and breaking changes.
 
 ## Feedback
 
@@ -87,7 +91,8 @@ Bugs and ideas → [**Issues**](https://github.com/JWE24-code/kip-app/issues).
 Questions and general feedback →
 [**Discussions**](https://github.com/JWE24-code/kip-app/discussions).
 Security → see [`SECURITY.md`](SECURITY.md).
-Changes → [CHANGELOG](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
+Changes → [CHANGELOG](CHANGELOG.md).
+Website → [jwe24-code.github.io/kip-site](https://jwe24-code.github.io/kip-site/).
 
 ## Build from source
 
