@@ -29,6 +29,7 @@
             [electron.shell :as shell]
             [electron.state :as state]
             [electron.update :as update]
+            [electron.groom-scheduler :as groom-scheduler]
             [electron.utils :as utils]
             [electron.wiki :as wiki]
             [electron.window :as win]
@@ -572,6 +573,12 @@
 
 (defmethod handle :checkForAppUpdate [_ [_ force?]]
   (update/check! {:force? (boolean force?)}))
+
+(defmethod handle :getGroomSchedule [_ _]
+  (groom-scheduler/schedule-info))
+
+(defmethod handle :setGroomSchedule [_ [_ sched]]
+  (groom-scheduler/set-schedule! (js->clj sched)))
 
 (defmethod handle :wikiChat [_ [_ vault-root question trace?]]
   (wiki/peck! vault-root question (boolean trace?)))
