@@ -1,14 +1,11 @@
 ---
-title: How to take dummy notes?
+title: The Nest
 ---
 
-- Hello, I'm a block!
-:PROPERTIES:
-:id: 5f713e91-8a3c-4b04-a33a-c39482428e2d
-:END:
-    - I'm a child block!
-    - I'm another child block!
-- Hey, I'm another block!
-:PROPERTIES:
-:id: 5f713ea8-8cba-403d-ac00-9964b1ec7190
-:END:
+- The **nest** is the wiki Kip builds for you. You never write it by hand — it grows every time you **hatch** a source.
+- Three kinds of page, all cross-linked:
+    - **entity** — a person, project, company, place. Anything you'd point at and name.
+    - **concept** — an idea, a decision, a theme that shows up across your sources.
+    - **source** — one document you fed in, with what Kip pulled out of it.
+- When you **peck** a question, the answer is stitched from these pages and cites them, so you can always trace a claim back to where it came from.
+- Open a real folder and hatch something to see your own nest fill in.

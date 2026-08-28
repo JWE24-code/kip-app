@@ -21,6 +21,7 @@
             [frontend.components.block :as block]
             [frontend.components.drop-source :as drop-source]
             [frontend.components.first-run :as first-run]
+            [frontend.components.kip-brand :as brand]
             [frontend.components.llm-banner :as llm-banner]
             [frontend.components.telemetry :as telemetry]
             [frontend.config :as config]
@@ -175,12 +176,13 @@
      [:pre.font-mono.text-sm.mb-3
       {:aria-hidden "true"
        :style {:color "var(--ls-active-primary-color, #10b981)" :margin 0 :line-height 1.3}}
-      "  \\\\\n  (o>\n\\_//)\n \\_/_)\n  _|_"]
+      brand/egg-ascii]
      [:div.text-sm.font-medium "Kip"]
+     [:div.text-xs.opacity-60.mt-1 {:style {:max-width "24rem"}} brand/slogan]
      (if (first-run-showing? llm counts)
        [:div.mt-3 (first-run/checklist (first-run/steps llm counts))]
        [:<>
-        [:div.text-sm.opacity-70.mt-1.mb-4 {:style {:max-width "28rem"}}
+        [:div.text-sm.opacity-70.mt-3.mb-4 {:style {:max-width "28rem"}}
          "Ask your nest a question, or tell it something to remember."]
         [:div.flex.flex-col.gap-1.5.items-center
          (for [p example-prompts]

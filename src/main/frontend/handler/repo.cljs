@@ -72,7 +72,7 @@
   [repo-url content]
   (spec/validate :repos/url repo-url)
   (let [repo-dir (config/get-repo-dir repo-url)
-        file-rpath (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")]
+        file-rpath (str (config/get-pages-directory) "/the_nest.md")]
     (p/let [_ (fs/mkdir-if-not-exists (path/path-join repo-dir (config/get-pages-directory)))
             _file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath content)]
       (file-common-handler/reset-file! repo-url file-rpath content))))

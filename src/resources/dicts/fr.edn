@@ -1,6 +1,6 @@
 {
-    :tutorial/text #resource "tutorials/tutorial-fr.md"
-    :tutorial/dummy-notes #resource "tutorials/dummy-notes-fr.md"
+    :tutorial/text #resource "tutorials/tutorial-en.md"
+    :tutorial/dummy-notes #resource "tutorials/dummy-notes-en.md"
     :help/about "À propos de Kip"
     :help/bug "Signaler une anomalie"
     :help/feature "Demander une fonctionnalité"
