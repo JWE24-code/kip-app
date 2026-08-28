@@ -68,6 +68,14 @@ jobs:
       # manual runs: the dropdown (default compile, fast). v* tags: always
       # release (optimized) — validated on CI 2026-08-28.
       KIP_CLJS: ${{ github.event.inputs.cljs_mode || (startsWith(github.ref, 'refs/tags/v') && 'release' || 'compile') }}
+      # Windows Authenticode: a base64 PFX + its password. Currently a
+      # self-signed code-signing cert (SmartScreen still warns "unknown
+      # publisher" — it gives the binary a stable identity and lets the
+      # updater verify signature continuity). Swap the two secrets for a real
+      # cert later; nothing else changes. Empty on forks -> build.ps1 skips
+      # signing.
+      KIP_SIGN_PFX_B64: ${{ secrets.KIP_SIGN_PFX_B64 }}
+      KIP_SIGN_PFX_PASSWORD: ${{ secrets.KIP_SIGN_PFX_PASSWORD }}
 
     steps:
       - name: Checkout kip-app
@@ -126,37 +134,33 @@ jobs:
         shell: bash
         run: npm install -g yarn@1.22.22
 
+      - name: Prepare code-signing (Windows)
+        if: runner.os == 'Windows' && env.KIP_SIGN_PFX_B64 != ''
+        shell: pwsh
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'kip-sign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:KIP_SIGN_PFX_B64))
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object FullName | Select-Object -Last 1 -ExpandProperty FullName
+          if (-not $signtool) { throw 'signtool.exe not found on the runner' }
+          # build.ps1 appends each target path to this command.
+          $cmd = '"{0}" sign /fd SHA256 /f "{1}" /p "{2}" /tr http://timestamp.digicert.com /td SHA256' -f `
+            $signtool, $pfx, $env:KIP_SIGN_PFX_PASSWORD
+          "KIP_SIGN_CMD=$cmd" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
       - name: Build + assemble
         shell: bash
         run: ${{ matrix.script }}
 
-      # ---- Authenticode signing (disabled) -------------------------------
-      # Kip v0.1 ships unsigned (SmartScreen note is in the README). To turn
-      # signing on, pick ONE of the blocks below and set its secrets. See
-      # .claude/RELEASE-signing.md for the full analysis.
-      #
-      # Azure Trusted Signing (~$10/mo, cloud, no token):
-      #   - name: Azure login
-      #     if: runner.os == 'Windows'
-      #     uses: azure/login@v2
-      #     with:
-      #       client-id: ${{ secrets.AZURE_CLIENT_ID }}
-      #       tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-      #       subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      #   - name: Sign
-      #     if: runner.os == 'Windows'
-      #     uses: azure/trusted-signing-action@v0
-      #     with:
-      #       endpoint: ${{ secrets.AZ_SIGN_ENDPOINT }}
-      #       trusted-signing-account-name: ${{ secrets.AZ_SIGN_ACCOUNT }}
-      #       certificate-profile-name: ${{ secrets.AZ_SIGN_PROFILE }}
-      #       files-folder: app/out/Kip-win32-x64
-      #       files-folder-filter: exe,dll
-      #       files-folder-recurse: true
-      #
-      # SignPath.io Foundation (free for OSS — apply first): sign the uploaded
-      # artifact with signpath/github-action-submit-signing-request@v1 in a
-      # separate job that `needs: build`, using a signpath.json policy.
+      # Windows binaries are Authenticode-signed by build.ps1 when KIP_SIGN_CMD
+      # is set (the "Prepare code-signing" step above builds it from the
+      # KIP_SIGN_PFX_* secrets). Today that's a self-signed cert — SmartScreen
+      # still warns, but the binary has a stable publisher identity and the
+      # updater can verify signature continuity. To move to a real cert (Azure
+      # Trusted Signing, a purchased OV/EV cert, or SignPath OSS) just replace
+      # the two secrets, or swap the "Prepare code-signing" step for that
+      # provider's action — build.ps1 and everything downstream is unchanged.
+      # See docs/signing.md.
 
       - name: Package
         shell: bash
