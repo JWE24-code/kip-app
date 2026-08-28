@@ -858,16 +858,14 @@
 (def help-menu-items
   [{:title "Handbook" :icon "book-2" :on-click #(handbooks/toggle-handbooks)}
    {:title "Keyboard shortcuts" :icon "command" :on-click #(state/sidebar-add-block! (state/get-current-repo) "shortcut-settings" :shortcut-settings)}
-   {:title "Documentation" :icon "help" :href "https://docs.logseq.com/"}
+   ;; Kip inherits Logseq's editor — its docs mostly apply to the writing side.
+   {:title "Editor docs (Logseq)" :icon "help" :href "https://docs.logseq.com/"}
    :hr
-   {:title "Report bug" :icon "bug" :on-click #(rfe/push-state :bug-report)}
-   {:title "Request feature" :icon "git-pull-request" :href "https://discuss.logseq.com/c/feedback/feature-requests/"}
-   {:title "Submit feedback" :icon "messages" :href "https://discuss.logseq.com/c/feedback/13"}
+   {:title "Report a bug" :icon "bug" :href "https://github.com/JWE24-code/kip-app/issues/new"}
+   {:title "Request a feature" :icon "git-pull-request" :href "https://github.com/JWE24-code/kip-app/issues/new"}
+   {:title "Discussions" :icon "messages" :href "https://github.com/JWE24-code/kip-app/discussions"}
    :hr
-   {:title "Ask the community" :icon "brand-discord" :href "https://discord.com/invite/KpN4eHY"}
-   {:title "Support forum" :icon "message" :href "https://discuss.logseq.com/"}
-   :hr
-   {:title "Release notes" :icon "asterisk" :href "https://docs.logseq.com/#/page/changelog"}])
+   {:title "Release notes" :icon "asterisk" :href "https://github.com/JWE24-code/kip-app/releases"}])
 
 (rum/defc help-menu-popup
   []

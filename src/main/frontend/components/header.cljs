@@ -152,16 +152,16 @@
 
        (when-not config/publishing?
          {:title [:div.flex-row.flex.justify-between.items-center
-                  [:span (t :join-community)]]
-          :options {:href "https://discuss.logseq.com"
-                    :title (t :discourse-title)
+                  [:span "Discussions"]]
+          :options {:href "https://github.com/JWE24-code/kip-app/discussions"
                     :target "_blank"}
-          :icon (ui/icon "brand-discord")})
+          :icon (ui/icon "messages")})
 
        (when-not config/publishing?
          {:title [:div.flex-row.flex.justify-between.items-center
                   [:span (t :help/bug)]]
-          :options {:href (rfe/href :bug-report)}
+          :options {:href "https://github.com/JWE24-code/kip-app/issues/new"
+                    :target "_blank"}
           :icon (ui/icon "bug")})
 
        (when config/publishing?

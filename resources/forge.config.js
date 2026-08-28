@@ -28,19 +28,26 @@ module.exports = {
         "schemes": "kip"
       }
     ],
-    osxSign: {
-      identity: 'Developer ID Application: Logseq Inc. (K378MFWK59)',
-      'hardened-runtime': true,
-      entitlements: 'entitlements.plist',
-      'entitlements-inherit': 'entitlements.plist',
-      'signature-flags': 'library'
-    },
-    osxNotarize: {
-      tool: 'notarytool',
-      appleId: process.env['APPLE_ID'],
-      appleIdPassword: process.env['APPLE_ID_PASSWORD'],
-      teamId: process.env['APPLE_TEAM_ID']
-    },
+    // Kip doesn't build or sign for macOS. Left here (from upstream Logseq)
+    // only so a future `electron-forge make` on macOS with your own
+    // credentials in the env would work; unused otherwise.
+    osxSign: process.env['APPLE_SIGN_IDENTITY']
+      ? {
+        identity: process.env['APPLE_SIGN_IDENTITY'],
+        'hardened-runtime': true,
+        entitlements: 'entitlements.plist',
+        'entitlements-inherit': 'entitlements.plist',
+        'signature-flags': 'library'
+      }
+      : undefined,
+    osxNotarize: process.env['APPLE_ID']
+      ? {
+        tool: 'notarytool',
+        appleId: process.env['APPLE_ID'],
+        appleIdPassword: process.env['APPLE_ID_PASSWORD'],
+        teamId: process.env['APPLE_TEAM_ID']
+      }
+      : undefined,
   },
   makers: [
     {
@@ -81,13 +88,15 @@ module.exports = {
     }
   ],
 
+  // Kip releases are cut by .github/workflows/build.yml (gh release), not
+  // `electron-forge publish`. Repointed off logseq/og for correctness.
   publishers: [
     {
       name: '@electron-forge/publisher-github',
       config: {
         repository: {
-          owner: 'logseq',
-          name: 'og'
+          owner: 'JWE24-code',
+          name: 'kip-app'
         },
         prerelease: true
       }

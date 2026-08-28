@@ -1,0 +1,21 @@
+Kip
+Copyright (C) 2026 Joeri Weitmann
+
+This program is a fork of Logseq (https://github.com/logseq/logseq),
+Copyright (C) Logseq, licensed under the GNU Affero General Public License
+version 3. Kip is not affiliated with, sponsored by, or endorsed by Logseq.
+It is distributed under the same license (see LICENSE.md).
+
+The Kip retrieval layer (the bundled scripts/, developed independently) is
+maintained at https://github.com/JWE24-code/kip and is also AGPL-3.0.
+
+Bundled third-party code:
+
+  * tldraw v1 — the whiteboard engine, in tldraw/
+    MIT / Apache-2.0. See tldraw/LICENSE.md and tldraw/packages/*/LICENSE.md.
+
+  * Runtime and build dependencies (npm, Maven/Clojure) retain their own
+    licenses; see the respective package metadata.
+
+"Logseq" is a trademark of its respective owner. Use here is nominative —
+to identify the upstream project this is a fork of.
