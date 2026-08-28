@@ -548,6 +548,9 @@
 (defmethod handle :wikiIngestMetrics [_ [_ vault-root]]
   (wiki/hatch-metrics! vault-root))
 
+(defmethod handle :wikiAddEgg [_ [_ vault-root filename content]]
+  (wiki/add-egg! vault-root filename content))
+
 (defmethod handle :wikiChat [_ [_ vault-root question trace?]]
   (wiki/peck! vault-root question (boolean trace?)))
 

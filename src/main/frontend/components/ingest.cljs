@@ -13,6 +13,7 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.ipc :as ipc]
+            [frontend.components.drop-source :as drop-source]
             [frontend.components.llm-banner :as llm-banner]
             [frontend.components.telemetry :as telemetry]
             [frontend.config :as config]
@@ -126,8 +127,10 @@
         remaining  @*remaining
         started?   (or (seq (:hatched done)) (seq (:failed done)) (some? remaining))
         pending-n  (if started? (or remaining 0) (count (:pending preview)))]
-    [:div.w-full.mx-auto {:class "md:max-w-[600px]"}
-     [:h2#modal-headline.text-xl.mb-3 "Hatch sources"]
+    (drop-source/drop-zone
+     {:on-added (fn [_] (load-preview! *preview *error *busy?))}
+     [:div.w-full.mx-auto {:class "md:max-w-[600px]"}
+      [:h2#modal-headline.text-xl.mb-3 "Hatch sources"]
      [:p.text-sm.opacity-70.mb-3
       "Turns new or changed files in " [:code "eggs/"] ", " [:code "journals/"] " and "
       [:code "pages/"] " into nest pages — no per-file review. Runs in batches of "
@@ -208,7 +211,7 @@
 
         (when (seq (:empty preview))
           [:div.text-xs.opacity-50.mt-2
-           (str (count (:empty preview)) " near-empty file(s) skipped.")])])]))
+           (str (count (:empty preview)) " near-empty file(s) skipped.")])])])))
 
 (defn show-hatch-modal! [e]
   (state/set-modal! hatch-modal)

@@ -19,6 +19,7 @@
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.components.block :as block]
+            [frontend.components.drop-source :as drop-source]
             [frontend.components.llm-banner :as llm-banner]
             [frontend.components.telemetry :as telemetry]
             [frontend.config :as config]
@@ -202,4 +203,6 @@
    {:style {:display "flex" :flex-direction "column"
             :flex "1 1 auto" :min-height 0
             :width "100%" :max-width "46rem" :margin "0 auto" :padding "0 .5rem"}}
-   (chat-panel)])
+   (drop-source/drop-zone
+    {:style {:display "flex" :flex-direction "column" :flex "1 1 auto" :min-height 0}}
+    (chat-panel))])
