@@ -143,13 +143,16 @@ node -e "const p='$APP/package.json',j=require(p);j.version='$VERSION';require('
 cp -f "$APP/icon.png" "$OUT/resources/icon.png" 2>/dev/null || true
 
 step "pack app.asar"
-# @electron/asar ships as a transitive dep of @electron-forge/cli (static
-# devDep). Run its bin JS through node — the .bin/ shim isn't reliably linked
-# for transitive deps (present on Linux, missing on Windows).
-ASAR_JS="$(cd "$APP_DIR/static" && node -e 'process.stdout.write(require.resolve("@electron/asar/bin/asar.js"))')"
-node "$ASAR_JS" pack "$APP" "$OUT/resources/app.asar" \
+# Fetch @electron/asar via npx — yarn 1 doesn't hoist it to a predictable path
+# in static/node_modules (works on Linux, not Windows). If anything here goes
+# wrong we MUST fail loudly: a missing app.asar makes upload-artifact silently
+# drop the now-empty resources/ dir and ship a codeless app.
+npx --yes -p @electron/asar@3.4.1 asar pack "$APP" "$OUT/resources/app.asar" \
   --unpack-dir "{scripts,node_modules/better-sqlite3}" \
   --unpack "*.node"
+[[ -f "$OUT/resources/app.asar" ]] || { echo "FATAL: asar pack produced no app.asar"; exit 1; }
+[[ -f "$OUT/resources/app.asar.unpacked/scripts/hatch-all.js" ]] \
+  || { echo "FATAL: scripts/ was not unpacked from the asar"; exit 1; }
 rm -rf "$APP"
 
 step "done — $OUT  (Kip $VERSION, cljs:$CLJS_MODE)"
