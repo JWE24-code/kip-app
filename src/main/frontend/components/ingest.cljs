@@ -129,7 +129,8 @@
   (rum/local false ::classic?)
   (rum/local false ::paste?)
   {:will-mount   (fn [state]
-                   (load-preview! (get state ::preview) (get state ::error) (get state ::busy?))
+                   (when-not (config/demo-graph?)
+                     (load-preview! (get state ::preview) (get state ::error) (get state ::busy?)))
                    (llm-handler/refresh!)
                    state)
    :will-unmount (fn [state]
@@ -152,16 +153,23 @@
         preview    @*preview
         done       @*done
         remaining  @*remaining
+        demo?      (config/demo-graph?)
         started?   (or (seq (:hatched done)) (seq (:failed done)) (some? remaining))
         pending-n  (if started? (or remaining 0) (count (:pending preview)))]
     (drop-source/drop-zone
-     {:on-added (fn [_] (load-preview! *preview *error *busy?))}
+     {:on-added (fn [_] (when-not demo? (load-preview! *preview *error *busy?)))}
      [:div.w-full.mx-auto {:class "md:max-w-[600px]"}
       [:h2#modal-headline.text-xl.mb-3 "Hatch sources"]
      [:p.text-sm.opacity-70.mb-3
       "Turns new or changed files in " (glossary/term "eggs/") ", " [:code "journals/"] " and "
       [:code "pages/"] " into nest pages — no per-file review. Runs in batches of "
       (str batch-size) "."]
+
+     (if demo?
+       [:div.text-sm.opacity-70.my-2
+        "Open a folder as your graph first — " (glossary/term "eggs/")
+        " and the rest of the coop live inside it. Use the graph menu at the top left."]
+       [:<>
 
      (when-not @*busy?
        [:div.mb-3
@@ -267,7 +275,7 @@
 
         (when (seq (:empty preview))
           [:div.text-xs.opacity-50.mt-2
-           (str (count (:empty preview)) " near-empty file(s) skipped.")])])])))
+           (str (count (:empty preview)) " near-empty file(s) skipped.")])])])])))
 
 (defn show-hatch-modal! [e]
   (state/set-modal! hatch-modal)

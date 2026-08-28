@@ -3,13 +3,15 @@
   empty state and the welcome card show the same thing as the website.")
 
 (def egg-ascii
-  "A small ASCII egg with the website favicon's zigzag."
-  (str "   .--.\n"
+  "A clean egg outline — pointed top, round bottom. Kept simple so it reads
+  as a mark, not a doodle."
+  (str "    __\n"
+       "   /  \\\n"
        "  /    \\\n"
-       " |\\/\\/\\/|\n"
+       " |      |\n"
        " |      |\n"
        "  \\    /\n"
-       "   '--'"))
+       "   \\__/"))
 
 (def slogan "Don't browse your notes. Peck them. Get answers.")
 
