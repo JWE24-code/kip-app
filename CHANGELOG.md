@@ -35,6 +35,15 @@ De-Logseq'd the first-run experience and a batch of polish.
 - **Windows builds are code-signed** (self-signed for now) — the binary
   carries a publisher identity; SmartScreen still warns until there's a
   real certificate.
+- **Hatch: recover from a stopped run** — if a batch dies partway, the
+  modal shows how far it got; hatching again picks up the rest.
+- **Hatch: review before writing** — an optional mode that walks each
+  pending source one at a time and lets you keep or skip its proposed
+  pages before they're written.
+- **Custom skills must be approved once** — a skill you add under
+  `.henhouse/skills/` runs with your privileges, so Settings → Skills now
+  asks you to approve it (showing what it declares) before Peck can use it.
+- Leaner package — dropped the non-English Electron locales (~12 MB).
 
 ## [0.2.1] — 2026-08-28
 
