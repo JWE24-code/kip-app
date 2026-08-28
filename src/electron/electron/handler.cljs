@@ -561,6 +561,9 @@
 (defmethod handle :wikiCoopCounts [_ [_ vault-root]]
   (wiki/coop-counts! vault-root))
 
+(defmethod handle :wikiCoopSummary [_ [_ vault-root]]
+  (wiki/coop-summary! vault-root))
+
 (defmethod handle :checkForAppUpdate [_ [_ force?]]
   (update/check! {:force? (boolean force?)}))
 
