@@ -20,6 +20,7 @@
             [electron.ipc :as ipc]
             [frontend.components.block :as block]
             [frontend.components.drop-source :as drop-source]
+            [frontend.components.first-run :as first-run]
             [frontend.components.llm-banner :as llm-banner]
             [frontend.components.telemetry :as telemetry]
             [frontend.config :as config]
@@ -135,23 +136,48 @@
       (when (seq steps) (steps-line steps))
       [:div.prose.prose-sm.max-w-none (block/inline-text {} :markdown text)]])])
 
-(rum/defc empty-state
-  []
-  [:div.flex.flex-col.items-center.text-center.opacity-80.py-8.select-none
-   [:pre.font-mono.text-sm.mb-3
-    {:aria-hidden "true"
-     :style {:color "var(--ls-active-primary-color, #10b981)" :margin 0 :line-height 1.3}}
-    "  \\\\\n  (o>\n\\_//)\n \\_/_)\n  _|_"]
-   [:div.text-sm.font-medium "Kip"]
-   [:div.text-sm.opacity-70.mt-1.mb-4 {:style {:max-width "28rem"}}
-    "Ask your nest a question, or tell it something to remember."]
-   [:div.flex.flex-col.gap-1.5.items-center
-    (for [p example-prompts]
-      [:button.text-xs.px-3.py-1.rounded-full.transition-colors
-       {:key p
-        :class "bg-gray-03 hover:bg-gray-04 opacity-80 hover:opacity-100"
-        :on-click #(reset! *input p)}
-       p])]])
+(defn- first-run-showing? [llm counts]
+  (and (not (first-run/dismissed?))
+       (not (first-run/ready? llm counts (first-run/steps llm counts)))))
+
+(rum/defcs empty-state
+  < rum/reactive
+  (rum/local nil ::poll)
+  {:did-mount    (fn [state]
+                   (first-run/refresh!)
+                   (reset! (::poll state) (js/setInterval first-run/refresh! 3000))
+                   state)
+   :did-update   (fn [state]
+                   (let [llm (:kip/llm @state/state)
+                         counts (:kip/coop-counts @state/state)]
+                     (when (and (not (first-run/dismissed?))
+                                (first-run/ready? llm counts (first-run/steps llm counts)))
+                       (first-run/mark-dismissed!)))
+                   state)
+   :will-unmount (fn [state]
+                   (when-let [id @(::poll state)] (js/clearInterval id))
+                   state)}
+  [_state]
+  (let [llm (state/sub :kip/llm)
+        counts (state/sub :kip/coop-counts)]
+    [:div.flex.flex-col.items-center.text-center.opacity-80.py-8.select-none
+     [:pre.font-mono.text-sm.mb-3
+      {:aria-hidden "true"
+       :style {:color "var(--ls-active-primary-color, #10b981)" :margin 0 :line-height 1.3}}
+      "  \\\\\n  (o>\n\\_//)\n \\_/_)\n  _|_"]
+     [:div.text-sm.font-medium "Kip"]
+     (if (first-run-showing? llm counts)
+       [:div.mt-3 (first-run/checklist (first-run/steps llm counts))]
+       [:<>
+        [:div.text-sm.opacity-70.mt-1.mb-4 {:style {:max-width "28rem"}}
+         "Ask your nest a question, or tell it something to remember."]
+        [:div.flex.flex-col.gap-1.5.items-center
+         (for [p example-prompts]
+           [:button.text-xs.px-3.py-1.rounded-full.transition-colors
+            {:key p
+             :class "bg-gray-03 hover:bg-gray-04 opacity-80 hover:opacity-100"
+             :on-click #(reset! *input p)}
+            p])]])]))
 
 (rum/defcs chat-panel
   < rum/reactive
