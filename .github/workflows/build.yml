@@ -128,6 +128,34 @@ jobs:
         shell: bash
         run: ${{ matrix.script }}
 
+      # ---- Authenticode signing (disabled) -------------------------------
+      # Kip v0.1 ships unsigned (SmartScreen note is in the README). To turn
+      # signing on, pick ONE of the blocks below and set its secrets. See
+      # .claude/RELEASE-signing.md for the full analysis.
+      #
+      # Azure Trusted Signing (~$10/mo, cloud, no token):
+      #   - name: Azure login
+      #     if: runner.os == 'Windows'
+      #     uses: azure/login@v2
+      #     with:
+      #       client-id: ${{ secrets.AZURE_CLIENT_ID }}
+      #       tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+      #       subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      #   - name: Sign
+      #     if: runner.os == 'Windows'
+      #     uses: azure/trusted-signing-action@v0
+      #     with:
+      #       endpoint: ${{ secrets.AZ_SIGN_ENDPOINT }}
+      #       trusted-signing-account-name: ${{ secrets.AZ_SIGN_ACCOUNT }}
+      #       certificate-profile-name: ${{ secrets.AZ_SIGN_PROFILE }}
+      #       files-folder: app/out/Kip-win32-x64
+      #       files-folder-filter: exe,dll
+      #       files-folder-recurse: true
+      #
+      # SignPath.io Foundation (free for OSS — apply first): sign the uploaded
+      # artifact with signpath/github-action-submit-signing-request@v1 in a
+      # separate job that `needs: build`, using a signpath.json policy.
+
       - name: Package
         shell: bash
         run: |

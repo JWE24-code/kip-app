@@ -133,5 +133,22 @@ $j = Get-Content $pkg -Raw | ConvertFrom-Json
 $j.version = $VERSION
 ($j | ConvertTo-Json -Depth 20) + "`n" | Set-Content $pkg -NoNewline
 
+# --- 7. Authenticode sign (optional) --------------------------------------
+# Set KIP_SIGN_CMD to a signing command; each target path is appended to it.
+# e.g. Azure Trusted Signing:
+#   KIP_SIGN_CMD='signtool sign /v /fd SHA256 /tr http://timestamp.acs.microsoft.com /td SHA256 /dlib "C:\...\Azure.CodeSigning.Dlib.dll" /dmdf "C:\...\metadata.json"'
+# See .claude/RELEASE-signing.md. No-op when unset.
+if ($env:KIP_SIGN_CMD) {
+  Step 'Authenticode sign (Kip.exe + root DLLs)'
+  $targets = @("$OUT\Kip.exe") + (Get-ChildItem "$OUT" -Filter *.dll | ForEach-Object FullName)
+  foreach ($t in $targets) {
+    cmd /c "$env:KIP_SIGN_CMD `"$t`""
+    if ($LASTEXITCODE) { throw "signing failed for $t (exit $LASTEXITCODE)" }
+  }
+  Write-Host "signed $($targets.Count) file(s)"
+} else {
+  Write-Host "not signed (KIP_SIGN_CMD unset) — see .claude/RELEASE-signing.md"
+}
+
 Step "done — $OUT  (Kip $VERSION, cljs:$CLJS)"
 Write-Host "run: $OUT\Kip.exe"
