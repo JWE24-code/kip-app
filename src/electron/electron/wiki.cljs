@@ -195,6 +195,28 @@
             full (.join node-path eggs-dir nm)]
         (if (fs/existsSync full) (recur (inc n)) [nm full])))))
 
+(defn- write-egg-content
+  "Sync core: validate the extension, skip a byte-identical file already in
+  `eggs-dir`, otherwise write `content` under a non-colliding name. Returns a
+  CLJS map: {:ok true :name ...} / {:ok true :name ... :duplicate ...} /
+  {:ok false :reason ...}."
+  [eggs-dir basename content]
+  (let [ext (string/lower-case (or (.extname node-path basename) ""))]
+    (if-not (contains? egg-extensions ext)
+      {:ok false :reason "unsupported" :ext ext}
+      (do
+        (fs/mkdirSync eggs-dir #js {:recursive true})
+        (if-let [dup (->> (fs/readdirSync eggs-dir)
+                          (filter (fn [nm]
+                                    (let [p (.join node-path eggs-dir nm)]
+                                      (and (try (.isFile (fs/statSync p)) (catch :default _ false))
+                                           (= content (fs/readFileSync p "utf8"))))))
+                          first)]
+          {:ok true :name dup :duplicate dup}
+          (let [[nm full] (unique-egg-path eggs-dir basename)]
+            (fs/writeFileSync full content "utf8")
+            {:ok true :name nm}))))))
+
 (defn add-egg!
   "Write `content` (a dropped file's text) into <graph>/eggs/ under `filename`,
   so it becomes a Hatch source. Resolves:
@@ -207,32 +229,40 @@
   (p/create
    (fn [resolve* _reject]
      (try
-       (let [ext (when (string? filename)
-                   (string/lower-case (.extname node-path filename)))]
-         (cond
-           (or (string/blank? vault-root) (string/blank? filename))
-           (resolve* #js {:ok false :reason "no-graph"})
-
-           (not (contains? egg-extensions ext))
-           (resolve* #js {:ok false :reason "unsupported" :ext (or ext "")})
-
-           :else
-           (let [eggs-dir (.join node-path vault-root "eggs")
-                 _ (fs/mkdirSync eggs-dir #js {:recursive true})
-                 dup (->> (fs/readdirSync eggs-dir)
-                          (filter (fn [nm]
-                                    (let [p (.join node-path eggs-dir nm)]
-                                      (and (try (.isFile (fs/statSync p)) (catch :default _ false))
-                                           (= content (fs/readFileSync p "utf8"))))))
-                          first)]
-             (if dup
-               (resolve* #js {:ok true :name dup :duplicate dup})
-               (let [[nm full] (unique-egg-path eggs-dir (.basename node-path filename))]
-                 (fs/writeFileSync full content "utf8")
-                 (resolve* #js {:ok true :name nm}))))))
+       (if (or (string/blank? vault-root) (string/blank? filename))
+         (resolve* #js {:ok false :reason "no-graph"})
+         (resolve* (clj->js (write-egg-content (.join node-path vault-root "eggs")
+                                               (.basename node-path filename)
+                                               content))))
        (catch :default e
          (log-error (str "add-egg! " filename ": " (.-message e)))
          (resolve* #js {:ok false :reason (.-message e)}))))))
+
+(defn pick-and-add-eggs!
+  "Open a native file picker (Markdown / text, multi-select) and copy the
+  chosen files into <graph>/eggs/. Resolves
+  {:canceled bool :added [names] :duplicates [names] :rejected [names]}."
+  [vault-root]
+  (p/let [^js res (.showOpenDialog dialog
+                                   #js {:title "Add sources to your coop"
+                                        :properties #js ["openFile" "multiSelections"]
+                                        :filters #js [#js {:name "Markdown / text"
+                                                           :extensions #js ["md" "markdown" "mdown" "txt" "text" "org"]}]})
+          paths (or (some-> res .-filePaths array-seq) [])]
+    (if (or (string/blank? vault-root) (empty? paths))
+      #js {:canceled true :added #js [] :duplicates #js [] :rejected #js []}
+      (let [eggs-dir (.join node-path vault-root "eggs")
+            results  (mapv (fn [path]
+                             (try
+                               (write-egg-content eggs-dir (.basename node-path path)
+                                                  (fs/readFileSync path "utf8"))
+                               (catch :default e
+                                 {:ok false :reason (.-message e) :name (.basename node-path path)})))
+                           paths)]
+        (clj->js {:canceled   false
+                  :added      (->> results (filter #(and (:ok %) (not (:duplicate %)))) (mapv :name))
+                  :duplicates (->> results (filter :duplicate) (mapv :name))
+                  :rejected   (->> results (remove :ok) (mapv #(or (:name %) "a file")))})))))
 
 (defn- count-files
   "Count of files under `dir` (recursively) matching `pred` (a fn of the

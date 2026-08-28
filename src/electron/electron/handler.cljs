@@ -552,6 +552,9 @@
 (defmethod handle :wikiAddEgg [_ [_ vault-root filename content]]
   (wiki/add-egg! vault-root filename content))
 
+(defmethod handle :wikiPickEggs [_ [_ vault-root]]
+  (wiki/pick-and-add-eggs! vault-root))
+
 (defmethod handle :wikiCoopCounts [_ [_ vault-root]]
   (wiki/coop-counts! vault-root))
 
