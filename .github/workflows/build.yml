@@ -168,6 +168,15 @@ jobs:
           v=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' app/src/main/frontend/version.cljs | head -1)
           ws="$PWD"
           [ "${{ runner.os }}" = "Windows" ] && outdir=app/out/Kip-win32-x64 || outdir=app/out/Kip-linux-x64
+
+          # the packaged app must actually contain code — guards against a
+          # silently-failed asar step leaving an empty resources/ that
+          # upload-artifact would just skip (shipping a codeless app)
+          test -f "$outdir/resources/app.asar" || { echo "::error::$outdir has no resources/app.asar"; exit 1; }
+          test -f "$outdir/resources/app.asar.unpacked/scripts/hatch-all.js" || { echo "::error::scripts/ not unpacked"; exit 1; }
+          nfiles=$(find "$outdir" -type f | wc -l)
+          [ "$nfiles" -ge 100 ] || { echo "::error::$outdir has only $nfiles files"; exit 1; }
+          echo "packaged app: $nfiles files, app.asar $(du -h "$outdir/resources/app.asar" | cut -f1)"
           if [ '${{ startsWith(github.ref, 'refs/tags/v') }}' = 'true' ]; then
             # tagged release: the named archive that gets attached to the Release
             if [ "${{ runner.os }}" = "Windows" ]; then
