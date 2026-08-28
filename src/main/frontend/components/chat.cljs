@@ -114,6 +114,11 @@
       (str "⚙ " skill "  " (/ (js/Math.round (/ (or ms 0) 100)) 10) "s"
            (when-not ok "  — failed"))])])
 
+;; Citations in an answer open the page as a right-sidebar peek instead of
+;; switching the whole app to Documents — the conversation stays in view.
+;; cmd/ctrl-click still opens it in Documents.
+(def ^:private citation-config {:page-ref-as-sidebar? true})
+
 (rum/defc message-cp
   [{:keys [role text pages steps]}]
   [:div.py-2
@@ -128,10 +133,10 @@
      :learned
      [:div.text-sm.rounded.px-3.py-2 {:class "bg-gray-03 border-l-2 border-gray-11"}
       [:div.text-xs.font-medium.opacity-60.mb-1 "✓ Learned"]
-      [:div.prose.prose-sm.max-w-none (block/inline-text {} :markdown text)]
+      [:div.prose.prose-sm.max-w-none (block/inline-text citation-config :markdown text)]
       (when (seq pages)
         [:div.text-xs.opacity-70.mt-1
-         (block/inline-text {} :markdown
+         (block/inline-text citation-config :markdown
                             (string/join "  ·  "
                                          (for [{:keys [action slug]} pages]
                                            (str (if (= action "create") "created" "updated") " [[" slug "]]"))))])]
@@ -140,7 +145,7 @@
      ;; via the app's own markdown renderer, given a plain unsaved string.
      [:div
       (when (seq steps) (steps-line steps))
-      [:div.prose.prose-sm.max-w-none (block/inline-text {} :markdown text)]])])
+      [:div.prose.prose-sm.max-w-none (block/inline-text citation-config :markdown text)]])])
 
 (defn- first-run-showing? [llm counts]
   (and (not (first-run/dismissed?))

@@ -501,10 +501,21 @@
 (declare page-reference)
 
 (defn open-page-ref
-  [e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?]
+  ([e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?]
+   (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page? nil))
+  ([e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page? config]
   (util/stop e)
   (when (not (util/right-click? e))
     (cond
+      ;; Citations in a Peck answer peek in the right sidebar so the
+      ;; conversation stays put; cmd/ctrl-click opens the page in Documents.
+      (and (:page-ref-as-sidebar? config) (not (util/meta-key? e)))
+      (when-let [page-entity (db/entity [:block/name redirect-page-name])]
+        (state/sidebar-add-block!
+         (state/get-current-repo)
+         (:db/id page-entity)
+         :page))
+
       (gobj/get e "shiftKey")
       (when-let [page-entity (db/entity [:block/name redirect-page-name])]
         (state/sidebar-add-block!
@@ -528,7 +539,7 @@
   (when (and contents-page?
              (util/mobile?)
              (state/get-left-sidebar-open?))
-    (ui-handler/close-left-sidebar!)))
+    (ui-handler/close-left-sidebar!))))
 
 (rum/defc page-inner
   "The inner div of page reference component
@@ -561,10 +572,10 @@
                                                          (date/journal-title->custom-format page-name))
                                                     redirect-page-name)
                              redirect-page-name (string/lower-case redirect-page-name)]
-                         (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?))
+                         (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page? config))
                        (set-mouse-down! false)))
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter"))
-                           (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page?)))}
+                           (open-page-ref e page-name redirect-page-name page-name-in-block contents-page? whiteboard-page? config)))}
 
      (if (and (coll? children) (seq children))
        (for [child children]
