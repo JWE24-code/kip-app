@@ -856,7 +856,8 @@
                "D"])))
 
 (def help-menu-items
-  [{:title "Handbook" :icon "book-2" :on-click #(handbooks/toggle-handbooks)}
+  [{:title "Getting started" :icon "rocket" :href "https://github.com/JWE24-code/kip/blob/main/docs/GETTING-STARTED.md"}
+   {:title "Handbook" :icon "book-2" :on-click #(handbooks/toggle-handbooks)}
    {:title "Keyboard shortcuts" :icon "command" :on-click #(state/sidebar-add-block! (state/get-current-repo) "shortcut-settings" :shortcut-settings)}
    ;; Kip inherits Logseq's editor — its docs mostly apply to the writing side.
    {:title "Editor docs (Logseq)" :icon "help" :href "https://docs.logseq.com/"}

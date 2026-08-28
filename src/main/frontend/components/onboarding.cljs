@@ -1,7 +1,5 @@
 (ns frontend.components.onboarding
-  (:require [frontend.context.i18n :refer [t]]
-            [rum.core :as rum]
-            [frontend.ui :as ui]
+  (:require [rum.core :as rum]
             [frontend.state :as state]
             [frontend.components.onboarding.setups :as setups]))
 
@@ -9,50 +7,40 @@
   [onboarding-and-home?]
   (setups/picker onboarding-and-home?))
 
+(defn- link [label href]
+  [:li [:a {:href href :target "_blank"} label]])
+
 (defn help
+  "Kip's help panel (the right-sidebar `?`). Kip-specific — nothing here points
+  at Logseq docs."
   []
   [:div.help.cp__sidebar-help-docs
-   (let [discourse-with-icon [:div.flex-row.inline-flex.items-center
-                              [:span.mr-1 (t :help/forum-community)]
-                              (ui/icon "message-circle" {:style {:font-size 20}})]
-         list
-         [{:title (t :help/title-usage)
-           :children [[[:a
-                        {:on-click (fn [] (state/sidebar-add-block! (state/get-current-repo) "shortcut-settings" :shortcut-settings))}
-                        [:div.flex-row.inline-flex.items-center
-                         [:span.mr-1 (t :help/shortcuts)]
-                         (ui/icon "command" {:style {:font-size 20}})]]]
-                      [(t :help/docs) "https://docs.logseq.com/"]
-                      [(t :help/start) "https://docs.logseq.com/#/page/tutorial"]
-                      ["FAQ" "https://docs.logseq.com/#/page/faq"]]}
+   [:p.mt-4.mb-1 [:b "Getting started"]]
+   [:ul
+    (link "First-run walkthrough" "https://github.com/JWE24-code/kip/blob/main/docs/GETTING-STARTED.md")
+    (link "Everything Kip adds on top of Logseq" "https://github.com/JWE24-code/kip/blob/main/docs/FEATURES.md")
+    [:li [:a {:on-click (fn [] (state/sidebar-add-block! (state/get-current-repo)
+                                                        "shortcut-settings" :shortcut-settings))}
+          "Keyboard shortcuts"]]]
 
-          {:title (t :help/title-community)
-           :children [[(t :help/awesome-logseq) "https://github.com/logseq/awesome-logseq"]
-                      [(t :help/blog) "https://blog.logseq.com"]
-                      [discourse-with-icon "https://discuss.logseq.com"]]}
+   [:p.mt-4.mb-1 [:b "How it fits together"]]
+   [:ul.text-sm.opacity-80
+    [:li [:b "Hatch"] " — a file you drop in " [:code "eggs/"] " becomes linked "
+     [:code "entity"] " / " [:code "concept"] " / " [:code "source"] " pages under The Nest."]
+    [:li [:b "Peck"] " — ask the nest a question (answers cite " [:code "[[pages]]"]
+     "), or tell it a fact or an upcoming meeting."]
+    [:li [:b "Groom"] " — read-only health checks over the nest."]]
 
-          {:title (t :help/title-development)
-           :children [[(t :help/roadmap) "https://trello.com/b/8txSM12G/roadmap"]
-                      [(t :help/bug) "https://github.com/logseq/og/issues/new?labels=from:in-app&template=bug_report.yaml"]
-                      [(t :help/feature) "https://discuss.logseq.com/c/feedback/feature-requests/"]
-                      [(t :help/changelog) "https://docs.logseq.com/#/page/changelog"]]}
+   [:p.mt-4.mb-1 [:b "The coop"]]
+   [:ul.text-sm.opacity-80
+    [:li [:code "eggs/"] " — the source documents you add"]
+    [:li [:code "nest/"] " — the LLM-maintained wiki"]
+    [:li [:code "clucks/"] " — the activity log"]
+    [:li [:code ".henhouse/"] " — LLM provider + skills config"]
+    [:li [:code ".roost/"] " — the search index (disposable — rebuild any time)"]]
 
-          {:title (t :help/title-about)
-           :children [[(t :help/about) "https://blog.logseq.com/about/"]]}
-
-          {:title (t :help/title-terms)
-           :children [[(t :help/privacy) "https://blog.logseq.com/privacy-policy/"]
-                      [(t :help/terms) "https://blog.logseq.com/terms/"]]}]]
-
-
-
-     (map (fn [sublist]
-            [[:p.mt-4.mb-1 [:b (:title sublist)]]
-             [:ul
-              (map (fn [[title href]]
-                     [:li
-                      (if href
-                        [:a {:href href :target "_blank"} title]
-                        title)])
-                (:children sublist))]])
-       list))])
+   [:p.mt-4.mb-1 [:b "Feedback"]]
+   [:ul
+    (link "Report a bug / request a feature" "https://github.com/JWE24-code/kip-app/issues")
+    (link "Discussions" "https://github.com/JWE24-code/kip-app/discussions")
+    (link "Changelog" "https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md")]])
