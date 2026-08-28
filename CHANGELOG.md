@@ -28,6 +28,13 @@ De-Logseq'd the first-run experience and a batch of polish.
 - **Citations peek** — clicking a `[[page]]` citation in a Peck answer
   opens it in the right sidebar instead of switching to Documents;
   cmd/ctrl-click still opens Documents.
+- **Trimmed the "…" menu** — dropped the leftover Logseq entries (plugins,
+  themes, export graph, import) and the redundant Peck entry.
+- Opening Hatch with no folder open now explains itself instead of
+  erroring.
+- **Windows builds are code-signed** (self-signed for now) — the binary
+  carries a publisher identity; SmartScreen still warns until there's a
+  real certificate.
 
 ## [0.2.1] — 2026-08-28
 
