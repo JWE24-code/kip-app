@@ -204,6 +204,24 @@ jobs:
             app/out/Kip-linux-x64/kip \
             app/out/Kip-linux-x64/resources/app.asar.unpacked/scripts/reminders.js list --json
 
+      - name: Smoke test (windows — the app launches and stays up)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # a codeless / crash-on-boot package (twice shipped during the asar
+          # work) exits within a second — fail the build if Kip.exe doesn't
+          # stay alive for 20s.
+          $exe = "app\out\Kip-win32-x64\Kip.exe"
+          $p = Start-Process -FilePath $exe -ArgumentList "--no-sandbox" -PassThru
+          Start-Sleep -Seconds 20
+          if ($p.HasExited) {
+            $log = "$env:APPDATA\Kip\logs\main.log"
+            if (Test-Path $log) { Write-Host "--- main.log ---"; Get-Content $log -Tail 40 }
+            throw "Kip.exe exited within 20s (code $($p.ExitCode)) — package is not runnable"
+          }
+          Write-Host "Kip.exe still running after 20s — ok"
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
