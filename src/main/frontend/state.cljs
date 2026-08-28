@@ -127,6 +127,10 @@
      ;; frontend.handler.coop/refresh-counts!.
      :kip/coop-counts                       {:loaded? false :eggs 0 :nestPages 0}
 
+     ;; Result of the polite update check (frontend.handler.update) —
+     ;; {:current :latest :url :notes :newer? :dismissed? :checking?}.
+     :kip/update                            {}
+
      :config                                {}
      :block/component-editing-mode?         false
      :editor/op                             nil

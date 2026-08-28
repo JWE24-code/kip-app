@@ -11,6 +11,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.handler :as handler]
+            [frontend.handler.update :as update-handler]
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.components.file-sync :as fs-sync]
             [frontend.handler.plugin :as plugin-handler]
@@ -220,6 +221,32 @@
          {:on-click #(handler/quit-and-install-new-version!)}
          (svg/reload 16) [:strong (t :updater/quit-and-install)]]]])))
 
+(defn- on-update-push [_ args]
+  (state/set-state! :kip/update (assoc (bean/->clj args) :checking? false)))
+
+;; A dismissible "a newer Kip is out" strip in the header — the polite update
+;; check (frontend.handler.update / electron.update). No download/install here;
+;; it just links to the release page.
+(rum/defcs app-update-banner
+  < rum/reactive
+  {:did-mount    (fn [state]
+                   (update-handler/check! false)
+                   (when (util/electron?)
+                     (js/apis.addListener "app-update-available" on-update-push))
+                   state)
+   :will-unmount (fn [state]
+                   (when (util/electron?)
+                     (js/apis.removeListener "app-update-available" on-update-push))
+                   state)}
+  [_state]
+  (let [{:keys [latest url]} (state/sub :kip/update)]
+    (when (update-handler/show-banner?)
+      [:div.cp__header-tips
+       [:p
+        (str "Kip " latest " is available.")
+        [:a.ml-2 {:href url :target "_blank"} [:strong "See what's new"]]
+        [:a.ml-3.opacity-70 {:on-click #(update-handler/dismiss!)} "Dismiss"]]])))
+
 (rum/defc ^:large-vars/cleanup-todo header < rum/reactive
   [{:keys [open-fn current-repo default-home new-block-mode]}]
   (let [repos (->> (state/sub [:me :repos])
@@ -317,4 +344,5 @@
 
       (sidebar/toggle)
 
-      (updater-tips-new-version t)]]))
+      (updater-tips-new-version t)
+      (app-update-banner)]]))
