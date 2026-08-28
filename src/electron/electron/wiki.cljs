@@ -179,6 +179,61 @@
        (resolve* (js/JSON.parse (fs/readFileSync (roost-file vault-root "hatch-metrics.json") "utf8")))
        (catch :default _ (resolve* nil))))))
 
+(def ^:private egg-extensions
+  "Text formats Hatch can read — a source dropped onto the app must be one of
+  these. PDF/Word would need an extraction step the retrieval layer doesn't
+  have yet."
+  #{".md" ".markdown" ".mdown" ".txt" ".text" ".org"})
+
+(defn- unique-egg-path
+  "eggs/<filename>, or eggs/<stem> (2)<ext>, (3)<ext>… when the name is taken."
+  [eggs-dir filename]
+  (let [ext  (.extname node-path filename)
+        stem (subs filename 0 (- (count filename) (count ext)))]
+    (loop [n 1]
+      (let [nm   (if (= n 1) filename (str stem " (" n ")" ext))
+            full (.join node-path eggs-dir nm)]
+        (if (fs/existsSync full) (recur (inc n)) [nm full])))))
+
+(defn add-egg!
+  "Write `content` (a dropped file's text) into <graph>/eggs/ under `filename`,
+  so it becomes a Hatch source. Resolves:
+    {:ok true  :name <name>}                     — written
+    {:ok true  :name <name> :duplicate <name>}   — identical text already in eggs/
+    {:ok false :reason \"no-graph\"}
+    {:ok false :reason \"unsupported\" :ext <ext>}
+    {:ok false :reason <message>}"
+  [vault-root filename content]
+  (p/create
+   (fn [resolve* _reject]
+     (try
+       (let [ext (when (string? filename)
+                   (string/lower-case (.extname node-path filename)))]
+         (cond
+           (or (string/blank? vault-root) (string/blank? filename))
+           (resolve* #js {:ok false :reason "no-graph"})
+
+           (not (contains? egg-extensions ext))
+           (resolve* #js {:ok false :reason "unsupported" :ext (or ext "")})
+
+           :else
+           (let [eggs-dir (.join node-path vault-root "eggs")
+                 _ (fs/mkdirSync eggs-dir #js {:recursive true})
+                 dup (->> (fs/readdirSync eggs-dir)
+                          (filter (fn [nm]
+                                    (let [p (.join node-path eggs-dir nm)]
+                                      (and (try (.isFile (fs/statSync p)) (catch :default _ false))
+                                           (= content (fs/readFileSync p "utf8"))))))
+                          first)]
+             (if dup
+               (resolve* #js {:ok true :name dup :duplicate dup})
+               (let [[nm full] (unique-egg-path eggs-dir (.basename node-path filename))]
+                 (fs/writeFileSync full content "utf8")
+                 (resolve* #js {:ok true :name nm}))))))
+       (catch :default e
+         (log-error (str "add-egg! " filename ": " (.-message e)))
+         (resolve* #js {:ok false :reason (.-message e)}))))))
+
 (defn peck!
   "Runs the Peck workflow for `question` without filing the answer back.
   Resolves to {:answer :citedSlugs :candidateSlugs :steps}. `steps` is what

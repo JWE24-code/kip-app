@@ -20,6 +20,7 @@
             [frontend.components.encryption :as encryption]
             [frontend.components.file-sync :as file-sync]
             [frontend.components.git :as git-component]
+            [frontend.components.ingest :as ingest]
             [frontend.components.plugins :as plugin]
             [frontend.components.shell :as shell]
             [frontend.components.whiteboard :as whiteboard]
@@ -332,6 +333,9 @@
 (defmethod handle :modal/show-cards [_]
   (state/set-modal! srs/global-cards {:id :srs
                                       :label "flashcards__cp"}))
+
+(defmethod handle :modal/show-hatch [_]
+  (state/set-modal! ingest/hatch-modal))
 
 (defmethod handle :modal/show-instruction [_]
   (state/set-modal! capacitor-fs/instruction {:id :instruction
