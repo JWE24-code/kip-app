@@ -134,6 +134,24 @@ fi
 VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$APP_DIR/src/main/frontend/version.cljs" | head -1)"
 node -e "const p='$APP/package.json',j=require(p);j.version='$VERSION';require('fs').writeFileSync(p,JSON.stringify(j,null,2)+'\n')"
 
+# --- 7. pack resources/app -> app.asar ----------------------------------------
+# One archive instead of ~15k loose files: faster to unzip, faster to load.
+# scripts/ stays unpacked (electron.wiki spawns `node scripts/*.js` by path —
+# can't cwd into or exec out of an asar) and so do native .node addons
+# (better-sqlite3). asar auto-creates app.asar.unpacked/ for the --unpack* set.
+# the Linux installer / PKGBUILD need a real icon file — keep one outside the asar
+cp -f "$APP/icon.png" "$OUT/resources/icon.png" 2>/dev/null || true
+
+step "pack app.asar"
+# @electron/asar ships as a transitive dep of @electron-forge/cli (static
+# devDep). Run its bin JS through node — the .bin/ shim isn't reliably linked
+# for transitive deps (present on Linux, missing on Windows).
+ASAR_JS="$(cd "$APP_DIR/static" && node -e 'process.stdout.write(require.resolve("@electron/asar/bin/asar.js"))')"
+node "$ASAR_JS" pack "$APP" "$OUT/resources/app.asar" \
+  --unpack-dir "{scripts,node_modules/better-sqlite3}" \
+  --unpack "*.node"
+rm -rf "$APP"
+
 step "done — $OUT  (Kip $VERSION, cljs:$CLJS_MODE)"
 echo "run:      $OUT/kip"
 echo "install:  bash $here/install.sh"

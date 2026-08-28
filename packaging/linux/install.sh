@@ -40,9 +40,8 @@ install -m755 "$here/kip.sh" "$BIN"
 
 echo "==> $ICON"
 mkdir -p "$(dirname "$ICON")"
-# static/icon.png is 512x512; fall back to the app icon in resources
-cp -f "$KIP_HOME/resources/app/icon.png" "$ICON" 2>/dev/null \
-  || cp -f "$KIP_HOME/resources/app/icons/logseq.png" "$ICON"
+# build.sh stages a 512x512 icon.png next to app.asar for exactly this
+cp -f "$KIP_HOME/resources/icon.png" "$ICON" 2>/dev/null || true
 
 echo "==> $DESKTOP"
 mkdir -p "$(dirname "$DESKTOP")"

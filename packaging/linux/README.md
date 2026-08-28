@@ -65,10 +65,10 @@ open.
 
 ```bash
 ELECTRON_RUN_AS_NODE=1 KIP_COOP_ROOT=/path/to/a/graph \
-  ~/.local/opt/kip/kip ~/.local/opt/kip/resources/app/scripts/hatch-all.js --preview
+  ~/.local/opt/kip/kip ~/.local/opt/kip/resources/app.asar.unpacked/scripts/hatch-all.js --preview
 ```
 
 Then launch the GUI and exercise Peck / Hatch sources / Deep groom / LLM
-settings — those all shell out to `resources/app/scripts/` and were the parts
+settings — those all shell out to `resources/app.asar.unpacked/scripts/` and were the parts
 that broke on Linux before the path-separator fix (`electron.wiki` /
 `electron.llm` / `electron.skills` now use `path.join`, not `\\`).

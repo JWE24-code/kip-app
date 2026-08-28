@@ -35,9 +35,14 @@
 
 ;; scripts/ ships inside the app: gulp syncs ../scripts (source + a pure-JS
 ;; node_modules; better-sqlite3 comes from the app's own Electron-ABI copy)
-;; into static/scripts, which is app.getAppPath()/scripts both in dev (static/)
-;; and packaged (resources/app/).
-(def scripts-dir (.join node-path (.getAppPath app) "scripts"))
+;; into static/scripts. In dev that's app.getAppPath()/scripts (static/scripts).
+;; A packaged build asar-packs resources/app but keeps scripts/ unpacked (we
+;; spawn `node scripts/*.js` by path — you can't cwd into or exec out of an
+;; asar), so there it lives at resources/app.asar.unpacked/scripts.
+(def scripts-dir
+  (if ^boolean (.-isPackaged app)
+    (.join node-path js/process.resourcesPath "app.asar.unpacked" "scripts")
+    (.join node-path (.getAppPath app) "scripts")))
 
 (defn- script
   "Absolute path to a bundled coop-maintenance script, e.g. (script \"groom.js\").
