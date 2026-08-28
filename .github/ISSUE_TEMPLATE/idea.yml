@@ -1,0 +1,22 @@
+name: Idea / feature request
+description: Suggest something Kip should do
+labels: [idea]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For open-ended "what if…" or "how do I…", [Discussions](https://github.com/JWE24-code/kip-app/discussions)
+        is a better fit. Use this for a concrete, specific suggestion.
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What should Kip do, and what problem does it solve for you?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: How you work around it now
+    validations:
+      required: false

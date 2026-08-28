@@ -194,6 +194,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" \
-            --notes "Automated build." --repo "${{ github.repository }}" 2>/dev/null || true
+          notes=$'Kip **'"${{ github.ref_name }}"$'**\n\n'
+          notes+=$'| Platform | File |\n|---|---|\n'
+          notes+=$'| Windows 10/11 x64 | `Kip-*-windows-x64.zip` — extract, run `Kip.exe` |\n'
+          notes+=$'| Linux x64 | `Kip-*-linux-x64.tar.gz` — `tar -xzf`, run `./kip` |\n\n'
+          notes+=$'Windows SmartScreen: the binary is unsigned — *More info → Run anyway*.\n'
+          notes+=$'Linux/Wayland: `./kip --ozone-platform-hint=auto`.\n\n'
+          notes+=$'Changelog: https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md\n'
+          notes+=$'First-run guide: https://github.com/JWE24-code/kip/blob/main/docs/GETTING-STARTED.md'
+          gh release create "${{ github.ref_name }}" --title "Kip ${{ github.ref_name }}" \
+            --notes "$notes" --repo "${{ github.repository }}" 2>/dev/null || true
           gh release upload "${{ github.ref_name }}" "${{ env.ASSET }}" --clobber --repo "${{ github.repository }}"
