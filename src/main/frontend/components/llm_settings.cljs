@@ -18,18 +18,13 @@
   (config/get-repo-dir (state/get-current-repo)))
 
 (def providers
-  [{:value "kip" :label "Kip (managed routing)"}
-   {:value "anthropic" :label "Anthropic"}
+  [{:value "anthropic" :label "Anthropic"}
    {:value "openai" :label "OpenAI"}
    {:value "deepseek" :label "DeepSeek"}
    {:value "local" :label "Local (Ollama)"}
    {:value "other" :label "Other (OpenAI-compatible)"}])
 
-(def providers-with-base-url #{:local :other :kip})
-
-;; Kip's managed backend routes the model itself — there's no client-side
-;; model/profile field for it.
-(def providers-without-model #{:kip})
+(def providers-with-base-url #{:local :other})
 
 ;; Placeholder text for the Model field, per provider.
 (def model-hints
@@ -99,8 +94,7 @@
         *test-result (get state ::test-result)
         provider (or @*provider :anthropic)
         fields (get @*fields provider (empty-provider-fields))
-        show-base-url? (contains? providers-with-base-url provider)
-        show-model? (not (contains? providers-without-model provider))]
+        show-base-url? (contains? providers-with-base-url provider)]
     [:div.panel-wrap
      (if-not @*loaded?
        [:div.text-sm.opacity-60 "Loading..."]
@@ -126,19 +120,14 @@
            :placeholder (when (= provider :local) "not needed for local")
            :on-change (fn [e] (swap! *fields assoc-in [provider :apiKey] (util/evalue e)))}]]
 
-        (when show-model?
-          [:div.text-sm.my-2
-           [:label.block.text-sm.font-medium.mb-1 {:for "llm-model"} "Model"]
-           [:input.form-input.is-small
-            {:id "llm-model"
-             :type "text"
-             :value (:model fields)
-             :placeholder (get model-hints provider)
-             :on-change (fn [e] (swap! *fields assoc-in [provider :model] (util/evalue e)))}]])
-
-        (when (= provider :kip)
-          [:div.text-xs.opacity-60.my-2
-           "Kip's managed backend picks the model for each request — nothing to configure here."])
+        [:div.text-sm.my-2
+         [:label.block.text-sm.font-medium.mb-1 {:for "llm-model"} "Model"]
+         [:input.form-input.is-small
+          {:id "llm-model"
+           :type "text"
+           :value (:model fields)
+           :placeholder (get model-hints provider)
+           :on-change (fn [e] (swap! *fields assoc-in [provider :model] (util/evalue e)))}]]
 
         (when show-base-url?
           [:div.text-sm.my-2
@@ -147,7 +136,7 @@
             {:id "llm-base-url"
              :type "text"
              :value (:baseUrl fields)
-             :placeholder (if (= provider :kip) "https://api.kip-ai.be/v1" "http://localhost:11434/v1")
+             :placeholder "http://localhost:11434/v1"
              :on-change (fn [e] (swap! *fields assoc-in [provider :baseUrl] (util/evalue e)))}]])
 
         [:div.text-xs.opacity-50.my-3
