@@ -167,14 +167,23 @@ jobs:
         run: |
           v=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' app/src/main/frontend/version.cljs | head -1)
           ws="$PWD"
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            asset="Kip-$v-${{ matrix.name }}.zip"
-            ( cd app/out/Kip-win32-x64 && 7z a -mx=5 "$ws/$asset" . >/dev/null )
+          [ "${{ runner.os }}" = "Windows" ] && outdir=app/out/Kip-win32-x64 || outdir=app/out/Kip-linux-x64
+          if [ '${{ startsWith(github.ref, 'refs/tags/v') }}' = 'true' ]; then
+            # tagged release: the named archive that gets attached to the Release
+            if [ "${{ runner.os }}" = "Windows" ]; then
+              asset="Kip-$v-${{ matrix.name }}.zip"
+              ( cd "$outdir" && 7z a -mx=5 "$ws/$asset" . >/dev/null )
+            else
+              asset="Kip-$v-${{ matrix.name }}.tar.gz"
+              tar -C app/out -czf "$asset" "$(basename "$outdir")"
+            fi
+            echo "ASSET=$asset" >> "$GITHUB_ENV"
+            { echo "ARTIFACT_PATH=$asset"; echo "ARTIFACT_COMPRESSION=0"; } >> "$GITHUB_ENV"
           else
-            asset="Kip-$v-${{ matrix.name }}.tar.gz"
-            tar -C app/out -czf "$asset" Kip-linux-x64
+            # manual / dev run: hand the folder to upload-artifact so it zips
+            # once (no double-unzip for a test download) — #37
+            { echo "ARTIFACT_PATH=$outdir"; echo "ARTIFACT_COMPRESSION=6"; } >> "$GITHUB_ENV"
           fi
-          echo "ASSET=$asset" >> "$GITHUB_ENV"
 
       - name: Smoke test (linux — the bundled retrieval layer runs under Electron-as-Node)
         if: runner.os == 'Linux'
@@ -187,10 +196,12 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
-          path: ${{ env.ASSET }}
+          path: ${{ env.ARTIFACT_PATH }}
           if-no-files-found: error
           retention-days: 5
-          compression-level: 0   # the asset is already compressed
+          # 0 for tags (ARTIFACT_PATH is an already-compressed archive);
+          # 6 for manual runs (ARTIFACT_PATH is the raw folder).
+          compression-level: ${{ env.ARTIFACT_COMPRESSION }}
 
       - name: Attach to Release (tags only)
         if: startsWith(github.ref, 'refs/tags/v')

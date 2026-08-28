@@ -102,6 +102,12 @@ RC "$DIST" "$OUT" @('/E')
 Rename-Item "$OUT\electron.exe" 'Kip.exe'
 Remove-Item "$OUT\resources\default_app.asar" -Force -ErrorAction SilentlyContinue
 
+# English locale only — Electron falls back to en-US; the other ~50 .pak
+# files are ~12 MB of dead weight (#37).
+if (Test-Path "$OUT\locales") {
+  Get-ChildItem "$OUT\locales" -Filter *.pak | Where-Object Name -ne 'en-US.pak' | Remove-Item -Force
+}
+
 $APP = "$OUT\resources\app"
 New-Item -ItemType Directory -Force $APP | Out-Null
 RC "$APP_DIR\static" "$APP" @(

@@ -99,6 +99,12 @@ mv "$OUT/electron" "$OUT/kip"
 chmod +x "$OUT/kip"
 rm -f "$OUT/resources/default_app.asar"
 
+# Ship only the English locale — Electron falls back to en-US, and the ~50
+# other .pak files are ~12 MB of dead weight (#37).
+if [[ -d "$OUT/locales" ]]; then
+  find "$OUT/locales" -name '*.pak' ! -name 'en-US.pak' -delete
+fi
+
 APP="$OUT/resources/app"
 mkdir -p "$APP"
 rsync -a --delete \
