@@ -13,8 +13,10 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.ipc :as ipc]
+            [frontend.components.llm-banner :as llm-banner]
             [frontend.components.telemetry :as telemetry]
             [frontend.config :as config]
+            [frontend.handler.llm :as llm-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [promesa.core :as p]
@@ -101,6 +103,7 @@
   (rum/local false ::classic?)
   {:will-mount   (fn [state]
                    (load-preview! (get state ::preview) (get state ::error) (get state ::busy?))
+                   (llm-handler/refresh!)
                    state)
    :will-unmount (fn [state]
                    (stop-poll! (get state ::progress) (get state ::poll-id))
@@ -129,6 +132,8 @@
       "Turns new or changed files in " [:code "eggs/"] ", " [:code "journals/"] " and "
       [:code "pages/"] " into nest pages — no per-file review. Runs in batches of "
       (str batch-size) "."]
+
+     (llm-banner/provider-banner)
 
      (when @*error
        [:div.text-sm.text-red-500.my-2 (str "Error: " @*error)])
