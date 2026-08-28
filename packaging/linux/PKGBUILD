@@ -39,8 +39,6 @@ package() {
   sed -i 's|/opt/kip|/opt/kip|' "$pkgdir/usr/bin/kip"
 
   install -Dm644 "$_repo/app/packaging/linux/kip.desktop" "$pkgdir/usr/share/applications/kip.desktop"
-  install -Dm644 "$pkgdir/opt/kip/resources/app/icon.png" \
-                 "$pkgdir/usr/share/icons/hicolor/512x512/apps/kip.png" 2>/dev/null || \
-  install -Dm644 "$pkgdir/opt/kip/resources/app/icons/logseq.png" \
+  install -Dm644 "$pkgdir/opt/kip/resources/icon.png" \
                  "$pkgdir/usr/share/icons/hicolor/512x512/apps/kip.png"
 }

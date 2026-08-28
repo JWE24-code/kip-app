@@ -190,8 +190,10 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p /tmp/coop/.roost
+          # scripts/ is unpacked out of app.asar (see packaging/linux/build.sh)
           ELECTRON_RUN_AS_NODE=1 KIP_COOP_ROOT=/tmp/coop \
-            app/out/Kip-linux-x64/kip app/out/Kip-linux-x64/resources/app/scripts/reminders.js list --json
+            app/out/Kip-linux-x64/kip \
+            app/out/Kip-linux-x64/resources/app.asar.unpacked/scripts/reminders.js list --json
 
       - uses: actions/upload-artifact@v4
         with:
@@ -215,7 +217,7 @@ jobs:
           notes+=$'| Platform | File |\n|---|---|\n'
           notes+=$'| Windows 10/11 x64 | `Kip-*-windows-x64.zip` — extract, run `Kip.exe` |\n'
           notes+=$'| Linux x64 | `Kip-*-linux-x64.tar.gz` — `tar -xzf`, run `./kip` |\n\n'
-          notes+=$'Windows SmartScreen: the binary is unsigned — *More info → Run anyway*.\n'
+          notes+=$'Windows SmartScreen: the binary is signed but the certificate is self-issued, so SmartScreen still shows *unknown publisher* — *More info → Run anyway*.\n'
           notes+=$'Linux/Wayland: `./kip --ozone-platform-hint=auto`.\n\n'
           # This release's section, lifted from the app changelog.
           section=$(awk -v v="$ver" '

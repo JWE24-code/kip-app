@@ -44,6 +44,9 @@ De-Logseq'd the first-run experience and a batch of polish.
   `.henhouse/skills/` runs with your privileges, so Settings → Skills now
   asks you to approve it (showing what it declares) before Peck can use it.
 - Leaner package — dropped the non-English Electron locales (~12 MB).
+- **Faster unzip and launch** — the app is now packed into a single
+  `app.asar` instead of ~15k loose files; the retrieval layer (`scripts/`)
+  and the native SQLite addon stay unpacked so Hatch/Peck/Groom still work.
 
 ## [0.2.1] — 2026-08-28
 
