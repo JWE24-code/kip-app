@@ -507,6 +507,9 @@
 (defmethod handle :testLlmConnection [_ [_ candidate]]
   (llm/test-llm-connection! candidate))
 
+(defmethod handle :probeLocalLlm [_ [_ base-url]]
+  (llm/probe-local! base-url))
+
 (defmethod handle :skillsList [_ [_ vault-root]]
   (skills/list! vault-root))
 

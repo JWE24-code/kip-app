@@ -63,6 +63,22 @@
         (p/catch (fn [err] (reset! *save-message {:type :error :text (str err)})))
         (p/finally (fn [] (reset! *saving? false))))))
 
+(defn- probe-local!
+  "Ping the local endpoint's /models and stash {:status :checking/:ok/:down
+  :models [...] :error ...} in *probe. No-op unless the current provider is
+  `local`."
+  [*provider *fields *probe]
+  (when (= :local @*provider)
+    (let [base-url (get-in @*fields [:local :baseUrl])]
+      (reset! *probe {:status :checking})
+      (-> (ipc/ipc "probeLocalLlm" base-url)
+          (p/then (fn [r]
+                    (let [{:keys [ok models error]} (bean/->clj r)]
+                      (reset! *probe (if ok
+                                       {:status :ok :models (vec models)}
+                                       {:status :down :error error})))))
+          (p/catch (fn [err] (reset! *probe {:status :down :error (str err)})))))))
+
 (defn- test-connection!
   [*provider *fields *testing? *test-result]
   (reset! *testing? true)
@@ -84,8 +100,15 @@
   (rum/local nil ::save-message)
   (rum/local false ::testing?)
   (rum/local nil ::test-result)
+  (rum/local nil ::probe)
   {:will-mount (fn [state]
                  (load-config! (get state ::provider) (get state ::fields) (get state ::loaded?))
+                 state)
+   :did-update (fn [state]
+                 (when (and @(get state ::loaded?)
+                            (= :local @(get state ::provider))
+                            (nil? @(get state ::probe)))
+                   (probe-local! (get state ::provider) (get state ::fields) (get state ::probe)))
                  state)}
   [state]
   (let [*provider (get state ::provider)
@@ -95,6 +118,7 @@
         *save-message (get state ::save-message)
         *testing? (get state ::testing?)
         *test-result (get state ::test-result)
+        *probe (get state ::probe)
         provider (or @*provider :anthropic)
         fields (get @*fields provider (empty-provider-fields))
         show-base-url? (contains? providers-with-base-url provider)]
@@ -108,8 +132,11 @@
           {:id "llm-provider"
            :value (name provider)
            :on-change (fn [e]
-                        (reset! *provider (keyword (util/evalue e)))
-                        (reset! *test-result nil))}
+                        (let [p (keyword (util/evalue e))]
+                          (reset! *provider p)
+                          (reset! *test-result nil)
+                          (reset! *probe nil)
+                          (when (= p :local) (probe-local! *provider *fields *probe))))}
           (for [{:keys [value label]} providers]
             [:option {:key value :value value} label])]]
 
@@ -140,7 +167,25 @@
              :type "text"
              :value (:baseUrl fields)
              :placeholder "http://localhost:11434/v1"
-             :on-change (fn [e] (swap! *fields assoc-in [provider :baseUrl] (util/evalue e)))}]])
+             :on-change (fn [e] (swap! *fields assoc-in [provider :baseUrl] (util/evalue e)))
+             :on-blur (fn [_] (when (= provider :local) (probe-local! *provider *fields *probe)))}]
+           (when (= provider :local)
+             (let [{:keys [status models error]} @*probe]
+               [:div.text-xs.mt-1
+                (case status
+                  :checking [:span.opacity-60 "Checking…"]
+                  :ok       [:span
+                             [:span.text-green-500 "● Reachable"]
+                             (when (seq models)
+                               [:span.opacity-70
+                                (str " · " (count models) (if (= 1 (count models)) " model: " " models: "))
+                                (interpose ", "
+                                           (for [m models]
+                                             [:a.underline {:key m
+                                                            :on-click #(swap! *fields assoc-in [:local :model] m)}
+                                              m]))])]
+                  :down     [:span.text-red-500 (str "● " error)]
+                  nil)]))])
 
         [:div.text-xs.opacity-50.my-3
          "Stored in plaintext at .henhouse/llm.json inside your graph folder "
