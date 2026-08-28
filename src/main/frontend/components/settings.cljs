@@ -22,6 +22,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.update :as update-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
@@ -50,79 +51,40 @@
      (ui/toggle state on-toggle true)
      detail-text]]])
 
+(def ^:private releases-url "https://github.com/JWE24-code/kip-app/releases")
+
 (rum/defcs app-updater < rum/reactive
-  [state version]
-  (let [update-pending? (state/sub :electron/updater-pending?)
-        {:keys [type payload]} (state/sub :electron/updater)]
+  [_state version]
+  (let [{:keys [checking? newer? latest url]} (state/sub :kip/update)]
     [:span.cp__settings-app-updater
-
      [:div.ctls.flex.items-center
-
       [:div.mt-1.sm:mt-0.sm:col-span-2.flex.gap-4.items-center.flex-wrap
-       [:div (cond
-               (mobile-util/native-android?)
-               (ui/button
-                (t :settings-page/check-for-updates)
-                :class "text-sm mr-1"
-                :href "https://github.com/logseq/og/releases")
+       [:div
+        (if (util/electron?)
+          (ui/button
+           (if checking? (t :settings-page/checking) (t :settings-page/check-for-updates))
+           :class "text-sm mr-1"
+           :disabled (boolean checking?)
+           :on-click #(update-handler/check! true))
+          (ui/button
+           (t :settings-page/check-for-updates)
+           :class "text-sm mr-1"
+           :href releases-url))]
 
-               (mobile-util/native-ios?)
-               (ui/button
-                (t :settings-page/check-for-updates)
-                :class "text-sm mr-1"
-                :href "https://apps.apple.com/app/logseq/id1601013908")
-
-               (util/electron?)
-               (ui/button
-                (if update-pending? (t :settings-page/checking) (t :settings-page/check-for-updates))
-                :class "text-sm mr-1"
-                :disabled update-pending?
-                :on-click #(js/window.apis.checkForUpdates false))
-
-               :else
-               nil)]
-
-       [:div.text-sm.cursor
-        {:title (str (t :settings-page/revision) config/revision)
-         :on-click (fn []
-                     (notification/show! [:div "Current Revision: "
-                                          [:a {:target "_blank"
-                                               :href (str "https://github.com/logseq/logseq/commit/" config/revision)}
-                                           config/revision]]
-                                         :info
-                                         false))}
-        version]
+       [:div.text-sm version]
 
        [:a.text-sm.fade-link.underline.inline
         {:target "_blank"
-         :href "https://docs.logseq.com/#/page/changelog"}
+         :href "https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md"}
         (t :settings-page/changelog)]]]
 
-     (when-not (or update-pending?
-                   (string/blank? type))
+     (when (and (util/electron?) (not checking?) (some? newer?))
        [:div.update-state.text-sm
-        (case type
-          "update-not-available"
-          [:p (t :settings-page/app-updated)]
-
-          "update-available"
-          (let [{:keys [name url]} payload]
-            [:p (str (t :settings-page/update-available))
-             [:a.link
-              {:on-click
-               (fn [e]
-                 (js/window.apis.openExternal url)
-                 (util/stop e))}
-              svg/external-link name " 🎉"]])
-
-          "error"
-          [:p (t :settings-page/update-error-1) [:br] (t :settings-page/update-error-2)
-           [:a.link
-            {:on-click
-             (fn [e]
-               (js/window.apis.openExternal "https://github.com/logseq/og/releases")
-               (util/stop e))}
-            svg/external-link " release channel"]])])]))
+        (if newer?
+          [:p (str "Kip " latest " is available — ")
+           [:a.link {:on-click (fn [e] (js/window.apis.openExternal url) (util/stop e))}
+            svg/external-link "download"]]
+          [:p (t :settings-page/app-updated)])])]))
 
 (rum/defc outdenting-hint
   []

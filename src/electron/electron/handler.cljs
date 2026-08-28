@@ -28,6 +28,7 @@
             [electron.server :as server]
             [electron.shell :as shell]
             [electron.state :as state]
+            [electron.update :as update]
             [electron.utils :as utils]
             [electron.wiki :as wiki]
             [electron.window :as win]
@@ -553,6 +554,9 @@
 
 (defmethod handle :wikiCoopCounts [_ [_ vault-root]]
   (wiki/coop-counts! vault-root))
+
+(defmethod handle :checkForAppUpdate [_ [_ force?]]
+  (update/check! {:force? (boolean force?)}))
 
 (defmethod handle :wikiChat [_ [_ vault-root question trace?]]
   (wiki/peck! vault-root question (boolean trace?)))

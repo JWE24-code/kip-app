@@ -2,6 +2,7 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater] :as updater]
+            [electron.update :as app-update]
             [electron.utils :refer [*win mac? linux? dev? get-win-from-sender
                                     decode-protected-assets-schema-path get-graph-name send-to-renderer]
              :as utils]
@@ -40,11 +41,12 @@
 ;; Handle creating/removing shortcuts on Windows when installing/uninstalling.
 (when (js/require "electron-squirrel-startup") (.quit app))
 
-(defn setup-updater! [^js _win]
-  ;; Kip is a personal fork with no release feed — the auto-updater is
-  ;; disabled. (Upstream pointed init-updater at logseq/logseq, which would
-  ;; offer to "update" Kip to stock Logseq.)
-  nil)
+(defn setup-updater! [^js win]
+  ;; The electron-updater auto-install path (electron.updater) stays disabled —
+  ;; it needs signed binaries and a release feed. This is just the polite check:
+  ;; ask GitHub on launch + every 24h and let the renderer show a "new version"
+  ;; banner. Returns a teardown fn.
+  (app-update/start! win))
 
 (defn open-url-handler
   "win - the main window instance (first renderer process)
