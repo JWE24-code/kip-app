@@ -19,8 +19,10 @@
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.components.block :as block]
+            [frontend.components.llm-banner :as llm-banner]
             [frontend.components.telemetry :as telemetry]
             [frontend.config :as config]
+            [frontend.handler.llm :as llm-handler]
             [frontend.state :as state]
             [promesa.core :as p]
             [rum.core :as rum]
@@ -155,7 +157,10 @@
   (rum/local false ::loading?)
   (rum/local nil ::progress)
   (rum/local nil ::poll-id)
-  {:will-unmount (fn [state]
+  {:will-mount (fn [state]
+                 (llm-handler/refresh!)
+                 state)
+   :will-unmount (fn [state]
                    (stop-poll! (get state ::progress) (get state ::poll-id))
                    state)}
   [state]
@@ -167,7 +172,8 @@
         submit! #(send-message! *loading? *progress *poll-id)
         activity (get @*progress :activity)]
     [:div.flex.flex-col {:style {:height "100%"}}
-     [:div.flex-1.overflow-y-auto.px-2
+     [:div.flex-1.overflow-y-auto.px-2.pt-2
+      (llm-banner/provider-banner)
       (if (empty? messages)
         (empty-state)
         (map-indexed (fn [idx msg] (rum/with-key (message-cp msg) idx)) messages))

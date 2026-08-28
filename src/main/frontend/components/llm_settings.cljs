@@ -8,6 +8,7 @@
   (:require [cljs-bean.core :as bean]
             [electron.ipc :as ipc]
             [frontend.config :as config]
+            [frontend.handler.llm :as llm-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -56,7 +57,9 @@
   (reset! *save-message nil)
   (let [config {:provider (name @*provider) :providers @*fields}]
     (-> (ipc/ipc "saveLlmConfig" (vault-root) config)
-        (p/then (fn [_] (reset! *save-message {:type :success :text "Saved."})))
+        (p/then (fn [_]
+                  (reset! *save-message {:type :success :text "Saved."})
+                  (llm-handler/refresh!)))
         (p/catch (fn [err] (reset! *save-message {:type :error :text (str err)})))
         (p/finally (fn [] (reset! *saving? false))))))
 

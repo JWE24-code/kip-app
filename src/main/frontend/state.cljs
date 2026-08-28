@@ -117,6 +117,12 @@
      ;; persisted — every launch starts in Peck.
      :ui/peck-mode?                         true
 
+     ;; Cached read of <graph>/.henhouse/llm.json — so Peck and Hatch can warn
+     ;; up front when no provider is configured. Refreshed by
+     ;; frontend.handler.llm/refresh! (panel mount, and after an LLM settings
+     ;; save). :loaded? false until the first read resolves.
+     :kip/llm                               {:loaded? false :configured? false}
+
      :config                                {}
      :block/component-editing-mode?         false
      :editor/op                             nil
