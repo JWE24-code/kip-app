@@ -145,8 +145,13 @@ $j.version = $VERSION
 # can't cwd into or exec out of an asar) and so do native .node addons
 # (better-sqlite3). asar auto-creates app.asar.unpacked\ for the --unpack* set.
 Step 'pack app.asar'
-# @electron/asar ships as a transitive dep of @electron-forge/cli (static devDep)
-& "$APP_DIR\static\node_modules\.bin\asar.cmd" pack "$APP" "$OUT\resources\app.asar" `
+# @electron/asar ships as a transitive dep of @electron-forge/cli (static
+# devDep). Run its bin JS through node — the .bin\ shim isn't reliably linked
+# for transitive deps (present on Linux, missing on Windows).
+Push-Location "$APP_DIR\static"
+$ASAR_JS = (node -e 'process.stdout.write(require.resolve("@electron/asar/bin/asar.js"))')
+Pop-Location
+node "$ASAR_JS" pack "$APP" "$OUT\resources\app.asar" `
   --unpack-dir "{scripts,node_modules/better-sqlite3}" --unpack "*.node"
 if ($LASTEXITCODE) { throw 'asar pack failed' }
 Remove-Item "$APP" -Recurse -Force

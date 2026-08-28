@@ -143,8 +143,11 @@ node -e "const p='$APP/package.json',j=require(p);j.version='$VERSION';require('
 cp -f "$APP/icon.png" "$OUT/resources/icon.png" 2>/dev/null || true
 
 step "pack app.asar"
-# @electron/asar ships as a transitive dep of @electron-forge/cli (static devDep)
-"$APP_DIR/static/node_modules/.bin/asar" pack "$APP" "$OUT/resources/app.asar" \
+# @electron/asar ships as a transitive dep of @electron-forge/cli (static
+# devDep). Run its bin JS through node — the .bin/ shim isn't reliably linked
+# for transitive deps (present on Linux, missing on Windows).
+ASAR_JS="$(cd "$APP_DIR/static" && node -e 'process.stdout.write(require.resolve("@electron/asar/bin/asar.js"))')"
+node "$ASAR_JS" pack "$APP" "$OUT/resources/app.asar" \
   --unpack-dir "{scripts,node_modules/better-sqlite3}" \
   --unpack "*.node"
 rm -rf "$APP"
