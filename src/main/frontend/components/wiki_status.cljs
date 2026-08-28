@@ -10,6 +10,7 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.ipc :as ipc]
+            [frontend.components.coop-glossary :as glossary]
             [frontend.components.telemetry :as telemetry]
             [frontend.config :as config]
             [frontend.state :as state]
@@ -135,17 +136,20 @@
      [:h3.text-lg.font-medium.mb-1 "Your coop"]
      [:div.text-sm.opacity-80.space-y-0.5
       [:div (str (or eggs 0) " source " (if (= 1 eggs) "file" "files") " in ")
-       [:code "eggs/"]
+       (glossary/term "eggs/")
        (when (and pending (pos? pending))
          [:span " · "
           [:a.underline {:on-click #(state/pub-event! [:modal/show-hatch])}
            (str pending " not yet hatched — hatch now")]])]
-      [:div (str nest-total " nest " (if (= 1 nest-total) "page" "pages"))
+      [:div (str nest-total " ")
+       (glossary/term "nest" "nest")
+       (str " " (if (= 1 nest-total) "page" "pages"))
        (when (pos? nest-total)
          (str " (" entities " entity, " concepts " concept, " sources " source)"))]
       [:div.text-xs.opacity-60
        "Last hatch: " (if lastHatchAt (telemetry/ago lastHatchAt) "never")
-       "  ·  Last groom: " (if lastGroomAt (telemetry/ago lastGroomAt) "never")]]]))
+       "  ·  Last groom: " (if lastGroomAt (telemetry/ago lastGroomAt) "never")]]
+     [:div.mt-2 (glossary/legend)]]))
 
 (rum/defcs coop-status-modal < rum/reactive
   (rum/local nil ::recent-clucks)

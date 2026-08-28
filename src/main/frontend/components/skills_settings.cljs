@@ -6,8 +6,8 @@
   skills.js has no native deps). Everything lives in
   <graph>/.henhouse/skills.json, so every call passes the open graph's directory."
   (:require [cljs-bean.core :as bean]
-            [clojure.string :as string]
             [electron.ipc :as ipc]
+            [frontend.components.coop-glossary :as glossary]
             [frontend.config :as config]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -93,7 +93,7 @@
         [:h2.text-lg.font-medium.mt-1.mb-2 "Skills"]
         [:div.text-xs.opacity-60.mb-3
          "Small programs Peck can run while answering a question. Toggle one off to "
-         "stop offering it. Config lives in " [:code ".henhouse/skills.json"] "."]
+         "stop offering it. Config lives in " (glossary/term "henhouse" ".henhouse/skills.json") "."]
 
         [:div.mb-6
          (for [{:keys [name description source enabled]} @*skills]

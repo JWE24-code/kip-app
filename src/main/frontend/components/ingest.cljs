@@ -13,6 +13,7 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.ipc :as ipc]
+            [frontend.components.coop-glossary :as glossary]
             [frontend.components.drop-source :as drop-source]
             [frontend.components.llm-banner :as llm-banner]
             [frontend.components.telemetry :as telemetry]
@@ -155,7 +156,7 @@
      [:div.w-full.mx-auto {:class "md:max-w-[600px]"}
       [:h2#modal-headline.text-xl.mb-3 "Hatch sources"]
      [:p.text-sm.opacity-70.mb-3
-      "Turns new or changed files in " [:code "eggs/"] ", " [:code "journals/"] " and "
+      "Turns new or changed files in " (glossary/term "eggs/") ", " [:code "journals/"] " and "
       [:code "pages/"] " into nest pages — no per-file review. Runs in batches of "
       (str batch-size) "."]
 

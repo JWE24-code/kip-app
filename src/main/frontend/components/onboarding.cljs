@@ -1,6 +1,7 @@
 (ns frontend.components.onboarding
   (:require [rum.core :as rum]
             [frontend.state :as state]
+            [frontend.components.coop-glossary :as glossary]
             [frontend.components.onboarding.setups :as setups]))
 
 (rum/defc intro
@@ -26,7 +27,7 @@
 
    [:p.mt-4.mb-1 [:b "How it fits together"]]
    [:ul.text-sm.opacity-80
-    [:li [:b "Hatch"] " — a file you drop in " [:code "eggs/"] " becomes linked "
+    [:li [:b "Hatch"] " — a file you drop in " (glossary/term "eggs/") " becomes linked "
      [:code "entity"] " / " [:code "concept"] " / " [:code "source"] " pages under The Nest."]
     [:li [:b "Peck"] " — ask the nest a question (answers cite " [:code "[[pages]]"]
      "), or tell it a fact or an upcoming meeting."]
@@ -34,11 +35,11 @@
 
    [:p.mt-4.mb-1 [:b "The coop"]]
    [:ul.text-sm.opacity-80
-    [:li [:code "eggs/"] " — the source documents you add"]
-    [:li [:code "nest/"] " — the LLM-maintained wiki"]
-    [:li [:code "clucks/"] " — the activity log"]
-    [:li [:code ".henhouse/"] " — LLM provider + skills config"]
-    [:li [:code ".roost/"] " — the search index (disposable — rebuild any time)"]]
+    [:li (glossary/term "eggs/") " — the source documents you add"]
+    [:li (glossary/term "nest/") " — the LLM-maintained wiki"]
+    [:li (glossary/term "clucks/") " — the activity log"]
+    [:li (glossary/term "henhouse" ".henhouse/") " — LLM provider + skills config"]
+    [:li (glossary/term "roost" ".roost/") " — the search index (disposable — rebuild any time)"]]
 
    [:p.mt-4.mb-1 [:b "Feedback"]]
    [:ul

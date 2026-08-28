@@ -7,6 +7,7 @@
   directory."
   (:require [cljs-bean.core :as bean]
             [electron.ipc :as ipc]
+            [frontend.components.coop-glossary :as glossary]
             [frontend.components.llm-banner :as llm-banner]
             [frontend.config :as config]
             [frontend.handler.llm :as llm-handler]
@@ -191,7 +192,7 @@
         [:div.text-xs.opacity-50.my-3
          "Stored in plaintext at .henhouse/llm.json inside your graph folder "
          "— a local-machine-only secret, not encrypted at rest. Add "
-         [:code ".henhouse/"] " to your graph's ignore list if it's under version control."]
+         (glossary/term "henhouse" ".henhouse/") " to your graph's ignore list if it's under version control."]
 
         [:div.flex.gap-2.items-center.my-2
          (ui/button

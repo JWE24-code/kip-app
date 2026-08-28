@@ -7,6 +7,7 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.ipc :as ipc]
+            [frontend.components.coop-glossary :as glossary]
             [frontend.config :as config]
             [frontend.handler.coop :as coop]
             [frontend.handler.notification :as notification]
@@ -32,7 +33,7 @@
 (defn- notify-added! [name]
   (notification/show!
    [:div.text-sm
-    [:div "Added " [:b name] " to " [:code "eggs/"] "."]
+    [:div "Added " [:b name] " to " (glossary/term "eggs/") "."]
     [:button.text-xs.underline.opacity-80.hover:opacity-100.mt-1
      {:on-click (fn []
                   (notification/clear-all!)
