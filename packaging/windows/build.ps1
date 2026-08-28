@@ -145,13 +145,11 @@ $j.version = $VERSION
 # can't cwd into or exec out of an asar) and so do native .node addons
 # (better-sqlite3). asar auto-creates app.asar.unpacked\ for the --unpack* set.
 Step 'pack app.asar'
-# @electron/asar is a static\ devDep -> its bin lands at a stable path. Run it
-# through node (the .bin\ shim isn't linked the same on every OS). If any of
-# this goes wrong we MUST fail loudly: a missing app.asar makes upload-artifact
-# silently drop the now-empty resources\ dir and ship a codeless app.
-$ASAR_JS = "$APP_DIR\static\node_modules\@electron\asar\bin\asar.js"
-if (-not (Test-Path $ASAR_JS)) { throw "@electron/asar CLI missing at $ASAR_JS" }
-node "$ASAR_JS" pack "$APP" "$OUT\resources\app.asar" `
+# Fetch @electron/asar via npx — yarn 1 doesn't hoist it to a predictable path
+# in static\node_modules (works on Linux, not Windows). If anything here goes
+# wrong we MUST fail loudly: a missing app.asar makes upload-artifact silently
+# drop the now-empty resources\ dir and ship a codeless app.
+npx --yes -p @electron/asar@3.4.1 asar pack "$APP" "$OUT\resources\app.asar" `
   --unpack-dir "{scripts,node_modules/better-sqlite3}" --unpack "*.node"
 if ($LASTEXITCODE) { throw "asar pack failed (exit $LASTEXITCODE)" }
 if (-not (Test-Path "$OUT\resources\app.asar")) { throw 'asar pack produced no app.asar' }
