@@ -21,7 +21,13 @@ exports.default = async function afterPack (context) {
   }
   await fs.promises.cp(src, dst, { recursive: true })
 
-  for (const probe of ['lib/skills.js', 'node_modules/gray-matter/package.json']) {
+  for (const probe of [
+    'lib/skills.js',
+    'node_modules/gray-matter/package.json',
+    // vendored by packaging/*/build.sh (Electron-ABI, not in scripts/package.json)
+    'node_modules/better-sqlite3/build/Release/better_sqlite3.node',
+    'node_modules/bindings/package.json'
+  ]) {
     if (!fs.existsSync(path.join(dst, probe))) {
       throw new Error(`after-pack: ${probe} missing after copy`)
     }

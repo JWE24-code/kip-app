@@ -209,13 +209,13 @@ jobs:
 
       - name: Smoke test (linux — the bundled retrieval layer runs under Electron-as-Node)
         if: runner.os == 'Linux' && env.KIP_TARGET != 'installer'
-        continue-on-error: true
         run: |
-          mkdir -p /tmp/coop/.roost
-          # scripts/ is unpacked out of app.asar (see packaging/linux/build.sh)
-          ELECTRON_RUN_AS_NODE=1 KIP_COOP_ROOT=/tmp/coop \
-            app/out/Kip-linux-x64/kip \
-            app/out/Kip-linux-x64/resources/app.asar.unpacked/scripts/reminders.js list --json
+          mkdir -p /tmp/coop/{eggs,.roost}
+          S=app/out/Kip-linux-x64/resources/app.asar.unpacked/scripts
+          # reminders.js is pure JS; hatch-all.js --preview opens the SQLite DB
+          # (better-sqlite3 -> bindings) — the part that actually broke.
+          ELECTRON_RUN_AS_NODE=1 KIP_COOP_ROOT=/tmp/coop app/out/Kip-linux-x64/kip "$S/reminders.js" list --json
+          ELECTRON_RUN_AS_NODE=1 KIP_COOP_ROOT=/tmp/coop app/out/Kip-linux-x64/kip "$S/hatch-all.js" --preview
 
       - name: Smoke test (windows — the app launches and stays up)
         if: runner.os == 'Windows' && env.KIP_TARGET != 'installer'
@@ -267,12 +267,15 @@ jobs:
           R=squashfs-root/resources
           # extraResources must have landed the retrieval layer + its nested
           # node_modules (electron-builder prunes those from the asar)
-          test -f "$R/app.asar.unpacked/scripts/lib/skills.js"   || { echo "::error::scripts/ missing"; exit 1; }
-          test -d "$R/app.asar.unpacked/scripts/node_modules/gray-matter" || { echo "::error::scripts/node_modules pruned"; exit 1; }
-          # the retrieval layer runs under Electron-as-Node
-          mkdir -p /tmp/coop/.roost
-          ELECTRON_RUN_AS_NODE=1 KIP_COOP_ROOT=/tmp/coop \
-            ./squashfs-root/kip "$R/app.asar.unpacked/scripts/reminders.js" list --json
+          S="$R/app.asar.unpacked/scripts"
+          test -f "$S/lib/skills.js"                      || { echo "::error::scripts/ missing"; exit 1; }
+          test -d "$S/node_modules/gray-matter"           || { echo "::error::scripts/node_modules pruned"; exit 1; }
+          test -f "$S/node_modules/better-sqlite3/build/Release/better_sqlite3.node" || { echo "::error::better-sqlite3 not vendored"; exit 1; }
+          # the retrieval layer runs under Electron-as-Node — reminders.js is
+          # pure JS; hatch-all.js --preview opens the SQLite DB (the broken bit)
+          mkdir -p /tmp/coop/{eggs,.roost}
+          ELECTRON_RUN_AS_NODE=1 KIP_COOP_ROOT=/tmp/coop ./squashfs-root/kip "$S/reminders.js" list --json
+          ELECTRON_RUN_AS_NODE=1 KIP_COOP_ROOT=/tmp/coop ./squashfs-root/kip "$S/hatch-all.js" --preview
           # full launch — the main process loads electron.skills / electron.llm
           xvfb-run -a ./squashfs-root/kip --no-sandbox &
           pid=$!
@@ -303,6 +306,15 @@ jobs:
           }
           Write-Host "Kip.exe (installed) still running after 20s — ok"
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          # exercise the retrieval layer's SQLite path (better-sqlite3 -> bindings)
+          $root = Split-Path $exe
+          $S = Join-Path $root 'resources\app.asar.unpacked\scripts'
+          $env:ELECTRON_RUN_AS_NODE = '1'
+          $env:KIP_COOP_ROOT = Join-Path $env:RUNNER_TEMP 'coop'
+          New-Item -ItemType Directory -Force (Join-Path $env:KIP_COOP_ROOT 'eggs') | Out-Null
+          & $exe (Join-Path $S 'hatch-all.js') --preview
+          if ($LASTEXITCODE) { throw "hatch-all.js --preview failed (exit $LASTEXITCODE) — SQLite/bindings broken" }
+          Write-Host "hatch-all.js --preview ok"
 
       - uses: actions/upload-artifact@v4
         if: env.KIP_TARGET == 'installer'
