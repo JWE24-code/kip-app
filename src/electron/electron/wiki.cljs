@@ -66,13 +66,28 @@
                         (js/Object.assign base #js {"KIP_COOP_ROOT" vault-root})
                         base))))
 
+(defn- coop-dir?
+  "vault-root is usable as a KIP_COOP_ROOT: nil (scripts fall back to their
+  bundled ./coop) or a string naming an existing directory. The in-memory demo
+  graph reports its dir as \"memory:///local\" — that must never reach a script,
+  since path.resolve turns it into a bogus \"memory:/local\" and the run dies on
+  mkdir (issue #51)."
+  [vault-root]
+  (or (nil? vault-root)
+      (and (string? vault-root)
+           (try (.isDirectory (fs/statSync vault-root))
+                (catch :default _ false)))))
+
 (defn- run-node-script!
   "Spawns the bundled Electron-as-Node against <script-path> <args...> (cwd =
   scripts-dir, no shell — args go through as an argv array), collects stdout,
   and resolves a promise with the parsed JSON result on a clean exit, or
-  rejects with stderr (or the parse error) otherwise."
+  rejects with stderr (or the parse error) otherwise. Rejects up front when
+  vault-root isn't a real folder — see coop-dir?."
   [script-path vault-root args]
-  (let [deferred (p/deferred)
+  (if-not (coop-dir? vault-root)
+    (p/rejected (js/Error. "Open a folder first (File → Open a folder) — Kip can only hatch, peck and groom a folder-backed graph."))
+   (let [deferred (p/deferred)
         job (child-process/spawn (.-execPath js/process)
                                  (apply array script-path args)
                                  #js {:cwd scripts-dir :env (script-env vault-root)})
@@ -98,7 +113,7 @@
                  (p/reject! deferred (if (string/blank? stderr)
                                        (str script-path " exited with code " code)
                                        stderr)))))))
-    deferred))
+    deferred)))
 
 (defn recent-clucks! [vault-root]
   (run-node-script! (script "recent-clucks.js") vault-root []))
@@ -255,7 +270,7 @@
   (p/create
    (fn [resolve* _reject]
      (try
-       (if (or (string/blank? vault-root) (string/blank? filename))
+       (if (or (string/blank? vault-root) (string/blank? filename) (not (coop-dir? vault-root)))
          (resolve* #js {:ok false :reason "no-graph"})
          (resolve* (clj->js (write-egg-content (.join node-path vault-root "eggs")
                                                (.basename node-path filename)

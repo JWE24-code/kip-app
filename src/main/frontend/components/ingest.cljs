@@ -89,27 +89,33 @@
                     (when (and err (nil? @*error)) (reset! *error err))))))
       (p/catch (fn [_] (when from-error (reset! *recovery {})))))) ;; no progress file — still flag it
 
+(def ^:private no-graph-msg
+  "Open a folder first (File → Open a folder) — Kip hatches the sources inside a graph's folder.")
+
 (defn- run-batch! [{:keys [*preview *done *remaining *error *busy? *progress *poll-id *metrics *trace? *classic? *recovery]}]
-  (reset! *busy? true)
-  (reset! *error nil)
-  (reset! *recovery nil)
-  (reset! *progress nil)
-  (start-poll! *progress *poll-id)
-  (-> (ipc/ipc "wikiIngestBatch" (vault-root) batch-size (boolean @*trace?) (boolean @*classic?))
-      (p/then (fn [r]
-                (let [{:keys [hatched failed remaining metrics]} (bean/->clj r)]
-                  (swap! *done (fn [d] {:hatched (into (:hatched d) hatched)
-                                        :failed  (into (:failed d) failed)}))
-                  (reset! *remaining remaining)
-                  (reset! *metrics metrics)
-                  (coop/refresh-counts!))))
-      (p/catch (fn [e]
-                 (reset! *error (str e))
-                 (check-recovery! *recovery *error (str e))
-                 (load-preview! *preview *error *busy?)))
-      (p/finally (fn []
-                   (stop-poll! *progress *poll-id)
-                   (reset! *busy? false)))))
+  (if (config/demo-graph?)
+    (reset! *error no-graph-msg)
+    (do
+      (reset! *busy? true)
+      (reset! *error nil)
+      (reset! *recovery nil)
+      (reset! *progress nil)
+      (start-poll! *progress *poll-id)
+      (-> (ipc/ipc "wikiIngestBatch" (vault-root) batch-size (boolean @*trace?) (boolean @*classic?))
+          (p/then (fn [r]
+                    (let [{:keys [hatched failed remaining metrics]} (bean/->clj r)]
+                      (swap! *done (fn [d] {:hatched (into (:hatched d) hatched)
+                                            :failed  (into (:failed d) failed)}))
+                      (reset! *remaining remaining)
+                      (reset! *metrics metrics)
+                      (coop/refresh-counts!))))
+          (p/catch (fn [e]
+                     (reset! *error (str e))
+                     (check-recovery! *recovery *error (str e))
+                     (load-preview! *preview *error *busy?)))
+          (p/finally (fn []
+                       (stop-poll! *progress *poll-id)
+                       (reset! *busy? false)))))))
 
 ;; --- "Review before writing" mode ----------------------------------------
 ;; One file at a time: propose its pages (LLM), let the user keep/skip each,
@@ -160,9 +166,12 @@
                  (swap! *rp assoc :phase :reviewing :proposal nil :error (str e))))))
 
 (defn- review-start! [ctx]
-  (reset! (:*done ctx) {:hatched [] :failed []})
-  (reset! (:*rp ctx) {:skip 0})
-  (review-next! ctx))
+  (if (config/demo-graph?)
+    (reset! (:*error ctx) no-graph-msg)
+    (do
+      (reset! (:*done ctx) {:hatched [] :failed []})
+      (reset! (:*rp ctx) {:skip 0})
+      (review-next! ctx))))
 
 (defn- per-file
   "The {:source :ms :ok} rows perf-report wants, from the modal's done state."
