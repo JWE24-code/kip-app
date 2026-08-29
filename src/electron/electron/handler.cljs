@@ -5,7 +5,7 @@
             ["abort-controller" :as AbortController]
             ["buffer" :as buffer]
             ["diff-match-patch" :as google-diff]
-            ["electron" :refer [app autoUpdater dialog ipcMain shell]]
+            ["electron" :refer [app dialog ipcMain shell]]
             ["electron-window-state" :as windowStateKeeper]
             ["fs" :as fs]
             ["fs-extra" :as fs-extra]
@@ -29,6 +29,7 @@
             [electron.shell :as shell]
             [electron.state :as state]
             [electron.update :as update]
+            [electron.updater :as updater]
             [electron.groom-scheduler :as groom-scheduler]
             [electron.utils :as utils]
             [electron.wiki :as wiki]
@@ -683,8 +684,11 @@
     (.abort controller)))
 
 (defmethod handle :quitAndInstall []
-  (logger/info ::quick-and-install)
-  (.quitAndInstall autoUpdater))
+  (logger/info ::quit-and-install)
+  (updater/quit-and-install!))
+
+(defmethod handle :updaterDownloadUpdate [_ _]
+  (updater/download-update!))
 
 (defmethod handle :graphUnlinked [^js _win [_ repo]]
   (doseq [window (win/get-all-windows)]

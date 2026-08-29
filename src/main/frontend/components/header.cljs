@@ -168,28 +168,41 @@
 (defn- on-update-push [_ args]
   (state/set-state! :kip/update (assoc (bean/->clj args) :checking? false)))
 
+(defn- on-download-progress [_ args]
+  (state/set-state! [:kip/update :percent]
+                    (some-> (bean/->clj args) :percent js/Math.round)))
+
 ;; A dismissible "a newer Kip is out" strip in the header — the polite update
-;; check (frontend.handler.update / electron.update). No download/install here;
-;; it just links to the release page.
+;; check (frontend.handler.update / electron.update). "Update" hands off to
+;; electron-updater (electron.updater) to download in place; on a build that
+;; can't self-update it falls back to opening the release page.
 (rum/defcs app-update-banner
   < rum/reactive
   {:did-mount    (fn [state]
                    (update-handler/check! false)
                    (when (util/electron?)
-                     (js/apis.addListener "app-update-available" on-update-push))
+                     (js/apis.addListener "app-update-available" on-update-push)
+                     (js/apis.addListener "updater-download-progress" on-download-progress))
                    state)
    :will-unmount (fn [state]
                    (when (util/electron?)
-                     (js/apis.removeListener "app-update-available" on-update-push))
+                     (js/apis.removeListener "app-update-available" on-update-push)
+                     (js/apis.removeListener "updater-download-progress" on-download-progress))
                    state)}
   [_state]
-  (let [{:keys [latest url]} (state/sub :kip/update)]
+  (let [{:keys [latest url downloading? percent]} (state/sub :kip/update)]
     (when (update-handler/show-banner?)
       [:div.cp__header-tips
        [:p
         (str "Kip " latest " is available.")
-        [:a.ml-2 {:href url :target "_blank"} [:strong "See what's new"]]
-        [:a.ml-3.opacity-70 {:on-click #(update-handler/dismiss!)} "Dismiss"]]])))
+        (if downloading?
+          [:span.ml-2.opacity-80
+           (if (number? percent) (str "Downloading… " percent "%") "Downloading…")]
+          [:<>
+           (when (util/electron?)
+             [:a.ml-2 {:on-click #(update-handler/download-and-install!)} [:strong "Update"]])
+           [:a.ml-3 {:href url :target "_blank"} "See what's new"]
+           [:a.ml-3.opacity-70 {:on-click #(update-handler/dismiss!)} "Dismiss"]])]])))
 
 (rum/defc ^:large-vars/cleanup-todo header < rum/reactive
   [{:keys [open-fn current-repo default-home new-block-mode]}]

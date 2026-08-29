@@ -87,7 +87,20 @@ fi
 step "rebuild better-sqlite3 for Electron $ELECTRON_VERSION"
 ( cd "$APP_DIR/static" && npx --yes "@electron/rebuild@4.0.1" -v "$ELECTRON_VERSION" -f --only better-sqlite3 )
 
-# --- 6. assemble out/Kip-linux-x64/ -------------------------------------
+# --- 6. package --------------------------------------------------------------
+# KIP_TARGET=installer  -> electron-builder: AppImage (self-updating) + tar.gz
+#                          + latest-linux.yml  (#38, feeds electron-updater)
+# KIP_TARGET=folder (default) -> the hand-assembled runnable folder + app.asar
+if [[ "${KIP_TARGET:-folder}" == "installer" ]]; then
+  VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$APP_DIR/src/main/frontend/version.cljs" | head -1)"
+  node -e "const p='$APP_DIR/static/package.json',j=require(p);j.version='$VERSION';require('fs').writeFileSync(p,JSON.stringify(j,null,2)+'\n')"
+  step "electron-builder (linux: AppImage + tar.gz) — Kip $VERSION"
+  ( cd "$APP_DIR" && npx --yes electron-builder --linux --x64 --publish "${KIP_PUBLISH:-never}" )
+  echo "dist/:"; ls -la "$APP_DIR/dist" || true
+  [[ -f "$APP_DIR/dist/latest-linux.yml" ]] || { echo "FATAL: no latest-linux.yml"; exit 1; }
+  exit 0
+fi
+
 step "assemble $OUT"
 DIST="$APP_DIR/static/node_modules/electron/dist"
 [[ -d "$DIST" ]] || { echo "FATAL: electron dist missing at $DIST"; exit 1; }

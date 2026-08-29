@@ -1,7 +1,7 @@
 (ns electron.core
   (:require [electron.handler :as handler]
             [electron.search :as search]
-            [electron.updater :refer [init-updater] :as updater]
+            [electron.updater :as updater]
             [electron.update :as app-update]
             [electron.utils :refer [*win mac? linux? dev? get-win-from-sender
                                     decode-protected-assets-schema-path get-graph-name send-to-renderer]
@@ -43,10 +43,12 @@
 (when (js/require "electron-squirrel-startup") (.quit app))
 
 (defn setup-updater! [^js win]
-  ;; The electron-updater auto-install path (electron.updater) stays disabled —
-  ;; it needs signed binaries and a release feed. This is just the polite check:
-  ;; ask GitHub on launch + every 24h and let the renderer show a "new version"
-  ;; banner. Returns a teardown fn.
+  ;; Two halves:
+  ;;  - electron.update  — polls GitHub on launch + every 24h, drives the
+  ;;    "a newer Kip is out" header banner. Returns a teardown fn.
+  ;;  - electron.updater — real electron-updater; only downloads/installs once
+  ;;    the user clicks Update in that banner (no-op for a portable/dev build).
+  (updater/wire! win)
   (app-update/start! win))
 
 (defn open-url-handler

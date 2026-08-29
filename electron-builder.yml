@@ -1,0 +1,98 @@
+# electron-builder config for Kip's installers (#38 → #16/#18/#20).
+#
+# The cljs build + gulp still produce static/ (see packaging/*/build.sh); this
+# takes static/ and wraps it into:
+#   Windows  -> NSIS installer (Kip-Setup-<version>.exe)   + latest.yml
+#   Linux    -> AppImage (self-updating)  + tar.gz (portable)  + latest-linux.yml
+#
+# electron-updater reads the latest*.yml + the installer from the GitHub Release.
+# Signing: electron-builder picks up CSC_LINK (base64 PFX) + CSC_KEY_PASSWORD
+# from the env — CI sets those from the KIP_SIGN_PFX_* secrets.
+
+appId: app.kip
+productName: Kip
+copyright: © Joeri Weitmann
+
+directories:
+  app: static          # the compiled app (gulp + cljs output)
+  output: dist
+  buildResources: build
+
+electronVersion: 41.7.1
+# static/node_modules/better-sqlite3 is already rebuilt for the Electron ABI by
+# packaging/*/build.sh — don't let electron-builder redo it (it would fail on
+# the --ignore-scripts tree).
+npmRebuild: false
+
+# What goes inside app.asar. static/ has dev-only cruft to leave out.
+files:
+  - "**/*"
+  - "!**/*.map"
+  - "!tests.js"
+  - "!gen-malli-kondo-config.js"
+  - "!.shadow-cljs${/*}"
+  - "!forge.config.js"
+  - "!entitlements.plist"
+  - "!node_modules/electron${/*}"
+  - "!node_modules/electron-builder${/*}"
+  - "!node_modules/@electron-forge${/*}"
+  - "!node_modules/electron-forge${/*}"
+  - "!node_modules/@electron/asar${/*}"
+  - "!node_modules/app-builder-bin${/*}"
+  - "!node_modules/app-builder-lib${/*}"
+  - "!node_modules/dmg-builder${/*}"
+  - "!node_modules/electron-publish${/*}"
+  - "!node_modules/typescript${/*}"
+  - "!node_modules/webpack${/*}"
+
+asar: true
+asarUnpack:
+  # Kip spawns `node scripts/*.js` by path — can't exec out of an asar.
+  - "scripts/**"
+  - "node_modules/better-sqlite3/**"
+  - "**/*.node"
+
+protocols:
+  - name: kip
+    schemes: [kip]
+
+publish:
+  provider: github
+  owner: JWE24-code
+  repo: kip-app
+
+win:
+  target: nsis
+  icon: build/icon.ico
+  artifactName: Kip-Setup-${version}.${ext}
+  # self-signed cert today; SmartScreen still warns. CSC_LINK / CSC_KEY_PASSWORD
+  # come from the env (CI: KIP_SIGN_PFX_* secrets).
+  signtoolOptions:
+    signingHashAlgorithms: [sha256]
+    rfc3161TimeStampServer: http://timestamp.digicert.com
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  # electron-updater on Windows downloads and runs the new Setup.exe silently.
+
+linux:
+  target:
+    - AppImage
+    - tar.gz
+  icon: build/icon.png
+  category: Office
+  executableName: kip
+  synopsis: Don't browse your notes. Peck them. Get answers.
+  description: A pecking-first knowledge base — a fork of Logseq with an LLM retrieval layer.
+  artifactName: Kip-${version}-${arch}.${ext}
+  desktop:
+    entry:
+      MimeType: x-scheme-handler/kip
+      StartupWMClass: Kip
