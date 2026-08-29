@@ -17,6 +17,7 @@
             [promesa.core :as p]))
 
 (def llm-lib (js/require (.join node-path wiki/scripts-dir "lib" "llm.js")))
+(def connectors-lib (js/require (.join node-path wiki/scripts-dir "lib" "connectors.js")))
 
 (defn get-llm-config!
   "Returns the parsed <graph>/.henhouse/llm.json, or null if it doesn't
@@ -34,10 +35,51 @@
 (defn test-llm-connection!
   "Fires a trivial LLM call against `candidate` (a CLJS map: {:provider
   :apiKey :model :baseUrl}, i.e. the settings form's current, possibly
-  unsaved values — not whatever's already saved). Never rejects — resolves
-  to {success true/false, reply/error}."
-  [candidate]
-  (.testConnection llm-lib (bean/->js candidate)))
+  unsaved values — not whatever's already saved). `vault-root` lets a
+  graph-local connector be resolved. Never rejects — resolves to {success
+  true/false, reply/error}."
+  [vault-root candidate]
+  (.testConnection llm-lib (bean/->js candidate)
+                   #js {:vaultRoot (or vault-root js/undefined)}))
+
+(defn list-providers!
+  "[{id label fields ready} …] — every connector available to this graph
+  (the 5 built-ins + any bundled/graph-local ones), each with its declared
+  form fields and whether its *saved* config in <graph>/.henhouse/llm.json
+  is already complete (spec.isReady). Synchronous."
+  [vault-root]
+  (let [vr (or vault-root js/undefined)
+        cfg (.loadLLMConfig llm-lib vr)
+        providers (or (some-> cfg .-providers) #js {})
+        registry (.loadConnectors connectors-lib vr)]
+    (.map (.list registry)
+          (fn [^js spec]
+            (let [block (or (aget providers (.-id spec)) #js {})
+                  resolved (.resolveConfig connectors-lib spec block)]
+              #js {:id     (.-id spec)
+                   :label  (.-label spec)
+                   :fields (.-fields spec)
+                   :ready  (try (boolean (.isReady spec resolved))
+                                (catch :default _ false))})))))
+
+(defn install-connector!
+  "Installs a connector from a .tgz file path or an https URL into
+  <graph>/.henhouse/connectors/. Only @kip-ai/* packages are accepted.
+  Never rejects — resolves to #js {ok true id name version} / {ok false error}."
+  [vault-root tgz-path-or-url]
+  (-> (.installConnectorFromTarball connectors-lib tgz-path-or-url
+                                    (or vault-root js/undefined))
+      (p/catch (fn [^js e]
+                 #js {:ok false :error (or (.-message e) (str e))}))))
+
+(defn remove-connector!
+  "Removes an installed connector by id. Returns #js {ok true id} /
+  {ok false error}."
+  [vault-root id]
+  (try
+    (.removeConnector connectors-lib id (or vault-root js/undefined))
+    (catch :default e
+      #js {:ok false :error (or (.-message e) (str e))})))
 
 (defn probe-local!
   "GET <base-url>/models — Ollama serves it at its OpenAI-compatible path, as

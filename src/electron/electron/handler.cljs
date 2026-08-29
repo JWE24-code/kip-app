@@ -506,11 +506,20 @@
 (defmethod handle :saveLlmConfig [_ [_ vault-root config]]
   (llm/save-llm-config! vault-root config))
 
-(defmethod handle :testLlmConnection [_ [_ candidate]]
-  (llm/test-llm-connection! candidate))
+(defmethod handle :testLlmConnection [_ [_ vault-root candidate]]
+  (llm/test-llm-connection! vault-root candidate))
 
 (defmethod handle :probeLocalLlm [_ [_ base-url]]
   (llm/probe-local! base-url))
+
+(defmethod handle :listLlmProviders [_ [_ vault-root]]
+  (llm/list-providers! vault-root))
+
+(defmethod handle :installConnector [_ [_ vault-root tgz-path-or-url]]
+  (llm/install-connector! vault-root tgz-path-or-url))
+
+(defmethod handle :removeConnector [_ [_ vault-root id]]
+  (llm/remove-connector! vault-root id))
 
 (defmethod handle :skillsList [_ [_ vault-root]]
   (skills/list! vault-root))
