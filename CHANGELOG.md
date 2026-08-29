@@ -3,6 +3,14 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [Unreleased]
+
+- **Schedule the deep groom** — Settings → Features gains a "run the deep
+  groom on a schedule" toggle (day of week + time). Runs in the main
+  process like reminders; nothing fires while Kip is closed, and a slot
+  that came due meanwhile runs on the next launch. Coop status shows the
+  next run.
+
 ## [0.2.2] — 2026-08-28
 
 De-Logseq'd the first-run experience and a batch of polish.
