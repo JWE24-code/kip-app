@@ -258,23 +258,31 @@ jobs:
             ls app/dist/*.AppImage app/dist/*.tar.gz app/dist/latest-linux.yml
           fi
 
-      - name: Smoke test the installer (linux — AppImage launches and stays up)
+      - name: Smoke test the installer (linux — AppImage payload + launch)
         if: env.KIP_TARGET == 'installer' && runner.os == 'Linux'
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
           cd app/dist
           ./*.AppImage --appimage-extract >/dev/null
-          # the Electron main process loads electron.skills -> scripts/lib/skills.js
-          # -> gray-matter etc. A missing nested dep dies here within a second.
+          R=squashfs-root/resources
+          # extraResources must have landed the retrieval layer + its nested
+          # node_modules (electron-builder prunes those from the asar)
+          test -f "$R/app.asar.unpacked/scripts/lib/skills.js"   || { echo "::error::scripts/ missing"; exit 1; }
+          test -d "$R/app.asar.unpacked/scripts/node_modules/gray-matter" || { echo "::error::scripts/node_modules pruned"; exit 1; }
+          # the retrieval layer runs under Electron-as-Node
+          mkdir -p /tmp/coop/.roost
+          ELECTRON_RUN_AS_NODE=1 KIP_COOP_ROOT=/tmp/coop \
+            ./squashfs-root/kip "$R/app.asar.unpacked/scripts/reminders.js" list --json
+          # full launch — the main process loads electron.skills / electron.llm
           xvfb-run -a ./squashfs-root/kip --no-sandbox &
           pid=$!
           sleep 20
-          if ! kill -0 $pid 2>/dev/null; then
-            echo "::error::Kip exited within 20s — installer is not runnable"
-            cat ~/.config/Kip/logs/main.log 2>/dev/null | tail -40 || true
-            exit 1
+          log=~/.config/Kip/logs/main.log
+          if grep -qi "cannot find module" "$log" 2>/dev/null; then
+            echo "::error::main process hit a missing module"; tail -40 "$log"; kill $pid; exit 1
           fi
-          echo "Kip (AppImage) still running after 20s — ok"
+          kill -0 $pid 2>/dev/null || { echo "::error::Kip exited within 20s"; tail -40 "$log" 2>/dev/null; exit 1; }
+          echo "Kip (AppImage) still running after 20s, no module errors — ok"
           kill $pid 2>/dev/null || true
 
       - name: Smoke test the installer (windows — silent install + launch)
