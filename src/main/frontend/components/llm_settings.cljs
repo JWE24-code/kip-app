@@ -88,7 +88,7 @@
   (let [provider @*provider
         fields (get @*fields provider (empty-provider-fields))
         candidate (assoc fields :provider (name provider))]
-    (-> (ipc/ipc "testLlmConnection" candidate)
+    (-> (ipc/ipc "testLlmConnection" (vault-root) candidate)
         (p/then (fn [result] (reset! *test-result (bean/->clj result))))
         (p/catch (fn [err] (reset! *test-result {:success false :error (str err)})))
         (p/finally (fn [] (reset! *testing? false))))))
