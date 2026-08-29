@@ -3,6 +3,25 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [0.3.1] — 2026-08-29
+
+- **The managed Kip connector** — one `kip_` key routes every Hatch/Peck/
+  Groom call through the managed Kip backend, which picks the model per
+  task, enforces your plan and meters usage — instead of setting up
+  Anthropic/OpenAI/DeepSeek keys yourself. It's invite-only for now: pick
+  "Have a Kip backend key?" under Settings → LLM, enter the key (and a
+  Base URL for a self-hosted backend). It updates with the app.
+- **Data-driven LLM settings** — the provider list and each provider's
+  fields are now generated, not hardcoded. A new **Add a connector** row
+  installs a connector package from a `.tgz` or a URL (`@kip-ai/*` only);
+  installed ones can be removed.
+- **Clearer quota / billing errors** — running out of included tokens or
+  budget (your own provider's, or the managed backend's) now says so,
+  instead of reading like a rate-limit.
+- The first-run "no LLM provider" nudge now trusts the connector's own
+  readiness check, so it stops nagging once a provider works via an
+  environment variable, not only via the settings form.
+
 ## [0.3.0] — 2026-08-29
 
 Kip ships as an installer now — and can update itself.
