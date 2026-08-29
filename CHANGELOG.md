@@ -3,6 +3,16 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [0.3.4] — 2026-08-29
+
+- **Fixed: Peck crashed on a stale search index** — if the index still
+  listed a nest page whose file had been deleted or moved (or, on OneDrive
+  / iCloud, wasn't downloaded yet), *every* Peck turn — questions, "tell it
+  something new", web-search-to-nest — died before it started. It now skips
+  the missing page and carries on. If you hit this: the graph is best kept
+  outside a cloud-sync folder, and a Hatch (or `rebuild-roost`) cleans the
+  index.
+
 ## [0.3.3] — 2026-08-29
 
 - **Managed connector: clearer connection errors** — a failed call to the
