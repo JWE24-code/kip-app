@@ -3,6 +3,14 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [0.3.3] — 2026-08-29
+
+- **Managed connector: clearer connection errors** — a failed call to the
+  Kip backend now says what to check (nothing listening, no response,
+  can't resolve the host, wrong protocol) instead of a bare "fetch
+  failed", and **Test connection** checks your key + reachability against
+  a lightweight endpoint, reporting your plan and monthly token cap.
+
 ## [0.3.2] — 2026-08-29
 
 - **Fixed: Windows in-app updates were rejected** — electron-updater
