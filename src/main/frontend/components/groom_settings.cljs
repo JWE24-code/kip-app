@@ -1,5 +1,6 @@
 (ns frontend.components.groom-settings
-  "The 'schedule the deep groom' control (Settings → Features). Backed by the
+  "The 'schedule the deep groom' control — rendered in the Coop status panel
+  (frontend.components.wiki-status), under 'Schedule'. Backed by the
   :getGroomSchedule / :setGroomSchedule IPC (electron.groom-scheduler, main
   process). The schedule is global, not per-graph."
   (:require [cljs-bean.core :as bean]
@@ -59,14 +60,3 @@
           "Next: " (or (when-str nextRun) "—")
           (when lastRun (str "  ·  last run " (when-str lastRun)))
           ". Runs on the next launch if Kip was closed at that time."])])))
-
-(rum/defcs next-run-note
-  < rum/reactive
-    (rum/local nil ::s)
-    {:will-mount (fn [state] (load! (::s state)) state)}
-  [state]
-  (let [{:keys [enabled nextRun lastRun]} @(::s state)]
-    (when enabled
-      [:div.text-xs.opacity-60
-       "Scheduled deep groom — next " (or (when-str nextRun) "—")
-       (when lastRun (str ", last " (when-str lastRun)))])))
