@@ -3,11 +3,12 @@
   Peck and Hatch panels can tell the user up front when no provider is set —
   instead of failing on the first call.
 
-  `configured?` is deliberately strict: it wants an explicit provider plus that
-  provider's required credentials *in the config file*, not an ambient fallback
-  (an Anthropic CLI profile, PROVIDER/*_API_KEY env vars). The retrieval layer
-  will still use those fallbacks if present — this check just decides whether to
-  nudge the user toward Settings → LLM."
+  Readiness is decided by the connector registry: `refresh!` caches
+  `listLlmProviders` (each provider's `ready` = its ProviderSpec's own
+  `isReady` against the resolved config) alongside the selected provider, and
+  `configured?` just reads the selected one's flag. `configured?` also takes a
+  bare config map (no registry) — then it falls back to a generic 'explicit
+  provider + a non-blank apiKey in llm.json' check."
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.ipc :as ipc]
@@ -18,35 +19,34 @@
 (defn- present? [s]
   (and (string? s) (not (string/blank? s))))
 
-(defn- provider-ready?
-  "The fields <graph>/.henhouse/llm.json must carry for `provider` to work
-  without any env-var / ambient-credential fallback."
-  [provider {:keys [apiKey model baseUrl]}]
-  (case provider
-    "anthropic"            (present? apiKey)
-    ("openai" "deepseek")  (and (present? apiKey) (present? model))
-    "other"                (and (present? apiKey) (present? model) (present? baseUrl))
-    "local"                (and (present? model) (present? baseUrl))
-    false))
-
 (defn configured?
-  "Given the parsed llm.json map (or nil), is a provider explicitly set up?"
-  [cfg]
-  (boolean
-   (when-let [provider (some-> cfg :provider)]
-     (provider-ready? provider (get-in cfg [:providers (keyword provider)])))))
+  "Is the config's selected provider ready to use? Prefers the readiness flag
+  from `providers` (a cached `listLlmProviders` result); falls back to
+  'explicit provider + a non-blank apiKey in llm.json' when the registry
+  isn't available or doesn't know the provider."
+  ([cfg] (configured? cfg nil))
+  ([cfg providers]
+   (boolean
+    (when-let [provider (some-> cfg :provider not-empty)]
+      (if-let [p (some #(when (= (:id %) provider) %) providers)]
+        (:ready p)
+        (present? (get-in cfg [:providers (keyword provider) :apiKey])))))))
 
 (defn- vault-root []
   (config/get-repo-dir (state/get-current-repo)))
 
 (defn refresh!
-  "Re-read llm.json and cache the result in the app db under :kip/llm. Call on
-  panel mount and after an LLM settings save. Never throws."
+  "Re-read llm.json + the connector list and cache them in the app db under
+  :kip/llm. Call on panel mount and after an LLM settings save. Never throws."
   []
-  (-> (ipc/ipc "getLlmConfig" (vault-root))
-      (p/then (fn [result]
-                (state/set-state! :kip/llm {:loaded? true
-                                            :configured? (configured? (some-> result bean/->clj))})))
+  (-> (p/let [cfg-js (ipc/ipc "getLlmConfig" (vault-root))
+              providers-js (ipc/ipc "listLlmProviders" (vault-root))]
+        (let [cfg (some-> cfg-js bean/->clj)
+              providers (vec (js->clj providers-js :keywordize-keys true))]
+          (state/set-state! :kip/llm {:loaded? true
+                                      :provider (:provider cfg)
+                                      :providers providers
+                                      :configured? (configured? cfg providers)})))
       (p/catch (fn [_]
                  (state/set-state! :kip/llm {:loaded? true :configured? false})))))
 
@@ -68,7 +68,14 @@
             {:title "The provider rejected your API key."
              :hint  "Check the key in Settings → LLM (and that it matches the selected provider)."}
 
-            #"(?i)\(429\)|rate.?limit|too many requests|quota|insufficient_quota"
+            ;; 402 = the managed Kip backend's quota/budget response; also
+            ;; OpenAI's insufficient_quota (billing exhausted, not "slow down").
+            ;; Checked before 429 so those claim the token.
+            #"(?i)\(402\)|insufficient_quota|payment required|plan limit|budget (?:exceeded|limit|reached)|over budget"
+            {:title "You've hit a usage or billing limit."
+             :hint  "This provider is out of quota or budget for now. Check your plan / billing, or ask your Kip backend admin to raise the limit."}
+
+            #"(?i)\(429\)|rate.?limit|too many requests|quota"
             {:title "The provider is rate-limiting you."
              :hint  "Wait a minute and try again — or check your plan's usage limits."}
 
