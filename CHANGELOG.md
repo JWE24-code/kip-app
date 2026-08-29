@@ -3,6 +3,17 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [0.3.2] — 2026-08-29
+
+- **Fixed: Windows in-app updates were rejected** — electron-updater
+  insisted the downloaded installer's certificate chain to a trusted root,
+  which our self-signed cert can't, so *every* Windows update failed with
+  "not signed by the application owner". The check is now off (the download
+  is still integrity-checked against the release's SHA-512); it comes back
+  when there's a real certificate. **This build must be installed by hand
+  once** — 0.3.0 / 0.3.1 shipped with the broken check and can't update
+  themselves. Linux (AppImage) was never affected.
+
 ## [0.3.1] — 2026-08-29
 
 - **The managed Kip connector** — one `kip_` key routes every Hatch/Peck/

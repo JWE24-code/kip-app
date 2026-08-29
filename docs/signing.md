@@ -9,9 +9,16 @@ root isn't trusted. What it does give us:
 
 - a **stable publisher identity** on `Kip.exe` and the bundled DLLs, so
   Add/Remove Programs and some corporate allow-listing behave better;
-- **signature continuity** the in-app updater (#16) can pin — an update whose
-  signature doesn't match the installed one can be refused;
 - a zero-cost, zero-lead-time path while a real cert is sorted out.
+
+**It does NOT give the in-app updater a signature check.** electron-updater's
+Windows verification requires the downloaded `Setup.exe`'s Authenticode
+`Status` to be `Valid` — a cert chaining to a trusted root. A self-signed cert
+is `NotTrusted`, so the check rejects *every* update ("not signed by the
+application owner"). `electron-builder.yml` sets `win.verifyUpdateCodeSignature:
+false` to skip it; the updater relies on the release's sha512 (`latest.yml`)
+for integrity. Flip that flag back to `true` once a real OV/EV cert is in
+place — then signature-continuity pinning works.
 
 The plan is to swap in a real certificate (OV/EV, Azure Trusted Signing, or
 SignPath's free-for-OSS program) later. Nothing downstream changes — see below.

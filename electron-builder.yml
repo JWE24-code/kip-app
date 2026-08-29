@@ -78,6 +78,12 @@ win:
   signtoolOptions:
     signingHashAlgorithms: [sha256]
     rfc3161TimeStampServer: http://timestamp.digicert.com
+  # electron-updater's Windows check requires the downloaded Setup.exe's
+  # Authenticode Status == Valid, i.e. a cert chaining to a trusted root. Our
+  # self-signed cert is "NotTrusted", so the check rejects *every* update
+  # ("not signed by the application owner"). Off until there's a real
+  # OV/EV cert — then flip back to true for signature-continuity pinning.
+  verifyUpdateCodeSignature: false
 
 nsis:
   oneClick: false
