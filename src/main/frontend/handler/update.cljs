@@ -43,3 +43,18 @@
                                               :dismissed? (= latest (dismissed-version)))))))
          (p/catch (fn [_]
                     (state/set-state! [:kip/update :checking?] false)))))))
+
+(defn download-and-install!
+  "User clicked *Update*. Ask the main process (electron-updater) to fetch the
+  new release; progress arrives on the `updater-download-progress` channel and
+  `updater-tips-new-version` shows *Restart to finish* on completion. If this
+  build can't self-update (portable unpack / dev), fall back to opening the
+  release page."
+  []
+  (when (util/electron?)
+    (state/set-state! [:kip/update :downloading?] true)
+    (-> (ipc/ipc "updaterDownloadUpdate")
+        (p/catch (fn [_]
+                   (state/set-state! [:kip/update :downloading?] false)
+                   (when-let [url (:url (:kip/update @state/state))]
+                     (js/window.open url)))))))
