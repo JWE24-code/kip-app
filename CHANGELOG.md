@@ -3,6 +3,18 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [0.3.5] — 2026-08-29
+
+- **Reasoning models are first-class** — pick `deepseek-reasoner` (or
+  OpenAI's `o1` / `o3` / `o4-mini`) and Kip no longer wastes a round-trip
+  on every call discovering they don't support forced-JSON mode. They still
+  think before answering, so they're slower — best kept for the managed
+  backend, which routes only the workloads that benefit to one.
+- **Docs: the managed connector and Add-a-connector, explained** — Settings
+  → LLM now has user docs for the "Kip (managed)" provider, installing an
+  `@kip-ai/*` connector from a `.tgz`, and why only that name is allowed
+  (a connector runs in Kip's own process).
+
 ## [0.3.4] — 2026-08-29
 
 - **Fixed: Peck crashed on a stale search index** — if the index still
