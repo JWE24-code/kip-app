@@ -3,6 +3,15 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [0.3.6] — 2026-08-30
+
+- **Fixed: "Run the deep groom on a schedule" never stuck** — ticking the
+  box in Settings → Features did nothing: the day/time controls never
+  appeared and the schedule was always saved as *off*. The setting crossed
+  the process boundary with the wrong key shape, so the main process read
+  every field as blank and wrote back "disabled". The scheduled deep groom
+  has been non-functional since it shipped in 0.3.0; it works now.
+
 ## [0.3.5] — 2026-08-30
 
 - **Reasoning models are first-class** — pick `deepseek-reasoner`,

@@ -594,7 +594,10 @@
   (groom-scheduler/schedule-info))
 
 (defmethod handle :setGroomSchedule [_ [_ sched]]
-  (groom-scheduler/set-schedule! (js->clj sched)))
+  ;; `sched` is already a CLJS map — the "main" channel runs args through
+  ;; bean/->clj before dispatch. (js->clj on it would be a no-op; passing it
+  ;; straight through is clearer.)
+  (groom-scheduler/set-schedule! sched))
 
 (defmethod handle :wikiChat [_ [_ vault-root question trace?]]
   (wiki/peck! vault-root question (boolean trace?)))

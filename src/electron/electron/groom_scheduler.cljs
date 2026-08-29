@@ -62,8 +62,7 @@
                                          :silent true}))))))))
 
 (defn- tick! []
-  (let [{:keys [enabled day time]} (some-> (cfgs/get-item :groom/schedule)
-                                           (js->clj :keywordize-keys true))]
+  (let [{:keys [enabled day time]} (cfgs/get-item :groom/schedule)]
     (when (and enabled (not @*running?) (number? day) time)
       (when-let [prev (prev-occurrence day time (js/Date.now))]
         (when (> prev (or (cfgs/get-item :groom/last-run) 0))
@@ -72,8 +71,7 @@
 (defn schedule-info
   "The renderer's view: current schedule + last/next run (epoch ms or nil)."
   []
-  (let [{:keys [enabled day time] :as sched} (some-> (cfgs/get-item :groom/schedule)
-                                                     (js->clj :keywordize-keys true))]
+  (let [{:keys [enabled day time] :as sched} (cfgs/get-item :groom/schedule)]
     #js {:enabled (boolean enabled)
          :day     (if (number? day) day 3)          ; default Wednesday
          :time    (or time "03:00")
@@ -85,14 +83,15 @@
 (defn set-schedule!
   "Persist a schedule from the renderer. Marks now as the last run when the
   schedule is first turned on, so an already-passed slot this week doesn't
-  fire immediately."
-  [{:strs [enabled day time]}]
+  fire immediately. `sched` arrives as a CLJS map with keyword keys (the
+  \"main\" IPC channel runs args through bean/->clj before dispatch)."
+  [{:keys [enabled day time]}]
   (let [enabled (boolean enabled)
         day (if (number? day) (int day) 3)
         time (or (and (parse-hhmm time) time) "03:00")
         was (cfgs/get-item :groom/schedule)]
     (cfgs/set-item! :groom/schedule {:enabled enabled :day day :time time})
-    (when (and enabled (not (:enabled (some-> was (js->clj :keywordize-keys true)))))
+    (when (and enabled (not (:enabled was)))
       (cfgs/set-item! :groom/last-run (js/Date.now)))
     (schedule-info)))
 
