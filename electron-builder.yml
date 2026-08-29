@@ -54,16 +54,11 @@ asarUnpack:
   - "node_modules/better-sqlite3/**"
   - "**/*.node"
 
-# The retrieval layer: copied whole (its nested node_modules included) to
-# resources/app.asar.unpacked/scripts — the same path the folder build's asar
-# unpack produces, so electron.wiki/scripts-dir is unchanged. Kip spawns
-# `node scripts/*.js` by path and can't exec out of an asar anyway.
-extraResources:
-  - from: static/scripts
-    to: app.asar.unpacked/scripts
-    filter:
-      - "**/*"
-      - "!**/*.map"
+# scripts/ (the retrieval layer, with its own nested node_modules) is excluded
+# from the asar above and copied in whole by build/after-pack.js — electron-
+# builder's dependency collector prunes nested node_modules and neither `files`
+# nor `extraResources` filters bring them back.
+afterPack: ./build/after-pack.js
 
 protocols:
   - name: kip
