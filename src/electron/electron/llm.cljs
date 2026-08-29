@@ -12,6 +12,7 @@
   filesystem and fetch — no native deps — so it stays here."
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
+            ["electron" :refer [dialog]]
             ["path" :as node-path]
             [electron.wiki :as wiki]
             [promesa.core :as p]))
@@ -42,25 +43,46 @@
   (.testConnection llm-lib (bean/->js candidate)
                    #js {:vaultRoot (or vault-root js/undefined)}))
 
+(def ^:private builtin-provider-ids #{"anthropic" "openai" "deepseek" "local" "other"})
+
 (defn list-providers!
-  "[{id label fields ready} …] — every connector available to this graph
-  (the 5 built-ins + any bundled/graph-local ones), each with its declared
-  form fields and whether its *saved* config in <graph>/.henhouse/llm.json
-  is already complete (spec.isReady). Synchronous."
+  "[{id label fields ready source} …] — every connector available to this
+  graph (the 5 built-ins + any bundled/graph-local ones), each with its
+  declared form fields, whether its *saved* config in
+  <graph>/.henhouse/llm.json is already complete (spec.isReady), and where
+  it came from (\"built-in\" | \"bundled\" | \"graph-local\"). Synchronous."
   [vault-root]
   (let [vr (or vault-root js/undefined)
         cfg (.loadLLMConfig llm-lib vr)
         providers (or (some-> cfg .-providers) #js {})
-        registry (.loadConnectors connectors-lib vr)]
+        registry (.loadConnectors connectors-lib vr)
+        graph-local (set (map #(.-id ^js %)
+                              (array-seq (.readConnectorsConfig connectors-lib vr))))]
     (.map (.list registry)
           (fn [^js spec]
-            (let [block (or (aget providers (.-id spec)) #js {})
+            (let [id (.-id spec)
+                  block (or (aget providers id) #js {})
                   resolved (.resolveConfig connectors-lib spec block)]
-              #js {:id     (.-id spec)
+              #js {:id     id
                    :label  (.-label spec)
                    :fields (.-fields spec)
+                   :source (cond (contains? builtin-provider-ids id) "built-in"
+                                 (contains? graph-local id)          "graph-local"
+                                 :else                               "bundled")
                    :ready  (try (boolean (.isReady spec resolved))
                                 (catch :default _ false))})))))
+
+(defn pick-connector-tarball!
+  "Native open-file dialog filtered to npm tarballs. Resolves the chosen
+  path, or nil if the user cancelled."
+  []
+  (-> (.showOpenDialog dialog
+                       #js {:title "Choose a connector package"
+                            :properties #js ["openFile"]
+                            :filters #js [#js {:name "npm package (.tgz)"
+                                               :extensions #js ["tgz" "gz"]}]})
+      (p/then (fn [^js res]
+                (or (some-> res .-filePaths (aget 0)) nil)))))
 
 (defn install-connector!
   "Installs a connector from a .tgz file path or an https URL into
