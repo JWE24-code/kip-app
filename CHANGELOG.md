@@ -12,6 +12,15 @@ changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGE
   downloads the new version in place and restarts into it; a portable
   folder/tar.gz build still updates by hand. The `v*` release stays on the
   folder-zip until this is validated end-to-end.
+
+## [0.2.3] — 2026-08-29
+
+- **Fixed: Hatch, Peck and Groom failed in the packaged app** — the
+  bundled retrieval layer couldn't load its SQLite engine
+  (`better-sqlite3` → `bindings`) from inside `app.asar`, so any run died
+  with a "cannot find module" error. Regressed in 0.2.2 with the switch to
+  a packed archive. `better-sqlite3` and its loader are now vendored next
+  to the scripts.
 - **Schedule the deep groom** — Settings → Features gains a "run the deep
   groom on a schedule" toggle (day of week + time). Runs in the main
   process like reminders; nothing fires while Kip is closed, and a slot
