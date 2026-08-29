@@ -515,6 +515,9 @@
 (defmethod handle :listLlmProviders [_ [_ vault-root]]
   (llm/list-providers! vault-root))
 
+(defmethod handle :pickConnectorTarball [_ _]
+  (llm/pick-connector-tarball!))
+
 (defmethod handle :installConnector [_ [_ vault-root tgz-path-or-url]]
   (llm/install-connector! vault-root tgz-path-or-url))
 
