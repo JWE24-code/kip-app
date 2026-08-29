@@ -1,12 +1,13 @@
 (ns frontend.components.wiki-status
-  "The Coop status panel: the last few clucks (recentClucks via
-  scripts/lib/roost.js) and the Groom workflow — a fast structural \"Run
-  groom\" and a \"Deep groom (weekly)\" that does the full LLM-heavy review
-  (per-page _Update_ reconciliation, summary drift, missing/broken links,
-  merge candidates, deeper contradictions) and writes a
-  <coop>/.roost/groom-report.md checklist. Everything goes through
-  electron.wiki, which shells out to the same CLI scripts used from the
-  terminal — one code path."
+  "The Coop status panel, top to bottom: the coop overview, the Groom
+  workflow (a fast structural \"Run groom\" and a \"Deep groom (weekly)\"
+  that does the full LLM-heavy review — per-page _Update_ reconciliation,
+  summary drift, missing/broken links, merge candidates, deeper
+  contradictions — and writes a <coop>/.roost/groom-report.md checklist),
+  the weekly-deep-groom Schedule (groom-settings/schedule-row), and the
+  last few clucks (recentClucks via scripts/lib/roost.js). Everything goes
+  through electron.wiki, which shells out to the same CLI scripts used from
+  the terminal — one code path."
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.ipc :as ipc]
@@ -186,14 +187,6 @@
        (coop-overview s @(get state ::pending)))
 
      [:div.mb-4
-      [:h3.text-lg.font-medium.mb-1 "Recent clucks"]
-      (cond
-        (nil? @*recent-clucks) [:div.text-sm.opacity-60 "Loading..."]
-        (:error @*recent-clucks) [:div.text-sm.text-red-500 (str "Error: " (:error @*recent-clucks))]
-        (empty? @*recent-clucks) [:div.text-sm.opacity-60 "No clucks yet."]
-        :else [:div (map (fn [entry] (cluck-entry entry)) @*recent-clucks)])]
-
-     [:div
       [:div.flex.justify-between.items-center.mb-1
        [:h3.text-lg.font-medium "Groom"]
        [:div.flex.gap-2
@@ -215,9 +208,6 @@
          (str "Last deep groom " (telemetry/ago at))
          "No deep groom recorded yet")]
 
-      (when (util/electron?)
-        [:div.mb-2 (groom-settings/next-run-note)])
-
       (cond
         @*deep-loading?
         [:div
@@ -234,7 +224,20 @@
         (some? @*groom-report)
         (groom-report @*groom-report)
 
-        :else nil)]]))
+        :else nil)]
+
+     (when (util/electron?)
+       [:div.mb-4
+        [:h3.text-lg.font-medium.mb-1 "Schedule"]
+        (groom-settings/schedule-row)])
+
+     [:div
+      [:h3.text-lg.font-medium.mb-1 "Recent clucks"]
+      (cond
+        (nil? @*recent-clucks) [:div.text-sm.opacity-60 "Loading..."]
+        (:error @*recent-clucks) [:div.text-sm.text-red-500 (str "Error: " (:error @*recent-clucks))]
+        (empty? @*recent-clucks) [:div.text-sm.opacity-60 "No clucks yet."]
+        :else [:div (map (fn [entry] (cluck-entry entry)) @*recent-clucks)])]]))
 
 (defn show-coop-status-modal! [e]
   (state/set-modal! coop-status-modal)

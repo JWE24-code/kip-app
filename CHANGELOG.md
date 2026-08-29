@@ -3,6 +3,14 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [0.3.7] — 2026-08-30
+
+- **The deep-groom schedule moved to Coop status** — it's no longer in
+  Settings → Features. The Coop status panel now reads, top to bottom:
+  the coop overview, **Groom** (run / deep-groom / last report), the weekly
+  **Schedule**, then **Recent clucks** — so everything about grooming is in
+  one place.
+
 ## [0.3.6] — 2026-08-30
 
 - **Fixed: "Run the deep groom on a schedule" never stuck** — ticking the
