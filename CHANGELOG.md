@@ -5,6 +5,13 @@ changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGE
 
 ## [Unreleased]
 
+- **Installer + in-app updates** (opt-in for now, `KIP_TARGET=installer`) —
+  electron-builder produces a signed Windows installer (`Kip-Setup-*.exe`)
+  and a self-updating Linux AppImage, with `latest.yml` update manifests.
+  The "a newer Kip is available" banner gets an **Update** button that
+  downloads the new version in place and restarts into it; a portable
+  folder/tar.gz build still updates by hand. The `v*` release stays on the
+  folder-zip until this is validated end-to-end.
 - **Schedule the deep groom** — Settings → Features gains a "run the deep
   groom on a schedule" toggle (day of week + time). Runs in the main
   process like reminders; nothing fires while Kip is closed, and a slot
