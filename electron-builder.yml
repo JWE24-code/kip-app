@@ -88,9 +88,11 @@ linux:
     - tar.gz
   icon: build/icon.png
   category: Office
+  executableName: kip
   synopsis: Don't browse your notes. Peck them. Get answers.
   description: A pecking-first knowledge base — a fork of Logseq with an LLM retrieval layer.
   artifactName: Kip-${version}-${arch}.${ext}
   desktop:
     entry:
       MimeType: x-scheme-handler/kip
+      StartupWMClass: Kip
