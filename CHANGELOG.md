@@ -3,18 +3,20 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
-## [Unreleased]
+## [0.3.0] — 2026-08-29
 
-- **Installer + in-app updates** (opt-in for now, `KIP_TARGET=installer`) —
-  electron-builder produces a signed Windows installer (`Kip-Setup-*.exe`)
-  and a self-updating Linux AppImage, with `latest.yml` update manifests.
-  The "a newer Kip is available" banner gets an **Update** button that
-  downloads the new version in place and restarts into it; a portable
-  folder/tar.gz build still updates by hand. The `v*` release stays on the
-  folder-zip until this is validated end-to-end.
+Kip ships as an installer now — and can update itself.
 
-## [0.2.3] — 2026-08-29
-
+- **Windows installer + Linux AppImage** — the Windows download is a real
+  installer (`Kip-Setup-*.exe`): per-user, no admin prompt, start-menu and
+  desktop shortcuts, choose-your-folder. Linux gets a self-updating
+  AppImage; the portable `tar.gz` is still there for anyone who wants it.
+  Windows binaries are code-signed (a self-issued certificate for now, so
+  SmartScreen still warns).
+- **In-app updates** — the "a newer Kip is available" banner gets an
+  **Update** button that downloads the new release and restarts into it,
+  with a progress readout. Works on the Windows installer and the Linux
+  AppImage; a portable build still points you at the releases page.
 - **Fixed: Hatch, Peck and Groom failed in the packaged app** — the
   bundled retrieval layer couldn't load its SQLite engine
   (`better-sqlite3` → `bindings`) from inside `app.asar`, so any run died

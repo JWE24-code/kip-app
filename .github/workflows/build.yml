@@ -74,9 +74,9 @@ jobs:
       # release (optimized) — validated on CI 2026-08-28.
       KIP_CLJS: ${{ github.event.inputs.cljs_mode || (startsWith(github.ref, 'refs/tags/v') && 'release' || 'compile') }}
       # folder = hand-assembled runnable zip; installer = electron-builder
-      # NSIS/AppImage (#38). v* tags stay on 'folder' until the installer path
-      # is proven; flip the default here when cutting over.
-      KIP_TARGET: ${{ github.event.inputs.target || 'folder' }}
+      # NSIS/AppImage (#38). v* tags ship the installer (0.3.0+); manual runs
+      # default to folder (cheaper) unless the dropdown says otherwise.
+      KIP_TARGET: ${{ github.event.inputs.target || (startsWith(github.ref, 'refs/tags/v') && 'installer' || 'folder') }}
       # Windows Authenticode: a base64 PFX + its password. Currently a
       # self-signed code-signing cert (SmartScreen still warns "unknown
       # publisher" — it gives the binary a stable identity and lets the
@@ -360,3 +360,40 @@ jobs:
           gh release create "$tag" --title "Kip $tag" \
             --notes "$notes" --repo "${{ github.repository }}" 2>/dev/null || true
           gh release upload "${{ github.ref_name }}" "${{ env.ASSET }}" --clobber --repo "${{ github.repository }}"
+
+      - name: Attach installers to the Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v') && env.KIP_TARGET == 'installer'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag='${{ github.ref_name }}'
+          ver="${tag#v}"
+          notes=$'Kip **'"$tag"$'**\n\n'
+          notes+=$'| Platform | File |\n|---|---|\n'
+          notes+=$'| Windows 10/11 x64 | `Kip-Setup-*.exe` — run it; per-user install, no admin prompt |\n'
+          notes+=$'| Linux x64 (AppImage) | `Kip-*.AppImage` — `chmod +x`, run it; updates itself |\n'
+          notes+=$'| Linux x64 (portable) | `Kip-*.tar.gz` — `tar -xzf`, run `./kip` |\n\n'
+          notes+=$'From here on Kip can update itself: the in-app "a newer Kip is available" banner gets an **Update** button (Windows installer + AppImage). The portable tar.gz updates by hand.\n\n'
+          notes+=$'Windows SmartScreen: the binary is signed but the certificate is self-issued, so SmartScreen still shows *unknown publisher* — *More info → Run anyway*.\n'
+          notes+=$'Linux/Wayland: `./kip --ozone-platform-hint=auto`.\n\n'
+          section=$(awk -v v="$ver" '
+            $0 ~ "^## \\[" v "\\]" {p=1; next}
+            p && /^## \[/ {exit}
+            p {print}
+          ' app/CHANGELOG.md)
+          if [ -n "$section" ]; then
+            notes+=$'---\n'
+            notes+="$section"
+            notes+=$'\n'
+          fi
+          notes+=$'Full changelog: https://github.com/JWE24-code/kip-app/blob/'"$tag"$'/CHANGELOG.md\n'
+          notes+=$'Retrieval layer: https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md\n'
+          notes+=$'First-run guide: https://github.com/JWE24-code/kip/blob/main/docs/GETTING-STARTED.md'
+          gh release create "$tag" --title "Kip $tag" \
+            --notes "$notes" --repo "${{ github.repository }}" 2>/dev/null || true
+          # this platform's installer(s) + the update manifests electron-updater reads
+          shopt -s nullglob
+          files=(app/dist/*.exe app/dist/*.AppImage app/dist/*.tar.gz app/dist/*.yml app/dist/*.blockmap)
+          [ ${#files[@]} -gt 0 ] || { echo "::error::no installer artifacts in app/dist to upload"; exit 1; }
+          gh release upload "$tag" "${files[@]}" --clobber --repo "${{ github.repository }}"
