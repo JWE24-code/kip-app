@@ -27,6 +27,11 @@ on:
         type: choice
         options: [compile, release]
         default: compile
+      target:
+        description: "package as (folder = runnable zip, installer = NSIS/AppImage via electron-builder — #38)"
+        type: choice
+        options: [folder, installer]
+        default: folder
   push:
     tags: ["v*"]
 
@@ -68,6 +73,10 @@ jobs:
       # manual runs: the dropdown (default compile, fast). v* tags: always
       # release (optimized) — validated on CI 2026-08-28.
       KIP_CLJS: ${{ github.event.inputs.cljs_mode || (startsWith(github.ref, 'refs/tags/v') && 'release' || 'compile') }}
+      # folder = hand-assembled runnable zip; installer = electron-builder
+      # NSIS/AppImage (#38). v* tags stay on 'folder' until the installer path
+      # is proven; flip the default here when cutting over.
+      KIP_TARGET: ${{ github.event.inputs.target || 'folder' }}
       # Windows Authenticode: a base64 PFX + its password. Currently a
       # self-signed code-signing cert (SmartScreen still warns "unknown
       # publisher" — it gives the binary a stable identity and lets the
@@ -76,6 +85,9 @@ jobs:
       # signing.
       KIP_SIGN_PFX_B64: ${{ secrets.KIP_SIGN_PFX_B64 }}
       KIP_SIGN_PFX_PASSWORD: ${{ secrets.KIP_SIGN_PFX_PASSWORD }}
+      # electron-builder reads these for Windows signing (installer target).
+      CSC_LINK: ${{ secrets.KIP_SIGN_PFX_B64 }}
+      CSC_KEY_PASSWORD: ${{ secrets.KIP_SIGN_PFX_PASSWORD }}
 
     steps:
       - name: Checkout kip-app
@@ -163,6 +175,7 @@ jobs:
       # See docs/signing.md.
 
       - name: Package
+        if: env.KIP_TARGET != 'installer'
         shell: bash
         run: |
           v=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' app/src/main/frontend/version.cljs | head -1)
@@ -195,7 +208,7 @@ jobs:
           fi
 
       - name: Smoke test (linux — the bundled retrieval layer runs under Electron-as-Node)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && env.KIP_TARGET != 'installer'
         continue-on-error: true
         run: |
           mkdir -p /tmp/coop/.roost
@@ -205,7 +218,7 @@ jobs:
             app/out/Kip-linux-x64/resources/app.asar.unpacked/scripts/reminders.js list --json
 
       - name: Smoke test (windows — the app launches and stays up)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && env.KIP_TARGET != 'installer'
         shell: pwsh
         run: |
           # a codeless / crash-on-boot package (twice shipped during the asar
@@ -223,6 +236,7 @@ jobs:
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
 
       - uses: actions/upload-artifact@v4
+        if: env.KIP_TARGET != 'installer'
         with:
           name: ${{ matrix.name }}
           path: ${{ env.ARTIFACT_PATH }}
@@ -232,8 +246,33 @@ jobs:
           # 6 for manual runs (ARTIFACT_PATH is the raw folder).
           compression-level: ${{ env.ARTIFACT_COMPRESSION }}
 
+      # --- installer target (#38): electron-builder output in app/dist ---------
+      - name: Check installer output
+        if: env.KIP_TARGET == 'installer'
+        shell: bash
+        run: |
+          ls -la app/dist
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            ls app/dist/*.exe app/dist/latest.yml
+          else
+            ls app/dist/*.AppImage app/dist/*.tar.gz app/dist/latest-linux.yml
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: env.KIP_TARGET == 'installer'
+        with:
+          name: installer-${{ matrix.name }}
+          path: |
+            app/dist/*.exe
+            app/dist/*.AppImage
+            app/dist/*.tar.gz
+            app/dist/*.yml
+            app/dist/*.blockmap
+          if-no-files-found: error
+          retention-days: 5
+
       - name: Attach to Release (tags only)
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && env.KIP_TARGET != 'installer'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash

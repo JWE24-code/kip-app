@@ -91,7 +91,27 @@ npx --yes "@electron/rebuild@4.0.1" -v $ELECTRON_VERSION -f --only better-sqlite
 Pop-Location
 if ($LASTEXITCODE) { throw 'better-sqlite3 rebuild failed' }
 
-# --- 6. assemble out\Kip-win32-x64\ -----------------------------------
+# --- 6. package -------------------------------------------------------------
+# KIP_TARGET=installer -> electron-builder: NSIS Kip-Setup-<version>.exe
+#                         + latest.yml  (#38, feeds electron-updater)
+# KIP_TARGET=folder (default) -> the hand-assembled runnable folder + app.asar
+if ($env:KIP_TARGET -eq 'installer') {
+  $VERSION = (Select-String -Path "$APP_DIR\src\main\frontend\version.cljs" -Pattern '\d+\.\d+\.\d+').Matches[0].Value
+  $pj = "$APP_DIR\static\package.json"
+  $j = Get-Content $pj -Raw | ConvertFrom-Json
+  $j.version = $VERSION
+  ($j | ConvertTo-Json -Depth 20) + "`n" | Set-Content $pj -NoNewline
+  Step "electron-builder (win: NSIS) — Kip $VERSION"
+  $pub = if ($env:KIP_PUBLISH) { $env:KIP_PUBLISH } else { 'never' }
+  Push-Location $APP_DIR
+  npx --yes electron-builder --win --x64 --publish $pub
+  Pop-Location
+  if ($LASTEXITCODE) { throw "electron-builder failed (exit $LASTEXITCODE)" }
+  Get-ChildItem "$APP_DIR\dist"
+  if (-not (Test-Path "$APP_DIR\dist\latest.yml")) { throw 'no latest.yml' }
+  exit 0
+}
+
 Step "assemble $OUT"
 $DIST = "$APP_DIR\static\node_modules\electron\dist"
 if (-not (Test-Path "$DIST\electron.exe")) { throw "electron dist missing at $DIST" }

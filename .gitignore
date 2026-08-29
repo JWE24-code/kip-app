@@ -17,6 +17,7 @@ node_modules/
 static/**
 !static/yarn.lock
 out/
+dist/
 tmp
 cljs-test-runner-out
 
