@@ -11,6 +11,7 @@
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.components.coop-glossary :as glossary]
+            [frontend.components.groom-settings :as groom-settings]
             [frontend.components.telemetry :as telemetry]
             [frontend.config :as config]
             [frontend.state :as state]
@@ -213,6 +214,9 @@
        (if-let [at @(get state ::deep-last)]
          (str "Last deep groom " (telemetry/ago at))
          "No deep groom recorded yet")]
+
+      (when (util/electron?)
+        [:div.mb-2 (groom-settings/next-run-note)])
 
       (cond
         @*deep-loading?

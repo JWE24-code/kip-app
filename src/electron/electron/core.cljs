@@ -20,6 +20,7 @@
             [electron.state :as state]
             [electron.git :as git]
             [electron.reminders :as reminders]
+            [electron.groom-scheduler :as groom-scheduler]
             [electron.window :as win]
             [electron.exceptions :as exceptions]
             ["/electron/utils" :as js-utils]
@@ -297,6 +298,8 @@
                (git/configure-auto-commit!)
 
                (reminders/start-scheduler!)
+
+               (groom-scheduler/start-scheduler!)
 
                (vreset! *setup-fn
                         (fn []

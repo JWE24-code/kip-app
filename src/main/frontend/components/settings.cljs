@@ -5,6 +5,7 @@
             [frontend.colors :as colors]
             [frontend.components.assets :as assets]
             [frontend.components.conversion :as conversion-component]
+            [frontend.components.groom-settings :as groom-settings]
             [frontend.components.llm-settings :as llm-settings]
             [frontend.components.skills-settings :as skills-settings]
             [frontend.components.plugins :as plugins]
@@ -707,7 +708,9 @@
      (when (util/electron?)
        (http-server-switcher-row))
      (flashcards-switcher-row enable-flashcards?)
-     (zotero-settings-row)]))
+     (zotero-settings-row)
+     (when (util/electron?)
+       (groom-settings/schedule-row))]))
 
 
 (def DEFAULT-ACTIVE-TAB-STATE [:general :general])
