@@ -87,6 +87,19 @@ fi
 step "rebuild better-sqlite3 for Electron $ELECTRON_VERSION"
 ( cd "$APP_DIR/static" && npx --yes "@electron/rebuild@4.0.1" -v "$ELECTRON_VERSION" -f --only better-sqlite3 )
 
+# The retrieval layer's db.js does `require('better-sqlite3')` but it's not in
+# scripts/package.json — it resolves from the app's node_modules by walking up
+# the tree. That walk-up doesn't work for a child `node` process spawned inside
+# app.asar.unpacked/scripts (it can't cross into the packed asar for bindings/).
+# Vendor the Electron-ABI build (+ its runtime deps) into scripts/node_modules
+# so it resolves locally — picked up by both the folder asar-pack and the
+# electron-builder afterPack copy of static/scripts.
+step "vendor better-sqlite3 into scripts/node_modules"
+for m in better-sqlite3 bindings file-uri-to-path; do
+  rm -rf "$APP_DIR/static/scripts/node_modules/$m"
+  cp -a "$APP_DIR/static/node_modules/$m" "$APP_DIR/static/scripts/node_modules/$m"
+done
+
 # --- 6. package --------------------------------------------------------------
 # KIP_TARGET=installer  -> electron-builder: AppImage (self-updating) + tar.gz
 #                          + latest-linux.yml  (#38, feeds electron-updater)
