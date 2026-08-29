@@ -324,7 +324,7 @@ jobs:
             app/dist/*.exe
             app/dist/*.AppImage
             app/dist/*.tar.gz
-            app/dist/*.yml
+            app/dist/latest*.yml
             app/dist/*.blockmap
           if-no-files-found: error
           retention-days: 5
@@ -394,6 +394,6 @@ jobs:
             --notes "$notes" --repo "${{ github.repository }}" 2>/dev/null || true
           # this platform's installer(s) + the update manifests electron-updater reads
           shopt -s nullglob
-          files=(app/dist/*.exe app/dist/*.AppImage app/dist/*.tar.gz app/dist/*.yml app/dist/*.blockmap)
+          files=(app/dist/*.exe app/dist/*.AppImage app/dist/*.tar.gz app/dist/latest*.yml app/dist/*.blockmap)
           [ ${#files[@]} -gt 0 ] || { echo "::error::no installer artifacts in app/dist to upload"; exit 1; }
           gh release upload "$tag" "${files[@]}" --clobber --repo "${{ github.repository }}"
