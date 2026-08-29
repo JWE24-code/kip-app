@@ -258,6 +258,44 @@ jobs:
             ls app/dist/*.AppImage app/dist/*.tar.gz app/dist/latest-linux.yml
           fi
 
+      - name: Smoke test the installer (linux — AppImage launches and stays up)
+        if: env.KIP_TARGET == 'installer' && runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
+          cd app/dist
+          ./*.AppImage --appimage-extract >/dev/null
+          # the Electron main process loads electron.skills -> scripts/lib/skills.js
+          # -> gray-matter etc. A missing nested dep dies here within a second.
+          xvfb-run -a ./squashfs-root/kip --no-sandbox &
+          pid=$!
+          sleep 20
+          if ! kill -0 $pid 2>/dev/null; then
+            echo "::error::Kip exited within 20s — installer is not runnable"
+            cat ~/.config/Kip/logs/main.log 2>/dev/null | tail -40 || true
+            exit 1
+          fi
+          echo "Kip (AppImage) still running after 20s — ok"
+          kill $pid 2>/dev/null || true
+
+      - name: Smoke test the installer (windows — silent install + launch)
+        if: env.KIP_TARGET == 'installer' && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem app\dist\*.exe | Where-Object Name -like 'Kip-Setup-*' | Select-Object -First 1
+          Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait
+          $exe = "$env:LOCALAPPDATA\Programs\Kip\Kip.exe"
+          if (-not (Test-Path $exe)) { $exe = "$env:PROGRAMFILES\Kip\Kip.exe" }
+          if (-not (Test-Path $exe)) { throw "installed Kip.exe not found after silent install" }
+          $p = Start-Process -FilePath $exe -ArgumentList '--no-sandbox' -PassThru
+          Start-Sleep -Seconds 20
+          if ($p.HasExited) {
+            $log = "$env:APPDATA\Kip\logs\main.log"
+            if (Test-Path $log) { Write-Host '--- main.log ---'; Get-Content $log -Tail 40 }
+            throw "Kip.exe exited within 20s (code $($p.ExitCode)) — installer is not runnable"
+          }
+          Write-Host "Kip.exe (installed) still running after 20s — ok"
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+
       - uses: actions/upload-artifact@v4
         if: env.KIP_TARGET == 'installer'
         with:

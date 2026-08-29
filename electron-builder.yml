@@ -33,6 +33,10 @@ files:
   - "!.shadow-cljs${/*}"
   - "!forge.config.js"
   - "!entitlements.plist"
+  # scripts/ (the retrieval layer) has its OWN nested node_modules that
+  # electron-builder's dependency collector prunes (it only knows the app's
+  # package.json). Ship it verbatim via extraResources instead — see below.
+  - "!scripts${/*}"
   - "!node_modules/electron${/*}"
   - "!node_modules/electron-builder${/*}"
   - "!node_modules/@electron-forge${/*}"
@@ -47,10 +51,19 @@ files:
 
 asar: true
 asarUnpack:
-  # Kip spawns `node scripts/*.js` by path — can't exec out of an asar.
-  - "scripts/**"
   - "node_modules/better-sqlite3/**"
   - "**/*.node"
+
+# The retrieval layer: copied whole (its nested node_modules included) to
+# resources/app.asar.unpacked/scripts — the same path the folder build's asar
+# unpack produces, so electron.wiki/scripts-dir is unchanged. Kip spawns
+# `node scripts/*.js` by path and can't exec out of an asar anyway.
+extraResources:
+  - from: static/scripts
+    to: app.asar.unpacked/scripts
+    filter:
+      - "**/*"
+      - "!**/*.map"
 
 protocols:
   - name: kip
