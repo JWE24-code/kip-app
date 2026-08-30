@@ -13,6 +13,9 @@ changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGE
   wins and Dropbox keeps the older version in its history. Your notes sync;
   the search cache and your API keys stay on the machine. Git's auto-commit
   stays on as a local undo history, no longer a sync mechanism.
+  - *Advanced:* Kip connects through its own registered Dropbox app. If you'd
+    rather use your own (for a separate rate-limit quota), drop your app key
+    in Settings → General → Dropbox → advanced, or set `KIP_DROPBOX_APP_KEY`.
 
 ## [0.3.7] — 2026-08-30
 

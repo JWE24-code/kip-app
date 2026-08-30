@@ -464,13 +464,38 @@
          (state/close-settings!)
          (route-handler/redirect! {:to :zotero-setting})))]]])
 
+(rum/defcs dropbox-app-key-advanced < rum/reactive (rum/local false ::open?) (rum/local "" ::val)
+  [state custom?]
+  (let [*open? (::open? state) *val (::val state)]
+    [:div.mt-2
+     [:button.text-xs.opacity-40.hover:opacity-70 {:on-click #(swap! *open? not)}
+      (str (if @*open? "▾" "▸") " advanced")]
+     (when @*open?
+       [:div.mt-1.text-xs.opacity-70.leading-snug
+        (if custom?
+          [:div
+           "Using your own Dropbox app. "
+           [:a.text-blue-500 {:on-click #(dropbox-handler/set-app-key! nil)} "Switch back to Kip's"]]
+          [:div.flex.flex-col.gap-1 {:style {:max-width "24rem"}}
+           [:span "Use your own Dropbox app key (for your own rate-limit quota). "
+            "Register an app at dropbox.com/developers, scoped access, with "
+            [:code "http://localhost"] " as a redirect URI."]
+           [:div.flex.gap-1
+            [:input.form-input.is-small.flex-1 {:type "text" :placeholder "app key"
+                                                :value @*val
+                                                :on-change #(reset! *val (.. % -target -value))}]
+            (ui/button "Use" :class "text-xs"
+                       :on-click #(when (seq (string/trim @*val))
+                                    (dropbox-handler/set-app-key! (string/trim @*val))
+                                    (reset! *val "")))]])])]))
+
 (rum/defc dropbox-sync-row < rum/reactive
   {:did-mount (fn [state]
                 (dropbox-handler/refresh!)
                 (dropbox-handler/refresh-sync!)
                 state)}
   [current-repo]
-  (let [{:keys [connected account error]} (state/sub :dropbox/status)
+  (let [{:keys [connected account error customAppKey]} (state/sub :dropbox/status)
         connecting? (state/sub :dropbox/connecting?)
         {:keys [synced conflictMode files lastSync] :as sync} (state/sub :dropbox/sync)
         sync-busy? (state/sub :dropbox/sync-busy?)]
@@ -484,7 +509,8 @@
                     :on-click #(dropbox-handler/connect!))
          [:div.text-sm.opacity-50.mt-1
           "Opens Dropbox in your browser. Kip only ever sees a folder it
-           creates for itself (Apps/Kip-ai/) — nothing else in your Dropbox."]]
+           creates for itself (Apps/Kip-ai/) — nothing else in your Dropbox."]
+         (dropbox-app-key-advanced (boolean customAppKey))]
         [:div
          [:div.text-sm
           (if account
