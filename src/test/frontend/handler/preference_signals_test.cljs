@@ -3,6 +3,19 @@
             [frontend.handler.preference-signals :as ps]
             [frontend.state :as state]))
 
+(deftest behavior!-builds-a-content-free-signal
+  (let [sent (atom nil)]
+    (with-redefs [ps/send! (fn [sig] (reset! sent sig) sig)]
+      (testing "regenerated — no edit bucket"
+        (ps/behavior! "call_1" "regenerated")
+        (is (= {:call_id "call_1" :kind "behavior" :behavior "regenerated"} @sent)))
+      (testing "edited — carries the client-side edit bucket only"
+        (ps/behavior! "call_2" "edited" 3)
+        (is (= {:call_id "call_2" :kind "behavior" :behavior "edited" :edit_bucket 3} @sent)))
+      (testing "nil edit bucket is dropped, not sent as null"
+        (ps/behavior! "call_3" "copied" nil)
+        (is (= {:call_id "call_3" :kind "behavior" :behavior "copied"} @sent))))))
+
 (defn- with-provider [provider f]
   (let [prev (:kip/llm @state/state)]
     (try

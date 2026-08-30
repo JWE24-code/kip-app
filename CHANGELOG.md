@@ -10,6 +10,11 @@ changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGE
   the coop overview, **Groom** (run / deep-groom / last report), the weekly
   **Schedule**, then **Recent clucks** — so everything about grooming is in
   one place.
+- **Regenerate a Peck answer** — every answer now has a `↻ Regenerate`
+  button that re-asks the same question and adds a fresh answer below.
+  Works on any provider. On the Kip (managed) backend a regenerate also
+  quietly tells the router the first answer missed — nothing but that one
+  bit, no text.
 - **Rate a Peck answer** — when you're on the Kip (managed) backend, a
   Peck answer now carries a small 👍 / 👎 control. It sends nothing but a
   thumbs-up or thumbs-down against that one answer — no text, no page

@@ -70,7 +70,7 @@
         {:role :assistant :text (if (string/blank? note) "Nothing new to add there." note)})
 
       answer
-      {:role :assistant :text answer :steps steps :call-id callId}
+      {:role :assistant :text answer :steps steps :call-id callId :answer? true}
 
       (= intent "reminder")
       {:role :assistant :text "Reminder noted — check the Reminders panel." :steps steps}
@@ -90,22 +90,38 @@
   (reset! *poll-id nil)
   (reset! *progress nil))
 
+(defn- ask!
+  "Run one Peck turn for `question` and hand the turn->message map (plus the
+  originating `:q`) to `on-result`. Shared by a fresh send and a regenerate."
+  [question on-result *loading? *progress *poll-id]
+  (when (and (not (string/blank? question)) (not @*loading?))
+    (reset! *loading? true)
+    (start-poll! *progress *poll-id)
+    (-> (ipc/ipc "wikiChat" (vault-root) question)
+        (p/then (fn [result]
+                  (on-result (assoc (turn->message (bean/->clj result)) :q question))))
+        (p/catch (fn [error]
+                   (swap! *messages conj {:role :error :text (str error)})))
+        (p/finally (fn []
+                     (stop-poll! *progress *poll-id)
+                     (reset! *loading? false))))))
+
 (defn- send-message!
   [*loading? *progress *poll-id]
   (let [input (string/trim @*input)]
     (when (and (not (string/blank? input)) (not @*loading?))
       (reset! *input "")
       (swap! *messages conj {:role :user :text input})
-      (reset! *loading? true)
-      (start-poll! *progress *poll-id)
-      (-> (ipc/ipc "wikiChat" (vault-root) input)
-          (p/then (fn [result]
-                    (swap! *messages conj (turn->message (bean/->clj result)))))
-          (p/catch (fn [error]
-                     (swap! *messages conj {:role :error :text (str error)})))
-          (p/finally (fn []
-                       (stop-poll! *progress *poll-id)
-                       (reset! *loading? false)))))))
+      (ask! input #(swap! *messages conj %) *loading? *progress *poll-id))))
+
+(defn- regenerate!
+  "Re-run the question that produced `msg`, appending a fresh answer below it.
+  Fires the preference-signals `regenerated` behaviour signal against the old
+  answer's call id — a no-op on every provider but the managed `kip` one."
+  [{:keys [q call-id]} *loading? *progress *poll-id]
+  (when (and (not (string/blank? q)) (not @*loading?))
+    (when call-id (pref-signals/behavior! call-id "regenerated"))
+    (ask! q #(swap! *messages conj (assoc % :regen? true)) *loading? *progress *poll-id)))
 
 (defn- steps-line
   "A ⚙ line per skill the tool loop ran, above the answer."
@@ -154,7 +170,8 @@
      (when (some? @*picked) [:span {:style {:opacity 0.45}} "logged"])]))
 
 (rum/defc message-cp
-  [{:keys [role text pages steps call-id]}]
+  [{:keys [role text pages steps call-id answer? regen?] :as msg}
+   {:keys [on-regenerate busy?]}]
   [:div.py-2
    (case role
      :user
@@ -178,10 +195,25 @@
      ;; :assistant — render [[slug]] citations as real clickable page links
      ;; via the app's own markdown renderer, given a plain unsaved string.
      [:div
+      (when regen?
+        [:div {:style {:font-size "9px" :letter-spacing "0.1em" :text-transform "uppercase"
+                       :font-family "ui-monospace, SFMono-Regular, Menlo, monospace"
+                       :opacity 0.4 :margin-bottom "4px"}}
+         "↻ regenerated"])
       (when (seq steps) (steps-line steps))
       [:div.prose.prose-sm.max-w-none (block/inline-text citation-config :markdown text)]
-      (when (and call-id (pref-signals/enabled?))
-        (rate-widget call-id))])])
+      [:div {:style {:display "flex" :align-items "center" :gap "16px" :flex-wrap "wrap"}}
+       (when (and call-id (pref-signals/enabled?))
+         (rate-widget call-id))
+       (when (and answer? on-regenerate)
+         [:button {:on-click #(when-not busy? (on-regenerate msg))
+                   :disabled (boolean busy?)
+                   :title "Ask again"
+                   :style {:font-size "9px" :letter-spacing "0.1em" :text-transform "uppercase"
+                           :font-family "ui-monospace, SFMono-Regular, Menlo, monospace"
+                           :opacity (if busy? 0.3 0.6) :cursor (if busy? "default" "pointer")
+                           :background "transparent" :border "none" :padding "3px 0" :margin-top "6px"}}
+          "↻ Regenerate"])]])])
 
 (defn- first-run-showing? [llm counts]
   (and (not (first-run/dismissed?))
@@ -246,13 +278,16 @@
         messages (rum/react *messages)
         input (rum/react *input)
         submit! #(send-message! *loading? *progress *poll-id)
+        regen! (fn [msg] (regenerate! msg *loading? *progress *poll-id))
         activity (get @*progress :activity)]
     [:div.flex.flex-col {:style {:height "100%"}}
      [:div.flex-1.overflow-y-auto.px-2.pt-2
       (llm-banner/provider-banner)
       (if (empty? messages)
         (empty-state)
-        (map-indexed (fn [idx msg] (rum/with-key (message-cp msg) idx)) messages))
+        (map-indexed (fn [idx msg]
+                       (rum/with-key (message-cp msg {:on-regenerate regen! :busy? @*loading?}) idx))
+                     messages))
       (when @*loading?
         [:div.py-2
          [:div.text-sm.opacity-60 "Thinking…"]
