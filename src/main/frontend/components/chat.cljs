@@ -90,46 +90,62 @@
   (reset! *poll-id nil)
   (reset! *progress nil))
 
+;; The last few turns, clipped, sent with the next question so a follow-up
+;; ("expand on that", "and their salary?") can resolve what it refers to
+;; (kip-app#82). Session-only — *messages resets when the conversation clears.
+(def ^:private history-turns 6)
+(def ^:private history-clip 700)
+
+(defn- recent-history [msgs]
+  (->> msgs
+       (filter #(and (#{:user :assistant} (:role %)) (not (string/blank? (:text %)))))
+       (take-last history-turns)
+       (mapv (fn [{:keys [role text]}]
+               {:role (name role)
+                :text (subs text 0 (min (count text) history-clip))}))))
+
 (defn- ask!
   "Run one Peck turn for `question` and hand the turn->message map (plus the
-  originating `:q`) to `on-result`. Shared by a fresh send and a regenerate.
-  `arena-compare-to` (optional): a prior answer's call id — makes this a
-  regenerate free-rider on the managed backend (kip-app#73)."
-  ([question on-result *loading? *progress *poll-id]
-   (ask! question on-result *loading? *progress *poll-id nil))
-  ([question on-result *loading? *progress *poll-id arena-compare-to]
-   (when (and (not (string/blank? question)) (not @*loading?))
-     (reset! *loading? true)
-     (start-poll! *progress *poll-id)
-     (-> (ipc/ipc "wikiChat" (vault-root) question false arena-compare-to)
-         (p/then (fn [result]
-                   (on-result (assoc (turn->message (bean/->clj result)) :q question))))
-         (p/catch (fn [error]
-                    (swap! *messages conj {:role :error :text (str error)})))
-         (p/finally (fn []
-                      (stop-poll! *progress *poll-id)
-                      (reset! *loading? false)))))))
+  originating `:q` and `:history`) to `on-result`. Shared by a fresh send and
+  a regenerate. `opts`: {:arena-compare-to <prior call id, kip-app#73>,
+  :history [{:role :text} …] (kip-app#82)}."
+  [question on-result *loading? *progress *poll-id {:keys [arena-compare-to history]}]
+  (when (and (not (string/blank? question)) (not @*loading?))
+    (reset! *loading? true)
+    (start-poll! *progress *poll-id)
+    (-> (ipc/ipc "wikiChat" (vault-root) question false arena-compare-to (or history []))
+        (p/then (fn [result]
+                  (on-result (assoc (turn->message (bean/->clj result))
+                                    :q question :history (vec history)))))
+        (p/catch (fn [error]
+                   (swap! *messages conj {:role :error :text (str error)})))
+        (p/finally (fn []
+                     (stop-poll! *progress *poll-id)
+                     (reset! *loading? false))))))
 
 (defn- send-message!
   [*loading? *progress *poll-id]
   (let [input (string/trim @*input)]
     (when (and (not (string/blank? input)) (not @*loading?))
-      (reset! *input "")
-      (swap! *messages conj {:role :user :text input})
-      (ask! input #(swap! *messages conj %) *loading? *progress *poll-id))))
+      (let [history (recent-history @*messages)]
+        (reset! *input "")
+        (swap! *messages conj {:role :user :text input})
+        (ask! input #(swap! *messages conj %) *loading? *progress *poll-id {:history history})))))
 
 (defn- regenerate!
   "Re-run the question that produced `msg`, appending a fresh answer below it.
   Fires the preference-signals `regenerated` behaviour signal against the old
   answer's call id. On the managed `kip` connector the re-run also goes
   through the arena as candidate B (the new answer carries an :arena-id and
-  gets a 'was this better?' strip). A no-op of both on every other provider."
-  [{:keys [q call-id]} *loading? *progress *poll-id]
+  gets a 'was this better?' strip). A no-op of both on every other provider.
+  Replays the same conversation history the original turn used."
+  [{:keys [q call-id history]} *loading? *progress *poll-id]
   (when (and (not (string/blank? q)) (not @*loading?))
     (when call-id (pref-signals/behavior! call-id "regenerated"))
     (let [arena-compare-to (when (and call-id (pref-signals/enabled?)) call-id)]
       (ask! q #(swap! *messages conj (assoc % :regen? true))
-            *loading? *progress *poll-id arena-compare-to))))
+            *loading? *progress *poll-id
+            {:arena-compare-to arena-compare-to :history (vec history)}))))
 
 (defn- steps-line
   "A ⚙ line per skill the tool loop ran, above the answer."

@@ -606,8 +606,8 @@
 (defmethod handle :kipFeedback [_ [_ vault-root signal]]
   (preference-signals/post-feedback! vault-root signal))
 
-(defmethod handle :wikiChat [_ [_ vault-root question trace? arena-compare-to]]
-  (wiki/peck! vault-root question (boolean trace?) arena-compare-to))
+(defmethod handle :wikiChat [_ [_ vault-root question trace? arena-compare-to history]]
+  (wiki/peck! vault-root question (boolean trace?) arena-compare-to history))
 
 ;; A verdict on an arena A/B pair (kip-app#73) — winner is "a" | "b" | "tie"
 ;; | "skip". electron.preference-signals gates on the kip provider and POSTs

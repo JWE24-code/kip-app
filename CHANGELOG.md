@@ -3,7 +3,14 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
-## [0.3.7] — 2026-08-30
+## [Unreleased]
+
+- **Peck follows a conversation** — ask a follow-up ("expand on that", "and
+  their salary?", "what about the second one?") and Kip now knows what
+  you're referring to. It carries the last few turns into the next
+  question — for finding the right pages *and* for the answer — so you can
+  keep pecking at a topic instead of re-explaining it each time. The buffer
+  is small and lives only for the session.
 
 - **The deep-groom schedule moved to Coop status** — it's no longer in
   Settings → Features. The Coop status panel now reads, top to bottom:
