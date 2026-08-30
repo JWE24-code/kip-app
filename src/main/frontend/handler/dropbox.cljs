@@ -33,6 +33,13 @@
   (-> (ipc/ipc "dropboxDisconnect")
       (p/then (fn [r] (put-status! (js->clj r :keywordize-keys true))))))
 
+(defn set-app-key!
+  "DIY: point Kip at your own Dropbox app (nil/blank → back to Kip's).
+  Disconnects, since tokens don't carry between apps."
+  [k]
+  (-> (ipc/ipc "dropboxSetAppKey" (or k ""))
+      (p/then (fn [_] (refresh!)))))
+
 ;; --- per-graph sync -------------------------------------------------------
 
 (defn- graph-dir [] (config/get-repo-dir (state/get-current-repo)))

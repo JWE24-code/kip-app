@@ -666,6 +666,9 @@
 (defmethod handle :dropboxStatus [_ _]
   (-> (dropbox/status) (p/then bean/->js)))
 
+(defmethod handle :dropboxSetAppKey [_ [_ k]]
+  (bean/->js (dropbox/set-app-key-and-disconnect! k)))
+
 ;; Dropbox graph sync (kip-app v0.4.0) — see electron.dropbox-sync.
 (defmethod handle :dropboxSyncStatus [_ [_ graph-path]]
   (bean/->js (dropbox-sync/status graph-path)))

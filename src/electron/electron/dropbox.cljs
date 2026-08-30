@@ -17,8 +17,13 @@
   plaintext otherwise (same posture as the LLM keys in .henhouse/llm.json).
   The short-lived access token lives only in memory.
 
-  This ns is *connection only* — the sync engine that uses the token is
-  separate (electron.dropbox-sync, TODO)."
+  App key: Kip ships its own (`default-app-key`). A DIY user can override it
+  with their own Dropbox app — KIP_DROPBOX_APP_KEY or the advanced setting —
+  e.g. to get their own rate-limit quota. Planned: a *managed* mode where a
+  Kip-subscription account brokers the OAuth through api.kip-ai.be so the
+  user needs no Dropbox app of their own (backend endpoints TBD).
+
+  This ns is *connection only*; the sync engine is electron.dropbox-sync."
   (:require ["crypto" :as crypto]
             ["http" :as http]
             ["electron" :refer [shell safeStorage]]
@@ -28,10 +33,28 @@
             [electron.logger :as logger]
             [promesa.core :as p]))
 
-;; A PKCE public-client id — embedded in every copy of the app by design,
-;; not a secret. Register `http://localhost` under the app's redirect URIs
-;; in the Dropbox App Console (Dropbox ignores the port for localhost).
-(def ^:private app-key "oqoouohdvzvbdia")
+;; Kip's own Dropbox PKCE public-client id — embedded in every copy of the app
+;; by design, not a secret (a PKCE public client has no client secret). One
+;; value for every install; Dropbox rate-limits per *app*, so a DIY user who
+;; wants their own quota (or their own Dropbox app for any reason) can override
+;; it — KIP_DROPBOX_APP_KEY, or :dropbox/config {:app-key "…"} in configs.edn
+;; (Settings → General → Dropbox → advanced). Whatever app is used must have
+;; `http://localhost` registered as an OAuth redirect URI.
+(def ^:private default-app-key "oqoouohdvzvbdia")
+
+(defn app-key []
+  (or (not-empty (aget (.-env js/process) "KIP_DROPBOX_APP_KEY"))
+      (not-empty (:app-key (cfgs/get-item :dropbox/config)))
+      default-app-key))
+
+(defn using-custom-app-key? [] (not= (app-key) default-app-key))
+
+(defn set-app-key!
+  "Persist a DIY Dropbox app key (or clear it with nil/blank). Disconnects
+   first — tokens from one app aren't valid for another."
+  [k]
+  (let [k (some-> k str string/trim not-empty)]
+    (cfgs/set-item! :dropbox/config (if k {:app-key k} nil))))
 
 (def ^:private authorize-url "https://www.dropbox.com/oauth2/authorize")
 (def ^:private token-url "https://api.dropboxapi.com/oauth2/token")
@@ -101,7 +124,7 @@
   (p/let [^js r (js/fetch token-url
                           #js {:method "POST"
                                :headers #js {"Content-Type" "application/x-www-form-urlencoded"}
-                               :body (form-encode (merge {:client_id app-key} params))})
+                               :body (form-encode (merge {:client_id (app-key)} params))})
           j (.json r)]
     (if (.-ok r)
       j
@@ -159,7 +182,7 @@
     (p/let [{:keys [redirect-uri code]} (start-loopback)
             _ (.openExternal shell
                              (str authorize-url "?"
-                                  (form-encode {:client_id app-key
+                                  (form-encode {:client_id (app-key)
                                                 :response_type "code"
                                                 :code_challenge challenge
                                                 :code_challenge_method "S256"
@@ -184,6 +207,14 @@
   (cfgs/set-item! :dropbox/auth nil)
   {:connected false})
 
+(defn set-app-key-and-disconnect!
+  "Swap the DIY Dropbox app key and drop any existing connection (tokens from
+   one app don't work for another). Pass nil/blank to go back to Kip's key."
+  [k]
+  (set-app-key! k)
+  (disconnect!)
+  {:connected false :customAppKey (using-custom-app-key?)})
+
 (defn access-token
   "Resolves a currently-valid access token, refreshing via the stored refresh
    token when needed. Rejects if not connected."
@@ -200,18 +231,20 @@
         (p/rejected (js/Error. "Not connected to Dropbox."))))))
 
 (defn status
-  "{ :connected bool, :account {:name :email} | nil, :encrypted bool }"
+  "{ :connected bool, :account {:name :email} | nil, :encrypted bool,
+     :customAppKey bool }"
   []
-  (if-not (connected?)
-    (p/resolved {:connected false})
-    (-> (access-token)
-        (p/then fetch-account)
-        (p/then (fn [account] {:connected true
-                               :account account
-                               :encrypted (encryption-available?)}))
-        (p/catch (fn [e]
-                   {:connected true :account nil
-                    :error (str "Dropbox connection needs re-authorising: " (.-message e))})))))
+  (let [base {:customAppKey (using-custom-app-key?)}]
+    (if-not (connected?)
+      (p/resolved (assoc base :connected false))
+      (-> (access-token)
+          (p/then fetch-account)
+          (p/then (fn [account] (assoc base :connected true
+                                       :account account
+                                       :encrypted (encryption-available?))))
+          (p/catch (fn [e]
+                     (assoc base :connected true :account nil
+                            :error (str "Dropbox connection needs re-authorising: " (.-message e)))))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Files API — the low-level calls the sync engine builds on
