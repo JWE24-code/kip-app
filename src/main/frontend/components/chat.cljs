@@ -26,6 +26,7 @@
             [frontend.components.telemetry :as telemetry]
             [frontend.config :as config]
             [frontend.handler.llm :as llm-handler]
+            [frontend.handler.preference-signals :as pref-signals]
             [frontend.state :as state]
             [promesa.core :as p]
             [rum.core :as rum]
@@ -61,7 +62,7 @@
    :pages pages})
 
 (defn- turn->message [result]
-  (let [{:keys [intent answer learned note pages steps]} result]
+  (let [{:keys [intent answer learned note pages steps callId]} result]
     (cond
       (= intent "statement")
       (if learned
@@ -69,7 +70,7 @@
         {:role :assistant :text (if (string/blank? note) "Nothing new to add there." note)})
 
       answer
-      {:role :assistant :text answer :steps steps}
+      {:role :assistant :text answer :steps steps :call-id callId}
 
       (= intent "reminder")
       {:role :assistant :text "Reminder noted — check the Reminders panel." :steps steps}
@@ -120,8 +121,40 @@
 ;; cmd/ctrl-click still opens it in Documents.
 (def ^:private citation-config {:page-ref-as-sidebar? true})
 
+;; --- preference signals (kip-app#73) — a 👍/👎 under a managed-backend answer.
+;; Only shown when the active provider is the `kip` connector AND the turn
+;; carried a call id. One rating per answer (the backend upserts, so a
+;; change of mind just overwrites). Teenage-Engineering flavour: hairline
+;; border, mono-caps micro-label, hot-orange when active, square corners.
+(def ^:private te-orange "#ff5c00")
+
+(rum/defcs rate-widget < (rum/local nil ::picked)
+  [state call-id]
+  (let [*picked (::picked state)
+        btn (fn [score glyph]
+              (let [active? (= @*picked score)
+                    dimmed? (and (some? @*picked) (not active?))]
+                [:button
+                 {:key score
+                  :title (if (= score 1) "Useful" "Not useful")
+                  :on-click (fn [] (reset! *picked score) (pref-signals/rate! call-id score))
+                  :style {:font-size "11px" :line-height "1" :padding "3px 7px"
+                          :border (str "1px solid " (if active? te-orange "var(--ls-border-color)"))
+                          :background (if active? te-orange "transparent")
+                          :opacity (if dimmed? 0.4 1)
+                          :cursor "pointer"}}
+                 glyph]))]
+    [:div {:style {:display "flex" :align-items "center" :gap "6px" :margin-top "6px"
+                   :font-size "9px" :letter-spacing "0.1em" :text-transform "uppercase"
+                   :font-family "ui-monospace, SFMono-Regular, Menlo, monospace"
+                   :opacity 0.85}}
+     [:span {:style {:opacity 0.5}} "Rate this answer"]
+     (btn 1 "👍")
+     (btn 0 "👎")
+     (when (some? @*picked) [:span {:style {:opacity 0.45}} "logged"])]))
+
 (rum/defc message-cp
-  [{:keys [role text pages steps]}]
+  [{:keys [role text pages steps call-id]}]
   [:div.py-2
    (case role
      :user
@@ -146,7 +179,9 @@
      ;; via the app's own markdown renderer, given a plain unsaved string.
      [:div
       (when (seq steps) (steps-line steps))
-      [:div.prose.prose-sm.max-w-none (block/inline-text citation-config :markdown text)]])])
+      [:div.prose.prose-sm.max-w-none (block/inline-text citation-config :markdown text)]
+      (when (and call-id (pref-signals/enabled?))
+        (rate-widget call-id))])])
 
 (defn- first-run-showing? [llm counts]
   (and (not (first-run/dismissed?))
@@ -207,6 +242,7 @@
   (let [*loading? (get state ::loading?)
         *progress (get state ::progress)
         *poll-id (get state ::poll-id)
+        _ (state/sub :kip/llm)  ; so the 👍/👎 widget appears/hides live on a provider switch
         messages (rum/react *messages)
         input (rum/react *input)
         submit! #(send-message! *loading? *progress *poll-id)
