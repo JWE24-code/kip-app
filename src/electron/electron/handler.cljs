@@ -31,6 +31,7 @@
             [electron.update :as update]
             [electron.updater :as updater]
             [electron.groom-scheduler :as groom-scheduler]
+            [electron.preference-signals :as preference-signals]
             [electron.utils :as utils]
             [electron.wiki :as wiki]
             [electron.window :as win]
@@ -598,6 +599,12 @@
   ;; bean/->clj before dispatch. (js->clj on it would be a no-op; passing it
   ;; straight through is clearer.)
   (groom-scheduler/set-schedule! sched))
+
+;; Preference signals (kip-app#73) — one content-free signal from the
+;; renderer. feedback-poster.js gates on the active provider being `kip` and
+;; strips the signal to its wire fields, so this handler stays a thin pass.
+(defmethod handle :kipFeedback [_ [_ vault-root signal]]
+  (preference-signals/post-feedback! vault-root signal))
 
 (defmethod handle :wikiChat [_ [_ vault-root question trace?]]
   (wiki/peck! vault-root question (boolean trace?)))
