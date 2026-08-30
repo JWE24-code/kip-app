@@ -62,7 +62,7 @@
    :pages pages})
 
 (defn- turn->message [result]
-  (let [{:keys [intent answer learned note pages steps callId arenaId]} result]
+  (let [{:keys [intent answer learned note pages steps callId arenaId webSource]} result]
     (cond
       (= intent "statement")
       (if learned
@@ -70,7 +70,8 @@
         {:role :assistant :text (if (string/blank? note) "Nothing new to add there." note)})
 
       answer
-      {:role :assistant :text answer :steps steps :call-id callId :arena-id arenaId :answer? true}
+      {:role :assistant :text answer :steps steps :call-id callId :arena-id arenaId
+       :web-source webSource :answer? true}
 
       (= intent "reminder")
       {:role :assistant :text "Reminder noted — check the Reminders panel." :steps steps}
@@ -210,8 +211,39 @@
      (btn "skip" "skip")
      (when (some? @*picked) [:span {:style {:opacity 0.45}} "logged"])]))
 
+;; --- web-search → source (kip-app#81) — when a turn ran web-search, offer to
+;; keep its results as an eggs/ source doc so they can be hatched into the nest.
+(rum/defcs web-source-widget < (rum/local nil ::st)
+  [state {:keys [filename content]}]
+  (let [*st (::st state)
+        save! (fn []
+                (reset! *st :saving)
+                (-> (ipc/ipc "wikiAddEgg" (vault-root) filename content)
+                    (p/then (fn [r] (reset! *st (bean/->clj r))))
+                    (p/catch (fn [e] (reset! *st {:ok false :reason (str e)})))))
+        s @*st]
+    [:div {:style {:margin-top "6px" :font-size "11px" :opacity 0.8}}
+     (cond
+       (map? s)
+       (if (:ok s)
+         [:span {:style {:opacity 0.6}}
+          (if (:duplicate s)
+            (str "Already in your sources as " (:name s) ".")
+            (str "Saved to eggs/" (:name s) " — run Hatch to add it to your nest."))]
+         [:span {:style {:color "#c0392b"}} (str "Couldn't save: " (or (:reason s) "unknown error"))])
+
+       (= s :saving) [:span {:style {:opacity 0.5}} "Saving…"]
+
+       :else
+       [:button {:on-click save!
+                 :style {:font-size "9px" :letter-spacing "0.1em" :text-transform "uppercase"
+                         :font-family "ui-monospace, SFMono-Regular, Menlo, monospace"
+                         :opacity 0.6 :cursor "pointer" :background "transparent"
+                         :border "none" :padding "3px 0"}}
+        "↓ Save these web results as a source"])]))
+
 (rum/defc message-cp
-  [{:keys [role text pages steps call-id arena-id answer? regen?] :as msg}
+  [{:keys [role text pages steps call-id arena-id web-source answer? regen?] :as msg}
    {:keys [on-regenerate busy?]}]
   [:div.py-2
    (case role
@@ -243,6 +275,8 @@
          "↻ regenerated"])
       (when (seq steps) (steps-line steps))
       [:div.prose.prose-sm.max-w-none (block/inline-text citation-config :markdown text)]
+      (when (and (:filename web-source) (:content web-source))
+        (web-source-widget web-source))
       (when (and arena-id (pref-signals/enabled?))
         (verdict-widget arena-id))
       [:div {:style {:display "flex" :align-items "center" :gap "16px" :flex-wrap "wrap"}}
