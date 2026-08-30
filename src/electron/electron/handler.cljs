@@ -606,8 +606,14 @@
 (defmethod handle :kipFeedback [_ [_ vault-root signal]]
   (preference-signals/post-feedback! vault-root signal))
 
-(defmethod handle :wikiChat [_ [_ vault-root question trace?]]
-  (wiki/peck! vault-root question (boolean trace?)))
+(defmethod handle :wikiChat [_ [_ vault-root question trace? arena-compare-to]]
+  (wiki/peck! vault-root question (boolean trace?) arena-compare-to))
+
+;; A verdict on an arena A/B pair (kip-app#73) — winner is "a" | "b" | "tie"
+;; | "skip". electron.preference-signals gates on the kip provider and POSTs
+;; to /v1/arena/<id>/verdict; a no-op otherwise.
+(defmethod handle :kipArena [_ [_ vault-root arena-id winner]]
+  (preference-signals/post-arena-verdict! vault-root arena-id winner))
 
 (defmethod handle :wikiChatProgress [_ [_ vault-root]]
   (wiki/peck-progress! vault-root))

@@ -14,7 +14,9 @@ changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGE
   button that re-asks the same question and adds a fresh answer below.
   Works on any provider. On the Kip (managed) backend a regenerate also
   quietly tells the router the first answer missed — nothing but that one
-  bit, no text.
+  bit, no text — and the re-run comes from a different model, so the new
+  answer carries a one-tap **"better than the last one?"** strip. Answer
+  it or ignore it; either way nothing but the verdict leaves the app.
 - **Rate a Peck answer** — when you're on the Kip (managed) backend, a
   Peck answer now carries a small 👍 / 👎 control. It sends nothing but a
   thumbs-up or thumbs-down against that one answer — no text, no page

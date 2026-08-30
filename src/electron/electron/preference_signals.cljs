@@ -2,13 +2,15 @@
   "In-process bridge to scripts/lib/feedback-poster.js — the electron side of
   the preference-signals epic (kip-app#73). The renderer's content-free
   signals (a 👍/👎 rating, a debounced behaviour event, an arena verdict)
-  come in over the :kipFeedback IPC channel and are POSTed once to the
-  managed Kip backend's /v1/feedback.
+  come in over two IPC channels — :kipFeedback (rating / behaviour) POSTs
+  once to /v1/feedback, :kipArena (a verdict on a regenerate A/B pair) POSTs
+  once to /v1/arena/<id>/verdict.
 
-  feedback-poster.js does the gating itself: postFeedback() checks the
-  active provider is `kip` and resolves { ok: false } without a request
-  otherwise, and it sanitises the signal down to the closed wire field set,
-  so nothing but { call_id, kind, enum/int } can leave. Required via
+  feedback-poster.js does the gating itself: postFeedback() and
+  postArenaVerdict() both check the active provider is `kip` and resolve
+  { ok: false } without a request otherwise, and postFeedback() sanitises
+  the signal down to the closed wire field set, so nothing but
+  { call_id, kind, enum/int } can leave. Required via
   js/require for the same reason electron.llm does (see its docstring)."
   (:require [cljs-bean.core :as bean]
             ["path" :as node-path]
@@ -30,4 +32,17 @@
                      #js {:vaultRoot (or vault-root js/undefined)})
       (p/catch (fn [err]
                  (logger/warn "[PreferenceSignals]" (str "postFeedback failed: " err))
+                 #js {:ok false}))))
+
+(defn post-arena-verdict!
+  "POST a verdict on an arena A/B pair. `winner` is \"a\" | \"b\" | \"tie\" |
+  \"skip\". Never rejects; resolves #js {:ok bool} (false when the provider
+  isn't `kip`, the winner/id is bad, or the request failed)."
+  [vault-root arena-id winner]
+  (-> (.postArenaVerdict feedback-lib
+                         arena-id
+                         winner
+                         #js {:vaultRoot (or vault-root js/undefined)})
+      (p/catch (fn [err]
+                 (logger/warn "[PreferenceSignals]" (str "postArenaVerdict failed: " err))
                  #js {:ok false}))))

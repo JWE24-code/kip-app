@@ -364,14 +364,19 @@
 
 (defn peck!
   "Runs the Peck workflow for `question` without filing the answer back.
-  Resolves to {:answer :citedSlugs :candidateSlugs :steps}. `steps` is what
-  the skills tool loop ran (scripts/lib/skills.js), if anything. With `trace?`
-  the run also streams every LLM + skill call, full I/O included, to
-  <coop>/.roost/peck-trace.jsonl."
-  ([vault-root question] (peck! vault-root question false))
-  ([vault-root question trace?]
+  Resolves to {:answer :citedSlugs :candidateSlugs :steps :callId :arenaId}.
+  `steps` is what the skills tool loop ran (scripts/lib/skills.js), if
+  anything. With `trace?` the run also streams every LLM + skill call, full
+  I/O included, to <coop>/.roost/peck-trace.jsonl. `arena-compare-to` (a
+  prior answer's callId) makes this a regenerate free-rider on the managed
+  backend — the answer runs as arena candidate B (kip-app#73)."
+  ([vault-root question] (peck! vault-root question false nil))
+  ([vault-root question trace?] (peck! vault-root question trace? nil))
+  ([vault-root question trace? arena-compare-to]
    (run-node-script! (script "chat.js") vault-root
-                     (cond-> [question] trace? (conj "--trace")))))
+                     (cond-> [question]
+                       trace? (conj "--trace")
+                       (not (string/blank? arena-compare-to)) (conj "--arena-compare-to" arena-compare-to)))))
 
 (defn peck-progress!
   "Reads <coop>/.roost/peck-progress.json, written continuously by chat.js

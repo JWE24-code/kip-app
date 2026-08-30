@@ -10,8 +10,9 @@
 
   `send!` ships one content-free signal to the managed backend via the
   :kipFeedback IPC (electron.preference-signals → scripts/lib/feedback-poster).
-  It's fire-and-forget and best-effort: a disabled gate, a rejected IPC, or a
-  backend error all resolve to nil without disturbing anything."
+  `verdict!` is the same pattern over :kipArena for an arena A/B verdict.
+  All of it is fire-and-forget and best-effort: a disabled gate, a rejected
+  IPC, or a backend error all resolve to nil without disturbing anything."
   (:require [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.state :as state]
@@ -51,3 +52,15 @@
   ([call-id behavior edit-bucket]
    (send! (cond-> {:call_id call-id :kind "behavior" :behavior behavior}
             (some? edit-bucket) (assoc :edit_bucket edit-bucket)))))
+
+(def ^:private arena-winners #{"a" "b" "tie" "skip"})
+
+(defn verdict!
+  "Post a verdict on an arena A/B pair (a regenerate free-rider). `winner` is
+  one of \"a\" \"b\" \"tie\" \"skip\". No-op unless `enabled?` and the args
+  are well-formed. Returns a promise that always resolves."
+  [arena-id winner]
+  (if (and (enabled?) (string? arena-id) (seq arena-id) (arena-winners winner))
+    (-> (ipc/ipc "kipArena" (vault-root) arena-id winner)
+        (p/catch (fn [_] nil)))
+    (p/resolved nil)))

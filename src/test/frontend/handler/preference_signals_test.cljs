@@ -1,5 +1,6 @@
 (ns frontend.handler.preference-signals-test
   (:require [clojure.test :refer [deftest testing is]]
+            [electron.ipc :as ipc]
             [frontend.handler.preference-signals :as ps]
             [frontend.state :as state]))
 
@@ -43,3 +44,23 @@
       #(do
          (is (some? (ps/send! {:kind "rating"})))          ; no call_id
          (is (some? (ps/send! {:call_id "c1"})))))))       ; no kind
+
+(deftest verdict!-fires-only-for-kip-and-a-valid-winner
+  (let [calls (atom [])]
+    (with-redefs [ipc/ipc (fn [& args] (swap! calls conj args) (js/Promise.resolve nil))]
+      (testing "well-formed verdict on the kip provider hits the :kipArena channel"
+        (reset! calls [])
+        (with-provider "kip" #(ps/verdict! "arena_1" "b"))
+        (is (= 1 (count @calls)))
+        (is (= "kipArena" (ffirst @calls)))
+        (is (= ["arena_1" "b"] (drop 2 (first @calls)))))
+      (testing "no IPC when the gate is closed"
+        (reset! calls [])
+        (with-provider "anthropic" #(ps/verdict! "arena_1" "b"))
+        (is (empty? @calls)))
+      (testing "no IPC for a bad winner or a blank arena id"
+        (reset! calls [])
+        (with-provider "kip"
+          #(do (ps/verdict! "arena_1" "best")
+               (ps/verdict! "" "a")))
+        (is (empty? @calls))))))

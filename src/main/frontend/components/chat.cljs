@@ -62,7 +62,7 @@
    :pages pages})
 
 (defn- turn->message [result]
-  (let [{:keys [intent answer learned note pages steps callId]} result]
+  (let [{:keys [intent answer learned note pages steps callId arenaId]} result]
     (cond
       (= intent "statement")
       (if learned
@@ -70,7 +70,7 @@
         {:role :assistant :text (if (string/blank? note) "Nothing new to add there." note)})
 
       answer
-      {:role :assistant :text answer :steps steps :call-id callId :answer? true}
+      {:role :assistant :text answer :steps steps :call-id callId :arena-id arenaId :answer? true}
 
       (= intent "reminder")
       {:role :assistant :text "Reminder noted — check the Reminders panel." :steps steps}
@@ -92,19 +92,23 @@
 
 (defn- ask!
   "Run one Peck turn for `question` and hand the turn->message map (plus the
-  originating `:q`) to `on-result`. Shared by a fresh send and a regenerate."
-  [question on-result *loading? *progress *poll-id]
-  (when (and (not (string/blank? question)) (not @*loading?))
-    (reset! *loading? true)
-    (start-poll! *progress *poll-id)
-    (-> (ipc/ipc "wikiChat" (vault-root) question)
-        (p/then (fn [result]
-                  (on-result (assoc (turn->message (bean/->clj result)) :q question))))
-        (p/catch (fn [error]
-                   (swap! *messages conj {:role :error :text (str error)})))
-        (p/finally (fn []
-                     (stop-poll! *progress *poll-id)
-                     (reset! *loading? false))))))
+  originating `:q`) to `on-result`. Shared by a fresh send and a regenerate.
+  `arena-compare-to` (optional): a prior answer's call id — makes this a
+  regenerate free-rider on the managed backend (kip-app#73)."
+  ([question on-result *loading? *progress *poll-id]
+   (ask! question on-result *loading? *progress *poll-id nil))
+  ([question on-result *loading? *progress *poll-id arena-compare-to]
+   (when (and (not (string/blank? question)) (not @*loading?))
+     (reset! *loading? true)
+     (start-poll! *progress *poll-id)
+     (-> (ipc/ipc "wikiChat" (vault-root) question false arena-compare-to)
+         (p/then (fn [result]
+                   (on-result (assoc (turn->message (bean/->clj result)) :q question))))
+         (p/catch (fn [error]
+                    (swap! *messages conj {:role :error :text (str error)})))
+         (p/finally (fn []
+                      (stop-poll! *progress *poll-id)
+                      (reset! *loading? false)))))))
 
 (defn- send-message!
   [*loading? *progress *poll-id]
@@ -117,11 +121,15 @@
 (defn- regenerate!
   "Re-run the question that produced `msg`, appending a fresh answer below it.
   Fires the preference-signals `regenerated` behaviour signal against the old
-  answer's call id — a no-op on every provider but the managed `kip` one."
+  answer's call id. On the managed `kip` connector the re-run also goes
+  through the arena as candidate B (the new answer carries an :arena-id and
+  gets a 'was this better?' strip). A no-op of both on every other provider."
   [{:keys [q call-id]} *loading? *progress *poll-id]
   (when (and (not (string/blank? q)) (not @*loading?))
     (when call-id (pref-signals/behavior! call-id "regenerated"))
-    (ask! q #(swap! *messages conj (assoc % :regen? true)) *loading? *progress *poll-id)))
+    (let [arena-compare-to (when (and call-id (pref-signals/enabled?)) call-id)]
+      (ask! q #(swap! *messages conj (assoc % :regen? true))
+            *loading? *progress *poll-id arena-compare-to))))
 
 (defn- steps-line
   "A ⚙ line per skill the tool loop ran, above the answer."
@@ -169,8 +177,41 @@
      (btn 0 "👎")
      (when (some? @*picked) [:span {:style {:opacity 0.45}} "logged"])]))
 
+;; --- arena verdict (kip-app#73) — shown under a regenerated answer on the
+;; managed backend. A = the previous answer, B = this one. The user can't
+;; tell which model produced which; the backend just wants the winner.
+(rum/defcs verdict-widget < (rum/local nil ::picked)
+  [state arena-id]
+  (let [*picked (::picked state)
+        btn (fn [winner label]
+              (let [active? (= @*picked winner)
+                    dimmed? (and (some? @*picked) (not active?))]
+                [:button
+                 {:key winner
+                  :on-click (fn [] (when (nil? @*picked)
+                                     (reset! *picked winner)
+                                     (pref-signals/verdict! arena-id winner)))
+                  :disabled (some? @*picked)
+                  :style {:font-size "10px" :text-transform "none"
+                          :font-family "ui-monospace, SFMono-Regular, Menlo, monospace"
+                          :line-height "1" :padding "3px 7px"
+                          :border (str "1px solid " (if active? te-orange "var(--ls-border-color)"))
+                          :background (if active? te-orange "transparent")
+                          :opacity (if dimmed? 0.4 1)
+                          :cursor (if (some? @*picked) "default" "pointer")}}
+                 label]))]
+    [:div {:style {:display "flex" :align-items "center" :gap "6px" :margin-top "6px"
+                   :font-size "9px" :letter-spacing "0.1em" :text-transform "uppercase"
+                   :font-family "ui-monospace, SFMono-Regular, Menlo, monospace" :opacity 0.85}}
+     [:span {:style {:opacity 0.5}} "Better?"]
+     (btn "a" "↑ that one")
+     (btn "b" "this one")
+     (btn "tie" "tie")
+     (btn "skip" "skip")
+     (when (some? @*picked) [:span {:style {:opacity 0.45}} "logged"])]))
+
 (rum/defc message-cp
-  [{:keys [role text pages steps call-id answer? regen?] :as msg}
+  [{:keys [role text pages steps call-id arena-id answer? regen?] :as msg}
    {:keys [on-regenerate busy?]}]
   [:div.py-2
    (case role
@@ -202,8 +243,12 @@
          "↻ regenerated"])
       (when (seq steps) (steps-line steps))
       [:div.prose.prose-sm.max-w-none (block/inline-text citation-config :markdown text)]
+      (when (and arena-id (pref-signals/enabled?))
+        (verdict-widget arena-id))
       [:div {:style {:display "flex" :align-items "center" :gap "16px" :flex-wrap "wrap"}}
-       (when (and call-id (pref-signals/enabled?))
+       ;; the A/B verdict is the richer signal — don't also ask for a 👍/👎 on
+       ;; the same answer.
+       (when (and call-id (not arena-id) (pref-signals/enabled?))
          (rate-widget call-id))
        (when (and answer? on-regenerate)
          [:button {:on-click #(when-not busy? (on-regenerate msg))
