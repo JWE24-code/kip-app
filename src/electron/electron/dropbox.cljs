@@ -272,12 +272,15 @@
 (def ^:private api-base "https://api.dropboxapi.com/2/")
 (def ^:private content-base "https://content.dropboxapi.com/2/")
 
-(defn- api-error [status body]
+(defn- api-error [status url body]
   (let [m (try (bean/->clj (js/JSON.parse body)) (catch :default _ nil))
-        summary (:error_summary m)]
-    (doto (js/Error. (str "Dropbox API " status (when summary (str ": " summary))))
+        ;; JSON errors carry error_summary; request-level 400s are plain text
+        detail (or (:error_summary m)
+                   (some-> body string/trim not-empty (subs 0 (min 300 (count (string/trim body))))))
+        endpoint (last (string/split (str url) #"/"))]
+    (doto (js/Error. (str "Dropbox API " status " on " endpoint (when detail (str ": " detail))))
       (aset "status" status)
-      (aset "dropbox" (or summary body)))))
+      (aset "dropbox" (or detail body)))))
 
 (defn rpc
   "POST {api-base}<endpoint> with a JSON body, JSON back. `arg` is a CLJS map."
@@ -291,7 +294,7 @@
           text (.text res)]
     (if (.-ok res)
       (if (seq text) (bean/->clj (js/JSON.parse text)) {})
-      (throw (api-error (.-status res) text)))))
+      (throw (api-error (.-status res) (.-url res) text)))))
 
 (defn- read-download [^js res]
   (if (.-ok res)
@@ -300,7 +303,7 @@
             m (bean/->clj (js/JSON.parse hdr))]
       {:buffer (js/Buffer.from ab) :rev (:rev m) :size (:size m)})
     (-> (.text res)
-        (p/then (fn [t] (throw (api-error (.-status res) t)))))))
+        (p/then (fn [t] (throw (api-error (.-status res) (.-url res) t)))))))
 
 (defn download
   "GET a file's bytes. Resolves { :buffer <Buffer> :rev str :size n }."
@@ -330,7 +333,7 @@
           text (.text res)]
     (if (.-ok res)
       (bean/->clj (js/JSON.parse text))
-      (throw (api-error (.-status res) text)))))
+      (throw (api-error (.-status res) (.-url res) text)))))
 
 (defn delete! [remote-path]
   (-> (rpc "files/delete_v2" {:path remote-path})
@@ -364,4 +367,4 @@
      (if (.-ok res)
        (let [m (bean/->clj (js/JSON.parse text))]
          {:changes (:changes m) :backoff (:backoff m)})
-       (throw (api-error (.-status res) text))))))
+       (throw (api-error (.-status res) (.-url res) text))))))
