@@ -3,6 +3,14 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [Unreleased]
+
+- **Connect a Dropbox account** — Settings → General → Dropbox. A one-tap
+  browser consent (OAuth with PKCE — no password, no secret stored in the
+  app) links a Dropbox account; Kip only ever sees a folder it creates for
+  itself, nothing else in your Dropbox. This is the groundwork for syncing
+  your graph through Dropbox — the sync itself lands in a follow-up.
+
 ## [0.3.7] — 2026-08-30
 
 - **The deep-groom schedule moved to Coop status** — it's no longer in

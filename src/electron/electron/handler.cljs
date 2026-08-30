@@ -31,6 +31,7 @@
             [electron.update :as update]
             [electron.updater :as updater]
             [electron.groom-scheduler :as groom-scheduler]
+            [electron.dropbox :as dropbox]
             [electron.preference-signals :as preference-signals]
             [electron.utils :as utils]
             [electron.wiki :as wiki]
@@ -632,6 +633,18 @@
 
 (defmethod handle :wikiRemindersMute [_ [_ vault-root id on?]]
   (wiki/reminders-mute! vault-root id on?))
+
+;; Dropbox account connection (kip-app v0.4.0) — see electron.dropbox.
+(defmethod handle :dropboxConnect [_ _]
+  (-> (dropbox/connect!)
+      (p/then bean/->js)
+      (p/catch (fn [e] (bean/->js {:connected false :error (or (.-message e) (str e))})))))
+
+(defmethod handle :dropboxDisconnect [_ _]
+  (dropbox/disconnect!))
+
+(defmethod handle :dropboxStatus [_ _]
+  (-> (dropbox/status) (p/then bean/->js)))
 
 (defmethod handle :wikiExportsList [_ [_ vault-root]]
   (wiki/exports-list! vault-root))
