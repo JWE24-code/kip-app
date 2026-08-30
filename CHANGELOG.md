@@ -10,6 +10,11 @@ changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGE
   the coop overview, **Groom** (run / deep-groom / last report), the weekly
   **Schedule**, then **Recent clucks** — so everything about grooming is in
   one place.
+- **Rate a Peck answer** — when you're on the Kip (managed) backend, a
+  Peck answer now carries a small 👍 / 👎 control. It sends nothing but a
+  thumbs-up or thumbs-down against that one answer — no text, no page
+  names — so the managed router can learn which model / workload pairings
+  actually land. It's invisible on every other provider.
 
 ## [0.3.6] — 2026-08-30
 
