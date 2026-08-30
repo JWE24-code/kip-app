@@ -3,6 +3,15 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [Unreleased]
+
+- **Subscribe to a calendar** — the Reminders panel gains a *Calendar feeds*
+  section: paste a live ICS or `webcal://` URL (Google / Outlook / Fastmail
+  "secret address in iCal format") and Kip pulls your upcoming events in as
+  reminders — each one notified ahead of time with a prep brief drawn from
+  your nest, exactly like a reminder you'd type yourself. Feeds refresh
+  every 20 minutes; the URL is stored like an API key, never in the graph.
+
 ## [0.3.7] — 2026-08-30
 
 - **The deep-groom schedule moved to Coop status** — it's no longer in

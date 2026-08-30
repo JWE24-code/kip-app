@@ -20,6 +20,7 @@
             [electron.state :as state]
             [electron.git :as git]
             [electron.reminders :as reminders]
+            [electron.calendar :as calendar]
             [electron.groom-scheduler :as groom-scheduler]
             [electron.window :as win]
             [electron.exceptions :as exceptions]
@@ -300,6 +301,8 @@
                (git/configure-auto-commit!)
 
                (reminders/start-scheduler!)
+
+               (calendar/start-scheduler!)
 
                (groom-scheduler/start-scheduler!)
 

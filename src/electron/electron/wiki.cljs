@@ -422,6 +422,39 @@
   (run-node-script! (script "reminders.js") vault-root [(if on? "unmute" "mute") (str id) "--json"]))
 
 ;; --------------------------------------------------------------------------
+;; Calendar subscriptions (scripts/calendar.js, <coop>/.henhouse/calendars.json).
+;; electron.calendar runs `calendar-sync!` on a slow timer; that keeps
+;; reminders.json current and the normal reminders scheduler does the firing.
+;; The panel uses list/add/remove/toggle/refresh.
+;; --------------------------------------------------------------------------
+
+(defn calendar-sync!
+  "Fetches every enabled ICS feed, expands the upcoming window, and reconciles
+  it into reminders.json (source \"calendar\"). Resolves to
+  {:calendars :ok :events :reconciled {:added :updated :removed} :errors}."
+  [vault-root]
+  (run-node-script! (script "calendar.js") vault-root ["sync" "--json"]))
+
+(defn calendar-list! [vault-root]
+  (run-node-script! (script "calendar.js") vault-root ["list" "--json"]))
+
+(defn calendar-add! [vault-root url {:keys [label lead refresh]}]
+  (run-node-script! (script "calendar.js") vault-root
+                    (cond-> ["add" url "--json"]
+                      (not (string/blank? label)) (conj "--label" label)
+                      (some? lead)                (conj "--lead" (str lead))
+                      (some? refresh)             (conj "--refresh" (str refresh)))))
+
+(defn calendar-remove! [vault-root id]
+  (run-node-script! (script "calendar.js") vault-root ["remove" (str id) "--json"]))
+
+(defn calendar-toggle! [vault-root id on?]
+  (run-node-script! (script "calendar.js") vault-root [(if on? "enable" "disable") (str id) "--json"]))
+
+(defn calendar-refresh! [vault-root]
+  (run-node-script! (script "calendar.js") vault-root ["refresh" "--json"]))
+
+;; --------------------------------------------------------------------------
 ;; <coop>/exports/ — the files Peck's docx/pptx/… skills produce. The Exports
 ;; panel (frontend.components.exports) lists them and drives these actions.
 ;; The renderer only ever sends a bare filename it got from exports-list!;

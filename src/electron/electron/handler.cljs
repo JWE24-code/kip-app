@@ -31,6 +31,7 @@
             [electron.update :as update]
             [electron.updater :as updater]
             [electron.groom-scheduler :as groom-scheduler]
+            [electron.calendar :as calendar]
             [electron.preference-signals :as preference-signals]
             [electron.utils :as utils]
             [electron.wiki :as wiki]
@@ -632,6 +633,24 @@
 
 (defmethod handle :wikiRemindersMute [_ [_ vault-root id on?]]
   (wiki/reminders-mute! vault-root id on?))
+
+;; Calendar subscriptions (kip-app#70) — see electron.calendar + scripts/calendar.js.
+(defmethod handle :calendarList [_ [_ vault-root]]
+  (wiki/calendar-list! vault-root))
+
+(defmethod handle :calendarAdd [_ [_ vault-root url opts]]
+  (-> (wiki/calendar-add! vault-root url (or opts {}))
+      (p/then (fn [r] (calendar/sync-now! vault-root) r))))
+
+(defmethod handle :calendarRemove [_ [_ vault-root id]]
+  (wiki/calendar-remove! vault-root id))
+
+(defmethod handle :calendarToggle [_ [_ vault-root id on?]]
+  (-> (wiki/calendar-toggle! vault-root id on?)
+      (p/then (fn [r] (calendar/sync-now! vault-root) r))))
+
+(defmethod handle :calendarRefresh [_ [_ vault-root]]
+  (calendar/sync-now! vault-root))
 
 (defmethod handle :wikiExportsList [_ [_ vault-root]]
   (wiki/exports-list! vault-root))

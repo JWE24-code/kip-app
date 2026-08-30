@@ -17,6 +17,7 @@
             [frontend.config :as config]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [frontend.util :as util]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -90,6 +91,83 @@
 (defn- set-sound! [id on? refresh]
   (-> (ipc/ipc "wikiRemindersMute" (vault-root) id on?)
       (p/finally refresh)))
+
+;; --- calendar subscriptions (kip-app#70) ---------------------------------
+;; ICS feeds whose upcoming events are reconciled into reminders.json by
+;; electron.calendar. Managed here because a calendar event IS a reminder.
+
+(defn- cal-fetch! [*cals]
+  (-> (ipc/ipc "calendarList" (vault-root))
+      (p/then (fn [r] (reset! *cals (vec (:calendars (bean/->clj r))))))
+      (p/catch (fn [_] (reset! *cals [])))))
+
+(defn- cal-add! [*url *err *cals refresh-reminders]
+  (let [url (string/trim @*url)]
+    (when-not (string/blank? url)
+      (reset! *err nil)
+      (-> (ipc/ipc "calendarAdd" (vault-root) url {})
+          (p/then (fn [r]
+                    (let [{:keys [calendar error]} (bean/->clj r)]
+                      (if (or error (nil? calendar))
+                        (reset! *err (or error "couldn't add that calendar"))
+                        (do (reset! *url "")
+                            (cal-fetch! *cals)
+                            (js/setTimeout refresh-reminders 1500))))))
+          (p/catch (fn [e] (reset! *err (str e))))))))
+
+(defn- cal-remove! [id *cals refresh-reminders]
+  (-> (ipc/ipc "calendarRemove" (vault-root) id)
+      (p/then (fn [_] (cal-fetch! *cals) (refresh-reminders)))))
+
+(defn- cal-refresh! [*cals refresh-reminders]
+  (-> (ipc/ipc "calendarRefresh" (vault-root))
+      (p/finally (fn [] (cal-fetch! *cals) (refresh-reminders)))))
+
+(rum/defcs calendar-feeds < rum/reactive
+  (rum/local nil ::cals)
+  (rum/local "" ::url)
+  (rum/local nil ::err)
+  (rum/local false ::open?)
+  {:will-mount (fn [state] (cal-fetch! (::cals state)) state)}
+  [state refresh-reminders]
+  (let [*cals (::cals state)
+        *url (::url state)
+        *err (::err state)
+        *open? (::open? state)
+        cals (or @*cals [])]
+    [:div.border-t.border-gray-05.mt-2.pt-2.px-1
+     [:button.flex.items-center.gap-1.text-xs.uppercase.tracking-wide.opacity-40.hover:opacity-70
+      {:on-click #(swap! *open? not)}
+      [:span (if @*open? "▾" "▸")] "Calendar feeds"
+      (when (seq cals) [:span.opacity-60 (str " (" (count cals) ")")])]
+     (when @*open?
+       [:div.mt-2.space-y-1
+        (for [c cals]
+          [:div.flex.items-baseline.gap-2.text-xs.group {:key (:id c)}
+           [:div.flex-1.min-w-0
+            [:div.truncate {:class (when (= (:enabled c) false) "opacity-40")} (:label c)]
+            [:div.opacity-45.truncate
+             (cond
+               (:lastError c) [:span.text-red-500 (str "⚠ " (:lastError c))]
+               (:lastFetchedAt c) (str "synced " (when-label (:lastFetchedAt c)))
+               :else "not synced yet")]]
+           (ui/button {:icon "x" :icon-props {:size 12} :variant :ghost :size :xs
+                       :class "opacity-0 group-hover:opacity-100" :title "Remove"
+                       :on-click #(cal-remove! (:id c) *cals refresh-reminders)})])
+        [:div.flex.gap-1.pt-1
+         [:input.form-input.is-small.flex-1.text-xs
+          {:type "text" :placeholder "ICS / webcal:// URL"
+           :value @*url
+           :on-change #(reset! *url (.. % -target -value))
+           :on-key-down (fn [e] (when (= "Enter" (.-key e)) (cal-add! *url *err *cals refresh-reminders)))}]
+         (ui/button {:size :xs :on-click #(cal-add! *url *err *cals refresh-reminders)} "Add")]
+        (when @*err [:div.text-xs.text-red-500.leading-snug @*err])
+        (when (seq cals)
+          [:button.text-xs.opacity-40.hover:opacity-70.pt-1
+           {:on-click #(cal-refresh! *cals refresh-reminders)} "Refresh now"])
+        [:div.text-xs.opacity-35.leading-snug.pt-1
+         "Google / Outlook / Fastmail “secret address in iCal format”. "
+         "Upcoming events become reminders with prep from your nest."]])]))
 
 (rum/defc reminder-row < rum/static
   [{:keys [id title eventAt leadMin status context sound]} refresh]
@@ -166,4 +244,5 @@
          (when (seq recent)
            [:div.mt-3
             [:div.text-xs.uppercase.tracking-wide.opacity-40.px-1.pt-1.pb-1 "Recent"]
-            (for [r recent] (rum/with-key (reminder-row r refresh) (:id r)))])])]]))
+            (for [r recent] (rum/with-key (reminder-row r refresh) (:id r)))])])]
+     (when (util/electron?) (calendar-feeds refresh))]))
