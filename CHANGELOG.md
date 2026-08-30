@@ -3,7 +3,7 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
-## [Unreleased]
+## [0.4.0] — 2026-08-31
 
 - **Subscribe to a calendar** — the Reminders panel gains a *Calendar feeds*
   section: paste a live ICS or `webcal://` URL (Google / Outlook / Fastmail
@@ -28,6 +28,10 @@ changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGE
   question — for finding the right pages *and* for the answer — so you can
   keep pecking at a topic instead of re-explaining it each time. The buffer
   is small and lives only for the session.
+- **Keep a web search** — when a Peck answer used web search, it now offers
+  "↓ Save these web results as a source". One click writes the result list
+  into `eggs/` as a Markdown doc; run Hatch and it becomes reference
+  material in your nest instead of vanishing with the turn.
 
 ## [0.3.7] — 2026-08-30
 

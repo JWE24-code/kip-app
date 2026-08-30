@@ -1,7 +1,7 @@
 {
   "name": "kip",
   "productName": "Kip",
-  "version": "0.3.7",
+  "version": "0.4.0",
   "main": "electron.js",
   "author": "Joeri Weitmann",
   "license": "AGPL-3.0",
