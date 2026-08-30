@@ -353,9 +353,11 @@
    longpoll. `conflict-mode` ∈ auto|manual. A failure is logged and any
    partially-written state is torn down so a retry starts clean."
   [graph-path opts]
+  (log (str "enable! " graph-path " -> " (graph-remote-name graph-path)))
   (-> (do-enable! graph-path opts)
       (p/catch (fn [e]
-                 (log-error (str "enable! failed for " graph-path ": " (.-message e)
+                 (log-error (str "enable! failed for " graph-path
+                                 " (remote " (graph-remote-name graph-path) "): " (.-message e)
                                  (when-let [d (aget e "dropbox")] (str " — " d))))
                  (try (fs/rmSync (state-path graph-path)) (catch :default _ nil))
                  (swap! *runtime dissoc graph-path)
