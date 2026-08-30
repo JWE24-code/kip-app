@@ -538,6 +538,8 @@
                (ui/button (if sync-busy? "Setting up…" "Sync this graph with Dropbox")
                           :class "text-sm" :disabled (boolean sync-busy?)
                           :on-click #(dropbox-handler/enable-sync! "auto"))
+               (when (:error sync)
+                 [:div.text-xs.text-red-500.mt-1.leading-snug (str "Couldn't start sync: " (:error sync))])
                [:div.text-xs.opacity-50.mt-1
                 "Two-way. Newest change wins on a conflict (Dropbox keeps history).
                  Notes only — the search cache and your API keys stay on this machine."]])])])]]))

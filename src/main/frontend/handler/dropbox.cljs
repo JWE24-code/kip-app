@@ -8,6 +8,7 @@
   render reactively without each holding their own copy."
   (:require [electron.ipc :as ipc]
             [frontend.config :as config]
+            [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.util :as util]
             [promesa.core :as p]))
@@ -44,19 +45,32 @@
 
 (defn- graph-dir [] (config/get-repo-dir (state/get-current-repo)))
 
-(defn- put-sync! [s] (state/set-state! :dropbox/sync (js->clj s :keywordize-keys true)) s)
+(defn- put-sync! [s]
+  (let [m (js->clj s :keywordize-keys true)]
+    (state/set-state! :dropbox/sync m)
+    (when-let [err (:error m)]
+      (notification/show! (str "Dropbox sync: " err) :error))
+    m))
 
 (defn refresh-sync! []
   (when (and (util/electron?) (graph-dir))
     (-> (ipc/ipc "dropboxSyncStatus" (graph-dir))
-        (p/then put-sync!)
-        (p/catch (fn [_] (put-sync! #js {:synced false}))))))
+        (p/then (fn [r]
+                  ;; a status read carries no error — don't stomp an error the
+                  ;; last enable!/sync-now! surfaced
+                  (let [prev (:dropbox/sync @state/state)
+                        m (js->clj r :keywordize-keys true)]
+                    (state/set-state! :dropbox/sync
+                                      (cond-> m
+                                        (and (:error prev) (not (:synced m))) (assoc :error (:error prev)))))))
+        (p/catch (fn [_] nil)))))
 
 (defn enable-sync! [conflict-mode]
   (state/set-state! :dropbox/sync-busy? true)
   (-> (ipc/ipc "dropboxSyncEnable" (graph-dir) {:conflict-mode (or conflict-mode "auto")})
       (p/then put-sync!)
-      (p/finally (fn [] (state/set-state! :dropbox/sync-busy? false) (refresh-sync!)))))
+      (p/then (fn [m] (when (:synced m) (refresh-sync!))))
+      (p/finally (fn [] (state/set-state! :dropbox/sync-busy? false)))))
 
 (defn disable-sync! []
   (-> (ipc/ipc "dropboxSyncDisable" (graph-dir))
@@ -66,4 +80,5 @@
   (state/set-state! :dropbox/sync-busy? true)
   (-> (ipc/ipc "dropboxSyncNow" (graph-dir))
       (p/then put-sync!)
-      (p/finally (fn [] (state/set-state! :dropbox/sync-busy? false) (refresh-sync!)))))
+      (p/then (fn [_] (refresh-sync!)))
+      (p/finally (fn [] (state/set-state! :dropbox/sync-busy? false)))))
