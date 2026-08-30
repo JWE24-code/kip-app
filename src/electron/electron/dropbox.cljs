@@ -60,6 +60,12 @@
 (def ^:private token-url "https://api.dropboxapi.com/oauth2/token")
 (def ^:private account-url "https://api.dropboxapi.com/2/users/get_current_account")
 
+;; Request the scopes explicitly so the consent is legible and doesn't silently
+;; depend on which boxes are ticked on the Dropbox app's Permissions tab. The
+;; app (Kip's or a DIY one) must have at least these enabled there.
+(def ^:private oauth-scope
+  "account_info.read files.metadata.read files.content.read files.content.write")
+
 (def ^:private log-error (partial logger/error "[Dropbox]"))
 
 ;; { :access-token str :expires-at ms } — memory only, never persisted
@@ -148,29 +154,40 @@
 
 (defn- start-loopback
   "Resolves { :redirect-uri, :code } — the code arrives on the first request
-   the loopback server sees carrying ?code (or it rejects on ?error/timeout)."
+   the loopback server sees carrying ?code (or it rejects on ?error/timeout).
+   Tracks settlement with a plain flag: promesa 4.0.2 has no `p/pending?` in
+   cljs (its IState protocol is JVM-only), and the timer must be cleared on
+   success so it doesn't fire 5 minutes later."
   []
   (let [ready (p/deferred)
         code-d (p/deferred)
-        srv (http/createServer)]
+        settled (volatile! false)
+        timer (volatile! nil)
+        srv (http/createServer)
+        finish (fn [f] (when-not @settled
+                         (vreset! settled true)
+                         (some-> @timer js/clearTimeout)
+                         (f)))]
     (.on srv "request"
          (fn [^js req ^js res]
            (let [u (js/URL. (.-url req) "http://localhost")
                  code (.. u -searchParams (get "code"))
                  err (.. u -searchParams (get "error"))]
              (.end (doto res (.writeHead 200 #js {"Content-Type" "text/html"})) done-page)
-             (if code
-               (p/resolve! code-d code)
-               (p/reject! code-d (js/Error. (str "Dropbox authorization "
-                                                (if err (str "was declined (" err ")") "returned no code") "."))))
+             (finish #(if code
+                        (p/resolve! code-d code)
+                        (p/reject! code-d (js/Error. (str "Dropbox authorization "
+                                                         (if err (str "was declined (" err ")") "returned no code") ".")))))
              (js/setImmediate #(.close srv)))))
-    (.on srv "error" (fn [e] (p/reject! ready e) (p/reject! code-d e)))
+    (.on srv "error" (fn [e] (p/reject! ready e) (finish #(p/reject! code-d e))))
     (.listen srv 0 "127.0.0.1"
              (fn [] (p/resolve! ready (str "http://localhost:" (.. srv address -port)))))
-    (js/setTimeout (fn [] (when (p/pending? code-d)
-                            (try (.close srv) (catch :default _ nil))
-                            (p/reject! code-d (js/Error. "Timed out waiting for Dropbox authorization."))))
-                   300000)
+    (vreset! timer
+             (js/setTimeout
+              (fn [] (finish (fn []
+                               (try (.close srv) (catch :default _ nil))
+                               (p/reject! code-d (js/Error. "Timed out waiting for Dropbox authorization.")))))
+              300000))
     (p/let [redirect-uri ready]
       {:redirect-uri redirect-uri :code code-d})))
 
@@ -187,6 +204,7 @@
                                                 :code_challenge challenge
                                                 :code_challenge_method "S256"
                                                 :token_access_type "offline"
+                                                :scope oauth-scope
                                                 :redirect_uri redirect-uri})))
             auth-code code
             tok-js (token-request {:grant_type "authorization_code"

@@ -673,10 +673,15 @@
 (defmethod handle :dropboxSyncStatus [_ [_ graph-path]]
   (bean/->js (dropbox-sync/status graph-path)))
 
+(defn- dropbox-sync-error [e fallback-map]
+  (logger/error "[DropboxSync]" (str "IPC failure: " (.-message e)
+                                     (when-let [d (aget e "dropbox")] (str " — " d))))
+  (bean/->js (assoc fallback-map :error (or (.-message e) (str e)))))
+
 (defmethod handle :dropboxSyncEnable [_ [_ graph-path opts]]
   (-> (dropbox-sync/enable! graph-path (or opts {}))
       (p/then bean/->js)
-      (p/catch (fn [e] (bean/->js {:synced false :error (or (.-message e) (str e))})))))
+      (p/catch #(dropbox-sync-error % {:synced false}))))
 
 (defmethod handle :dropboxSyncDisable [_ [_ graph-path]]
   (bean/->js (dropbox-sync/disable! graph-path)))
@@ -684,7 +689,7 @@
 (defmethod handle :dropboxSyncNow [_ [_ graph-path]]
   (-> (dropbox-sync/sync-now! graph-path)
       (p/then bean/->js)
-      (p/catch (fn [e] (bean/->js {:synced true :error (or (.-message e) (str e))})))))
+      (p/catch #(dropbox-sync-error % {:synced true}))))
 
 (defmethod handle :wikiExportsList [_ [_ vault-root]]
   (wiki/exports-list! vault-root))

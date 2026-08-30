@@ -298,11 +298,7 @@
             (p/recur next-page acc'))
           {:files acc' :cursor (:cursor page)})))))
 
-(defn enable!
-  "Turn on sync for `graph-path`. Ensures /<name> in the app folder, reconciles
-   local ↔ remote by content hash (uploads what's missing/changed, records what
-   already matches, pulls remote-only files down), records a cursor, and starts
-   the watcher + longpoll. `conflict-mode` ∈ auto|manual."
+(defn- do-enable!
   [graph-path {:keys [conflict-mode] :or {conflict-mode "auto"}}]
   (if (synced? graph-path)
     (p/resolved {:synced true})
@@ -350,6 +346,20 @@
       (log (str "sync enabled: " graph-path " -> " remote " (" (count locals) " local, "
                 (count remote-files) " remote)"))
       {:synced true :remote remote :files (count (:files (read-state graph-path)))})))
+
+(defn enable!
+  "Turn on sync for `graph-path`. Ensures /<name> in the app folder, reconciles
+   local ↔ remote by content hash, records a cursor, starts the watcher +
+   longpoll. `conflict-mode` ∈ auto|manual. A failure is logged and any
+   partially-written state is torn down so a retry starts clean."
+  [graph-path opts]
+  (-> (do-enable! graph-path opts)
+      (p/catch (fn [e]
+                 (log-error (str "enable! failed for " graph-path ": " (.-message e)
+                                 (when-let [d (aget e "dropbox")] (str " — " d))))
+                 (try (fs/rmSync (state-path graph-path)) (catch :default _ nil))
+                 (swap! *runtime dissoc graph-path)
+                 (throw e)))))
 
 (defn disable! [graph-path]
   (when-let [stop (get-in @*runtime [graph-path :loop-stop])] (stop))
