@@ -33,6 +33,7 @@
             [electron.groom-scheduler :as groom-scheduler]
             [electron.calendar :as calendar]
             [electron.dropbox :as dropbox]
+            [electron.dropbox-sync :as dropbox-sync]
             [electron.preference-signals :as preference-signals]
             [electron.utils :as utils]
             [electron.wiki :as wiki]
@@ -664,6 +665,23 @@
 
 (defmethod handle :dropboxStatus [_ _]
   (-> (dropbox/status) (p/then bean/->js)))
+
+;; Dropbox graph sync (kip-app v0.4.0) — see electron.dropbox-sync.
+(defmethod handle :dropboxSyncStatus [_ [_ graph-path]]
+  (bean/->js (dropbox-sync/status graph-path)))
+
+(defmethod handle :dropboxSyncEnable [_ [_ graph-path opts]]
+  (-> (dropbox-sync/enable! graph-path (or opts {}))
+      (p/then bean/->js)
+      (p/catch (fn [e] (bean/->js {:synced false :error (or (.-message e) (str e))})))))
+
+(defmethod handle :dropboxSyncDisable [_ [_ graph-path]]
+  (bean/->js (dropbox-sync/disable! graph-path)))
+
+(defmethod handle :dropboxSyncNow [_ [_ graph-path]]
+  (-> (dropbox-sync/sync-now! graph-path)
+      (p/then bean/->js)
+      (p/catch (fn [e] (bean/->js {:synced true :error (or (.-message e) (str e))})))))
 
 (defmethod handle :wikiExportsList [_ [_ vault-root]]
   (wiki/exports-list! vault-root))

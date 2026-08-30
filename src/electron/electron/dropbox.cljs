@@ -212,3 +212,105 @@
         (p/catch (fn [e]
                    {:connected true :account nil
                     :error (str "Dropbox connection needs re-authorising: " (.-message e))})))))
+
+;; ---------------------------------------------------------------------------
+;; Files API — the low-level calls the sync engine builds on
+;; (https://www.dropbox.com/developers/documentation/http/documentation)
+;; ---------------------------------------------------------------------------
+
+(def ^:private api-base "https://api.dropboxapi.com/2/")
+(def ^:private content-base "https://content.dropboxapi.com/2/")
+
+(defn- api-error [status body]
+  (let [m (try (bean/->clj (js/JSON.parse body)) (catch :default _ nil))
+        summary (:error_summary m)]
+    (doto (js/Error. (str "Dropbox API " status (when summary (str ": " summary))))
+      (aset "status" status)
+      (aset "dropbox" (or summary body)))))
+
+(defn rpc
+  "POST {api-base}<endpoint> with a JSON body, JSON back. `arg` is a CLJS map."
+  [endpoint arg]
+  (p/let [token (access-token)
+          ^js res (js/fetch (str api-base endpoint)
+                            #js {:method "POST"
+                                 :headers #js {"Authorization" (str "Bearer " token)
+                                               "Content-Type" "application/json"}
+                                 :body (js/JSON.stringify (bean/->js arg))})
+          text (.text res)]
+    (if (.-ok res)
+      (if (seq text) (bean/->clj (js/JSON.parse text)) {})
+      (throw (api-error (.-status res) text)))))
+
+(defn- read-download [^js res]
+  (if (.-ok res)
+    (p/let [ab (.arrayBuffer res)
+            hdr (.. res -headers (get "dropbox-api-result"))
+            m (bean/->clj (js/JSON.parse hdr))]
+      {:buffer (js/Buffer.from ab) :rev (:rev m) :size (:size m)})
+    (-> (.text res)
+        (p/then (fn [t] (throw (api-error (.-status res) t)))))))
+
+(defn download
+  "GET a file's bytes. Resolves { :buffer <Buffer> :rev str :size n }."
+  [remote-path]
+  (p/let [token (access-token)
+          res (js/fetch (str content-base "files/download")
+                        #js {:method "POST"
+                             :headers #js {"Authorization" (str "Bearer " token)
+                                           "Dropbox-API-Arg" (js/JSON.stringify #js {:path remote-path})}})]
+    (read-download res)))
+
+(defn upload
+  "PUT bytes to `remote-path`. `mode` is :add or a rev string (update). Resolves
+   the new metadata { :rev :size :content_hash … }."
+  [remote-path ^js buffer mode]
+  (p/let [token (access-token)
+          arg {:path remote-path
+               :mode (if (string? mode) {".tag" "update" :update mode} {".tag" "add"})
+               :autorename false
+               :mute true}
+          ^js res (js/fetch (str content-base "files/upload")
+                            #js {:method "POST"
+                                 :headers #js {"Authorization" (str "Bearer " token)
+                                               "Content-Type" "application/octet-stream"
+                                               "Dropbox-API-Arg" (js/JSON.stringify (bean/->js arg))}
+                                 :body buffer})
+          text (.text res)]
+    (if (.-ok res)
+      (bean/->clj (js/JSON.parse text))
+      (throw (api-error (.-status res) text)))))
+
+(defn delete! [remote-path]
+  (-> (rpc "files/delete_v2" {:path remote-path})
+      (p/catch (fn [e] (when-not (re-find #"not_found" (str (aget e "dropbox"))) (throw e))))))
+
+(defn ensure-folder! [remote-path]
+  (-> (rpc "files/create_folder_v2" {:path remote-path})
+      (p/catch (fn [e] (when-not (re-find #"path/conflict" (str (aget e "dropbox"))) (throw e))))))
+
+(defn list-folder
+  "First page of a recursive listing under `remote-path` (\"\" = app root).
+   Resolves { :entries [ … ] :cursor str :has-more bool }."
+  [remote-path]
+  (p/let [r (rpc "files/list_folder" {:path remote-path :recursive true})]
+    {:entries (:entries r) :cursor (:cursor r) :has-more (:has_more r)}))
+
+(defn list-folder-continue [cursor]
+  (p/let [r (rpc "files/list_folder/continue" {:cursor cursor})]
+    {:entries (:entries r) :cursor (:cursor r) :has-more (:has_more r)}))
+
+(defn longpoll
+  "Blocks (up to `timeout` s, default 300) until the folder behind `cursor`
+   changes. Unauthenticated endpoint. Resolves { :changes bool :backoff n }."
+  ([cursor] (longpoll cursor 300))
+  ([cursor timeout]
+   (p/let [^js res (js/fetch "https://notify.dropboxapi.com/2/files/list_folder/longpoll"
+                             #js {:method "POST"
+                                  :headers #js {"Content-Type" "application/json"}
+                                  :body (js/JSON.stringify #js {:cursor cursor :timeout timeout})})
+           text (.text res)]
+     (if (.-ok res)
+       (let [m (bean/->clj (js/JSON.parse text))]
+         {:changes (:changes m) :backoff (:backoff m)})
+       (throw (api-error (.-status res) text))))))
