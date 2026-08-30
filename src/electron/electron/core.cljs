@@ -21,6 +21,7 @@
             [electron.git :as git]
             [electron.reminders :as reminders]
             [electron.groom-scheduler :as groom-scheduler]
+            [electron.dropbox-sync :as dropbox-sync]
             [electron.window :as win]
             [electron.exceptions :as exceptions]
             ["/electron/utils" :as js-utils]
@@ -302,6 +303,8 @@
                (reminders/start-scheduler!)
 
                (groom-scheduler/start-scheduler!)
+
+               (dropbox-sync/resume-all!)
 
                (vreset! *setup-fn
                         (fn []

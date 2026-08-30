@@ -465,29 +465,56 @@
          (route-handler/redirect! {:to :zotero-setting})))]]])
 
 (rum/defc dropbox-sync-row < rum/reactive
-  {:did-mount (fn [state] (dropbox-handler/refresh!) state)}
-  []
+  {:did-mount (fn [state]
+                (dropbox-handler/refresh!)
+                (dropbox-handler/refresh-sync!)
+                state)}
+  [current-repo]
   (let [{:keys [connected account error]} (state/sub :dropbox/status)
-        connecting? (state/sub :dropbox/connecting?)]
-    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+        connecting? (state/sub :dropbox/connecting?)
+        {:keys [synced conflictMode files lastSync] :as sync} (state/sub :dropbox/sync)
+        sync-busy? (state/sub :dropbox/sync-busy?)]
+    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
      [:label.block.text-sm.font-medium.leading-5.opacity-70 {:for "dropbox_sync"} "Dropbox"]
      [:div.mt-1.sm:mt-0.sm:col-span-2
-      (if connected
-        [:div
-         [:div.text-sm
-          (if account
-            [:span "Connected as " [:b (or (:name account) (:email account))]]
-            [:span.text-amber-600 (or error "Connected — needs re-authorising")])]
-         [:div.mt-1
-          (ui/button "Disconnect" :class "text-sm" :background "gray"
-                     :on-click #(dropbox-handler/disconnect!))]]
+      (if-not connected
         [:div
          (ui/button (if connecting? "Waiting for Dropbox…" "Connect Dropbox")
                     :class "text-sm" :disabled (boolean connecting?)
                     :on-click #(dropbox-handler/connect!))
          [:div.text-sm.opacity-50.mt-1
-          "Opens Dropbox in your browser. Kip syncs your graph to a folder it
-           creates in your Dropbox — nothing else is touched."]])]]))
+          "Opens Dropbox in your browser. Kip only ever sees a folder it
+           creates for itself (Apps/Kip-ai/) — nothing else in your Dropbox."]]
+        [:div
+         [:div.text-sm
+          (if account
+            [:span "Connected as " [:b (or (:name account) (:email account))]]
+            [:span.text-amber-600 (or error "Connected — needs re-authorising")])
+          "  ·  "
+          [:a.opacity-60.hover:opacity-100 {:on-click #(dropbox-handler/disconnect!)} "disconnect"]]
+
+         (when current-repo
+           [:div.mt-2.pt-2.border-t.border-gray-05
+            (if synced
+              [:div.text-sm
+               [:div "This graph syncs with Dropbox"
+                (when files [:span.opacity-50 (str " · " files " files")])
+                (when (:error sync) [:span.text-red-500 (str " · " (:error sync))])]
+               [:div.opacity-50.text-xs.mt-0.5
+                (str "Conflicts: " (if (= conflictMode "manual") "keep both copies" "newest wins")
+                     (when lastSync (str " · last sync " (.toLocaleTimeString (js/Date. lastSync)))))]
+               [:div.mt-1.flex.gap-2
+                (ui/button "Sync now" :class "text-xs" :disabled (boolean sync-busy?)
+                           :on-click #(dropbox-handler/sync-now!))
+                (ui/button "Stop syncing this graph" :class "text-xs" :background "gray"
+                           :on-click #(dropbox-handler/disable-sync!))]]
+              [:div
+               (ui/button (if sync-busy? "Setting up…" "Sync this graph with Dropbox")
+                          :class "text-sm" :disabled (boolean sync-busy?)
+                          :on-click #(dropbox-handler/enable-sync! "auto"))
+               [:div.text-xs.opacity-50.mt-1
+                "Two-way. Newest change wins on a conflict (Dropbox keeps history).
+                 Notes only — the search cache and your API keys stay on this machine."]])])])]]))
 
 (defn usage-diagnostics-row [t instrument-disabled?]
   (toggle "usage-diagnostics"
@@ -636,7 +663,7 @@
      (theme-modes-row t switch-theme system-theme? dark?)
      (when (and (util/electron?) (not util/mac?)) (native-titlebar-row t))
      (when show-radix-themes? (accent-color-row false))
-     (when (util/electron?) (dropbox-sync-row))
+     (when (util/electron?) (dropbox-sync-row current-repo))
      (when (config/global-config-enabled?) (edit-global-config-edn))
      (when current-repo (edit-config-edn))
      (when current-repo (edit-custom-css))
