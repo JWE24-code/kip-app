@@ -50,6 +50,21 @@
     (swap! *locks assoc graph-path (p/catch run (fn [_] nil)))
     run))
 
+;; abs-path -> content-hash we just wrote from a pull. The chokidar watcher
+;; checks this: if the file on disk is exactly what a pull put there, that
+;; `change` event is our own echo — drop it instead of pushing it back. TTL'd
+;; so a genuine later edit of the same file isn't muted.
+(defonce ^:private *pull-writes (atom {}))
+(def ^:private pull-write-ttl-ms 20000)
+
+(defn- note-pull-write! [abs hash]
+  (swap! *pull-writes assoc abs hash)
+  (js/setTimeout #(swap! *pull-writes (fn [m] (if (= (get m abs) hash) (dissoc m abs) m)))
+                 pull-write-ttl-ms))
+
+(defn- own-echo? [abs current-hash]
+  (= current-hash (get @*pull-writes abs)))
+
 ;; ---------------------------------------------------------------------------
 ;; per-graph state file
 ;; ---------------------------------------------------------------------------
@@ -140,22 +155,30 @@
       (p/let [^js buf (.readFileSync fs abs)
               hash (dropbox-content-hash buf)
               recorded (get-in st [:files rel])]
-        (when (or (nil? recorded) (not= (:hash recorded) hash))
+        (when (and (or (nil? recorded) (not= (:hash recorded) hash))
+                   (not (own-echo? abs hash)))          ; don't push a pull's own write
           (if (> (.-length buf) max-file-bytes)
             (log (str "skipping " rel " — larger than the sync limit"))
-            (p/let [known-rev (:rev recorded)
-                    meta (-> (dbx/upload (remote-path graph-path rel) buf (or known-rev :add))
-                             (p/catch (fn [e]
-                                        ;; someone changed it upstream first — pull will
-                                        ;; sort it out; re-add without a rev so we don't lose it
-                                        (if (re-find #"conflict" (str (aget e "dropbox")))
-                                          (dbx/upload (str (remote-path graph-path rel)
-                                                           " (Kip " (subs (.toISOString (js/Date.)) 0 10) ")")
-                                                      buf :add)
-                                          (throw e)))))]
+            (p/let [rpath (remote-path graph-path rel)
+                    meta (-> (dbx/upload rpath buf (or (:rev recorded) :add))
+                             (p/catch
+                              (fn [e]
+                                (if-not (re-find #"conflict" (str (aget e "dropbox")))
+                                  (throw e)
+                                  ;; the known rev is stale. Check what's actually there:
+                                  (p/let [rm (dbx/get-metadata rpath)]
+                                    (cond
+                                      ;; remote already holds our bytes — our own earlier
+                                      ;; push; nothing to do but record the current rev
+                                      (= (:content_hash rm) hash) rm
+                                      ;; genuine divergence — local wins (auto policy),
+                                      ;; overwrite; Dropbox keeps the old version
+                                      :else (p/do!
+                                             (log (str "push conflict — local " rel " overwrote the remote"))
+                                             (dbx/upload rpath buf :overwrite))))))))]
               (write-state! graph-path
                             (assoc-in (read-state graph-path) [:files rel]
-                                      {:rev (:rev meta) :hash (:content_hash meta)}))
+                                      {:rev (:rev meta) :hash (or (:content_hash meta) hash)}))
               (log (str "pushed " rel)))))))))
 
 (defn- flush-pending! [graph-path]
@@ -201,27 +224,38 @@
               (p/resolved (update st :files dissoc rel)))))
 
       (= tag "file")
-      (let [recorded (get-in st [:files rel])]
-        (if (= (:rev recorded) (:rev entry))
+      (let [recorded (get-in st [:files rel])
+            abs (abs-path graph-path rel)
+            local-now (when (fs/existsSync abs) (local-hash abs))]
+        (cond
+          ;; already reconciled against this exact revision
+          (= (:rev recorded) (:rev entry))
           (p/resolved st)
-          (p/let [abs (abs-path graph-path rel)
-                  local-changed? (and (fs/existsSync abs) recorded
-                                      (not= (:hash recorded) (local-hash abs)))
-                  dl (dbx/download (:path_display entry))]
+
+          ;; the bytes on disk already ARE this entry's content — our own push
+          ;; coming back, or a race we already handled. Catch the rev up, don't
+          ;; rewrite the file (that would re-trigger the watcher).
+          (and local-now (= local-now (:content_hash entry)))
+          (p/resolved (assoc-in st [:files rel] {:rev (:rev entry) :hash local-now}))
+
+          :else
+          (p/let [local-changed? (and local-now recorded (not= (:hash recorded) local-now))
+                  dl (dbx/download (:path_display entry))
+                  dl-hash (dropbox-content-hash (:buffer dl))]
             (fs/mkdirSync (node-path/dirname abs) #js {:recursive true})
             (if (and local-changed? (= "manual" (:conflictMode st)))
-              (let [cn (conflict-name rel (subs (.toISOString (js/Date.)) 0 10))]
-                (fs/writeFileSync (abs-path graph-path cn) (:buffer dl))
+              (let [cn (conflict-name rel (subs (.toISOString (js/Date.)) 0 10))
+                    cabs (abs-path graph-path cn)]
+                (note-pull-write! cabs dl-hash)
+                (fs/writeFileSync cabs (:buffer dl))
                 (log (str "conflict — wrote " cn))
                 (p/resolved st))
               (do
-                ;; auto (or no local change): the remote copy wins
-                (when (and local-changed?)
+                (when local-changed?
                   (log (str "conflict — Dropbox copy of " rel " won")))
+                (note-pull-write! abs dl-hash)
                 (fs/writeFileSync abs (:buffer dl))
-                (p/resolved (assoc-in st [:files rel]
-                                      {:rev (:rev dl)
-                                       :hash (dropbox-content-hash (:buffer dl))})))))))
+                (p/resolved (assoc-in st [:files rel] {:rev (:rev dl) :hash dl-hash})))))))
 
       :else (p/resolved st))))
 
@@ -264,9 +298,13 @@
                        :awaitWriteFinish true
                        :persistent true})
         on (fn [pth]
-             (let [rel (-> (node-path/relative graph-path pth) (string/replace "\\" "/"))]
+             (let [rel (-> (node-path/relative graph-path pth) (string/replace "\\" "/"))
+                   abs (abs-path graph-path rel)]
                (when (and (seq rel) (not (excluded? rel)))
-                 (schedule-push! graph-path rel))))]
+                 (if (and (fs/existsSync abs) (own-echo? abs (local-hash abs)))
+                   ;; this is a file a pull just wrote — consume the marker, don't push
+                   (swap! *pull-writes dissoc abs)
+                   (schedule-push! graph-path rel)))))]
     (doto w
       (.on "add" on) (.on "change" on) (.on "unlink" on))
     (swap! *runtime assoc-in [graph-path :watcher] w)))
