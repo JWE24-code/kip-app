@@ -15,6 +15,7 @@
             [frontend.db :as db]
             [frontend.dicts :as dicts]
             [frontend.handler.config :as config-handler]
+            [frontend.handler.dropbox :as dropbox-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
@@ -463,6 +464,31 @@
          (state/close-settings!)
          (route-handler/redirect! {:to :zotero-setting})))]]])
 
+(rum/defc dropbox-sync-row < rum/reactive
+  {:did-mount (fn [state] (dropbox-handler/refresh!) state)}
+  []
+  (let [{:keys [connected account error]} (state/sub :dropbox/status)
+        connecting? (state/sub :dropbox/connecting?)]
+    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+     [:label.block.text-sm.font-medium.leading-5.opacity-70 {:for "dropbox_sync"} "Dropbox"]
+     [:div.mt-1.sm:mt-0.sm:col-span-2
+      (if connected
+        [:div
+         [:div.text-sm
+          (if account
+            [:span "Connected as " [:b (or (:name account) (:email account))]]
+            [:span.text-amber-600 (or error "Connected — needs re-authorising")])]
+         [:div.mt-1
+          (ui/button "Disconnect" :class "text-sm" :background "gray"
+                     :on-click #(dropbox-handler/disconnect!))]]
+        [:div
+         (ui/button (if connecting? "Waiting for Dropbox…" "Connect Dropbox")
+                    :class "text-sm" :disabled (boolean connecting?)
+                    :on-click #(dropbox-handler/connect!))
+         [:div.text-sm.opacity-50.mt-1
+          "Opens Dropbox in your browser. Kip syncs your graph to a folder it
+           creates in your Dropbox — nothing else is touched."]])]]))
+
 (defn usage-diagnostics-row [t instrument-disabled?]
   (toggle "usage-diagnostics"
           (t :settings-page/disable-sentry)
@@ -610,6 +636,7 @@
      (theme-modes-row t switch-theme system-theme? dark?)
      (when (and (util/electron?) (not util/mac?)) (native-titlebar-row t))
      (when show-radix-themes? (accent-color-row false))
+     (when (util/electron?) (dropbox-sync-row))
      (when (config/global-config-enabled?) (edit-global-config-edn))
      (when current-repo (edit-config-edn))
      (when current-repo (edit-custom-css))

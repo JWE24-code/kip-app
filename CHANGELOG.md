@@ -11,6 +11,11 @@ changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGE
   reminders — each one notified ahead of time with a prep brief drawn from
   your nest, exactly like a reminder you'd type yourself. Feeds refresh
   every 20 minutes; the URL is stored like an API key, never in the graph.
+- **Connect a Dropbox account** — Settings → General → Dropbox. A one-tap
+  browser consent (OAuth with PKCE — no password, no secret stored in the
+  app) links a Dropbox account; Kip only ever sees a folder it creates for
+  itself, nothing else in your Dropbox. This is the groundwork for syncing
+  your graph through Dropbox — the sync itself lands in a follow-up.
 
 ## [0.3.7] — 2026-08-30
 
