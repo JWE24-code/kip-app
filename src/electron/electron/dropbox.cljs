@@ -315,13 +315,22 @@
                                            "Dropbox-API-Arg" (js/JSON.stringify #js {:path remote-path})}})]
     (read-download res)))
 
+(defn get-metadata
+  "Current { :rev :content_hash :size … } for a remote file, or nil if it's gone."
+  [remote-path]
+  (-> (rpc "files/get_metadata" {:path remote-path})
+      (p/catch (fn [e] (if (re-find #"not_found" (str (aget e "dropbox"))) nil (throw e))))))
+
 (defn upload
-  "PUT bytes to `remote-path`. `mode` is :add or a rev string (update). Resolves
-   the new metadata { :rev :size :content_hash … }."
+  "PUT bytes to `remote-path`. `mode` is :add, :overwrite, or a rev string
+   (update). Resolves the new metadata { :rev :size :content_hash … }."
   [remote-path ^js buffer mode]
   (p/let [token (access-token)
           arg {:path remote-path
-               :mode (if (string? mode) {".tag" "update" :update mode} {".tag" "add"})
+               :mode (cond
+                       (string? mode) {".tag" "update" :update mode}
+                       (= mode :overwrite) {".tag" "overwrite"}
+                       :else {".tag" "add"})
                :autorename false
                :mute true}
           ^js res (js/fetch (str content-base "files/upload")
