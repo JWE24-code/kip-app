@@ -14,8 +14,15 @@
 
   Self-updates a NSIS install (Windows) or an AppImage (Linux) only — a
   portable tar.gz / folder unzip or a dev run has no updater, and
-  download-update! rejects with a 'grab it yourself' message."
-  (:require ["electron-updater" :refer [autoUpdater]]
+  download-update! rejects with a 'grab it yourself' message.
+
+  On Linux the AppImage install lands under a new versioned name
+  (AppImageUpdater.doInstall unlinks the old file first), so wire! also listens
+  for 'appimage-filename-updated' and repoints launcher symlinks that
+  referenced the old name (#98)."
+  (:require ["fs" :as fs]
+            ["path" :as node-path]
+            ["electron-updater" :refer [autoUpdater]]
             [clojure.string :as string]
             [electron.logger :as logger]
             [electron.utils :as utils]
@@ -36,6 +43,55 @@
   []
   (boolean (try (.isUpdaterActive autoUpdater)
                 (catch :default _ false))))
+
+(defn- replace-symlink!
+  "Point the symlink `link` at `target`, via a same-directory temp link renamed
+  over it — a crash mid-repoint then leaves the old link intact rather than no
+  launcher at all. Same style (absolute vs relative) as callers pass."
+  [link target]
+  (let [tmp (node-path/join (node-path/dirname link)
+                            (str "." (node-path/basename link) ".kip-relink"))]
+    (try (fs/unlinkSync tmp) (catch :default _))
+    (fs/symlinkSync target tmp)
+    (fs/renameSync tmp link)))
+
+(defn- repoint-launcher-symlinks!
+  "#98: the AppImage install unlinks the old versioned file and moves the new
+  build next to it under a fresh versioned name, so launcher symlinks set up
+  against the old name (~/Applications/Kip.AppImage -> Kip-<v>-x86_64.AppImage,
+  which Kip.desktop execs) are left dangling on every update. Retarget every
+  symlink in the same directory that resolved to `old-file`, keeping each
+  link's absolute/relative style."
+  [old-file new-file]
+  (let [dir (node-path/dirname old-file)
+        names (try (seq (fs/readdirSync dir)) (catch :default _))]
+    (doseq [name names
+            :let [link (node-path/join dir name)]
+            :when (not= link new-file)
+            :let [target (try (fs/readlinkSync link) (catch :default _))]
+            :when (and target (= (node-path/resolve dir target) old-file))]
+      (let [new-target (if (node-path/isAbsolute target)
+                         new-file
+                         (node-path/relative dir new-file))]
+        (try
+          (replace-symlink! link new-target)
+          (debug "repointed launcher symlink" link "->" new-target)
+          (catch :default e
+            (logger/warn "[updater]" "couldn't repoint launcher symlink" link
+                         "-" (or (.-message e) e))))))))
+
+(defn- fix-launcher-symlinks!
+  "Handler for 'appimage-filename-updated', which doInstall emits right after
+  the rename. The old path is still in APPIMAGE at that point — doInstall
+  doesn't touch the env var. AppImage-only; no-op elsewhere."
+  [new-file]
+  (when-let [old-file (.-APPIMAGE js/process.env)]
+    (when new-file
+      (try
+        (repoint-launcher-symlinks! old-file new-file)
+        (catch :default e
+          (logger/warn "[updater]" "launcher symlink repoint failed:"
+                       (or (.-message e) e)))))))
 
 (defn wire!
   "Idempotent. Configure electron-updater and forward its events to `win`:
@@ -65,7 +121,8 @@
              (utils/send-to-renderer win "auto-updater-downloaded"
                                      #js {:name    (.-version info)
                                           :version (.-version info)
-                                          :notes   (.-releaseNotes info)}))))))
+                                          :notes   (.-releaseNotes info)})))
+      (.on "appimage-filename-updated" fix-launcher-symlinks!))))
 
 (defn download-update!
   "Check the feed, then download. Progress + completion arrive as the events
