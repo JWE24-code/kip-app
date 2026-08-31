@@ -3,7 +3,7 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
-## [Unreleased]
+## [0.4.3] — 2026-08-31
 
 - **Peck searches the web when your notes come up short** — ask a question
   your nest doesn't cover and Kip no longer just shrugs: it runs a web search
