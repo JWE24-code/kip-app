@@ -3,6 +3,15 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [Unreleased]
+
+- **Peck searches the web when your notes come up short** — ask a question
+  your nest doesn't cover and Kip no longer just shrugs: it runs a web search
+  and answers from that, offering the results as a source you can hatch. Uses
+  the built-in web search (DuckDuckGo, no key needed); it stays out of the way
+  on a regenerate and when a skill already searched. Turn off web search in
+  Settings → Skills to keep it strictly notes-only.
+
 ## [0.4.2] — 2026-08-31
 
 - **The answer streams in** — a Peck answer now appears word by word as the
