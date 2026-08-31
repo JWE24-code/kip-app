@@ -3,7 +3,7 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
-## [Unreleased]
+## [0.4.2] — 2026-08-31
 
 - **The answer streams in** — a Peck answer now appears word by word as the
   model writes it, instead of after a wait then all at once. Works on the
