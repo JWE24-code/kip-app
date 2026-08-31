@@ -3,7 +3,7 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
-## [Unreleased]
+## [0.4.1] — 2026-08-31
 
 - **Fixed: Dropbox sync failed on any file with an accent, em dash or other
   non-ASCII character in its name** — "Sync this graph" aborted partway
