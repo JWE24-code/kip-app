@@ -3,6 +3,16 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [Unreleased]
+
+- **Fixed: Dropbox sync failed on any file with an accent, em dash or other
+  non-ASCII character in its name** — "Sync this graph" aborted partway
+  through with *"Cannot convert argument to a ByteString"* and rolled itself
+  back. The file's path went into a Dropbox request header unescaped, and
+  HTTP headers can't carry those characters. They're now escaped as the
+  Dropbox API expects, so a note titled *"Weekly review — 2026"* (or in any
+  non-Latin script) syncs fine.
+
 ## [0.4.0] — 2026-08-31
 
 - **Subscribe to a calendar** — the Reminders panel gains a *Calendar feeds*

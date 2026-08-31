@@ -282,6 +282,18 @@
       (aset "status" status)
       (aset "dropbox" (or detail body)))))
 
+(defn- api-arg
+  "JSON-encode `x` for the `Dropbox-API-Arg` HTTP header, escaping every
+   non-ASCII character as \\uXXXX. An HTTP header value must be a ByteString
+   (latin1) — `fetch` throws \"Cannot convert argument to a ByteString\" the
+   moment a file name carries an em dash, accented letter, CJK, … Dropbox
+   specifies this escaping for the header (the JSON body form doesn't need it)."
+  [x]
+  (.replace (js/JSON.stringify x)
+            (js/RegExp. "[\\u007f-\\uffff]" "g")
+            (fn [c]
+              (str "\\u" (.slice (str "000" (.toString (.charCodeAt c 0) 16)) -4)))))
+
 (defn rpc
   "POST {api-base}<endpoint> with a JSON body, JSON back. `arg` is a CLJS map."
   [endpoint arg]
@@ -312,7 +324,7 @@
           res (js/fetch (str content-base "files/download")
                         #js {:method "POST"
                              :headers #js {"Authorization" (str "Bearer " token)
-                                           "Dropbox-API-Arg" (js/JSON.stringify #js {:path remote-path})}})]
+                                           "Dropbox-API-Arg" (api-arg #js {:path remote-path})}})]
     (read-download res)))
 
 (defn get-metadata
@@ -337,7 +349,7 @@
                             #js {:method "POST"
                                  :headers #js {"Authorization" (str "Bearer " token)
                                                "Content-Type" "application/octet-stream"
-                                               "Dropbox-API-Arg" (js/JSON.stringify (bean/->js arg))}
+                                               "Dropbox-API-Arg" (api-arg (bean/->js arg))}
                                  :body buffer})
           text (.text res)]
     (if (.-ok res)
