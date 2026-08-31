@@ -24,6 +24,7 @@
   (eggs/, nest/, clucks/, .roost/) inside the open graph — see
   scripts/lib/paths.js."
   (:require ["child_process" :as child-process]
+            ["crypto" :as crypto]
             ["fs" :as fs]
             ["path" :as node-path]
             ["electron" :refer [app dialog shell]]
@@ -225,10 +226,19 @@
        (catch :default _ (resolve* nil))))))
 
 (def ^:private egg-extensions
-  "Text formats Hatch can read — a source dropped onto the app must be one of
-  these. PDF/Word would need an extraction step the retrieval layer doesn't
-  have yet."
+  "Text formats Hatch reads as-is — a source dropped onto the app is either one
+  of these or an Office/PDF file (office-extensions), converted to Markdown
+  first (add-office-source!)."
   #{".md" ".markdown" ".mdown" ".txt" ".text" ".org"})
+
+(def ^:private office-extensions
+  "Document formats scripts/office-extract.js converts to Markdown."
+  #{".docx" ".xlsx" ".xls" ".xlsm" ".csv" ".tsv" ".pptx" ".pdf"})
+
+(def ^:private legacy-office-hints
+  "Formats we don't convert → the modern one to re-save as."
+  {".doc" ".docx" ".ppt" ".pptx" ".odt" ".docx" ".odp" ".pptx"
+   ".ods" ".xlsx" ".rtf" ".docx" ".pages" ".docx" ".key" ".pptx" ".numbers" ".xlsx"})
 
 (defn- unique-egg-path
   "eggs/<filename>, or eggs/<stem> (2)<ext>, (3)<ext>… when the name is taken."
@@ -283,31 +293,120 @@
          (log-error (str "add-egg! " filename ": " (.-message e)))
          (resolve* #js {:ok false :reason (.-message e)}))))))
 
+;; --- Office / PDF drop-ins (kip-app#91) ------------------------------------
+;; A .docx/.xlsx/.pptx/.pdf can't be hatched as text. scripts/office-extract.js
+;; converts it to compact Markdown; the .md goes into eggs/ as the source, and
+;; the untouched original is kept in the app's userData (NOT the graph — so it
+;; doesn't sync or clutter eggs/).
+
+(defn- originals-dir
+  "userData/kip-source-originals/<graph-hash>/ — where a converted file's
+  original is parked. Per-graph so two graphs' \"report.docx\" don't collide."
+  [vault-root]
+  (let [h (-> (crypto/createHash "sha1") (.update (str vault-root)) (.digest "hex") (subs 0 12))]
+    (.join node-path (.getPath app "userData") "kip-source-originals" h)))
+
+(defn- unique-path
+  "`dir/filename`, or `dir/<stem> (2)<ext>`, … when the name is taken."
+  [dir filename]
+  (let [ext  (.extname node-path filename)
+        stem (subs filename 0 (- (count filename) (count ext)))]
+    (loop [n 1]
+      (let [full (.join node-path dir (if (= n 1) filename (str stem " (" n ")" ext)))]
+        (if (fs/existsSync full) (recur (inc n)) full)))))
+
+(defn- convert-kept-original!
+  "Given an original file already parked at `orig-abs`, convert it to Markdown
+  in <graph>/eggs/ via office-extract.js. Resolves a CLJS map:
+    {:ok true :name <name.md> :kind <fmt> :warnings [...]}
+    {:ok false :reason <message> :name <original>}"
+  [vault-root orig-abs]
+  (let [eggs-dir (.join node-path vault-root "eggs")
+        base     (.basename node-path orig-abs)
+        ext      (.extname node-path base)
+        md-out   (unique-path eggs-dir (str (subs base 0 (- (count base) (count ext))) ".md"))]
+    (fs/mkdirSync eggs-dir #js {:recursive true})
+    (-> (run-node-script! (script "office-extract.js") vault-root [orig-abs md-out "--json"])
+        (p/then (fn [r]
+                  (let [r (js->clj r :keywordize-keys true)]
+                    (if (:ok r)
+                      {:ok true :name (.basename node-path md-out) :kind (:kind r)
+                       :warnings (vec (or (:warnings r) []))}
+                      (do (log-error (str "office-extract " base ": " (:error r)))
+                          (try (fs/rmSync orig-abs #js {:force true}) (catch :default _ nil))
+                          {:ok false :reason (or (:error r) "conversion failed") :name base})))))
+        (p/catch (fn [e]
+                   (log-error (str "office-extract " base ": " e))
+                   (try (fs/rmSync orig-abs #js {:force true}) (catch :default _ nil))
+                   {:ok false :reason (str e) :name base})))))
+
+(defn add-office-source!
+  "Decode `base64` (a dropped .docx/.xlsx/.pptx/.pdf), park the original under
+  userData, and convert it to a Markdown Hatch source in <graph>/eggs/.
+  Resolves:
+    {:ok true :name <name.md> :kind <fmt> :warnings [...]}
+    {:ok false :reason \"no-graph\" | \"unsupported\" | <message> [:ext :hint]}"
+  [vault-root filename base64]
+  (p/create
+   (fn [resolve* _reject]
+     (try
+       (let [ext (string/lower-case (or (.extname node-path filename) ""))]
+         (cond
+           (or (string/blank? vault-root) (string/blank? filename) (not (coop-dir? vault-root)))
+           (resolve* #js {:ok false :reason "no-graph"})
+
+           (not (contains? office-extensions ext))
+           (resolve* #js {:ok false :reason "unsupported" :ext ext
+                          :hint (get legacy-office-hints ext)})
+
+           :else
+           (let [odir (originals-dir vault-root)]
+             (fs/mkdirSync odir #js {:recursive true})
+             (let [orig (unique-path odir (.basename node-path filename))]
+               (fs/writeFileSync orig (js/Buffer.from base64 "base64"))
+               (-> (convert-kept-original! vault-root orig)
+                   (p/then #(resolve* (clj->js %))))))))
+       (catch :default e
+         (log-error (str "add-office-source! " filename ": " (.-message e)))
+         (resolve* #js {:ok false :reason (.-message e)}))))))
+
 (defn pick-and-add-eggs!
-  "Open a native file picker (Markdown / text, multi-select) and copy the
-  chosen files into <graph>/eggs/. Resolves
+  "Open a native file picker (Markdown / text / Office / PDF, multi-select) and
+  add the chosen files to <graph>/eggs/ — text as-is, Office/PDF converted to
+  Markdown. Resolves
   {:canceled bool :added [names] :duplicates [names] :rejected [names]}."
   [vault-root]
   (p/let [^js res (.showOpenDialog dialog
                                    #js {:title "Add sources to your coop"
                                         :properties #js ["openFile" "multiSelections"]
-                                        :filters #js [#js {:name "Markdown / text"
-                                                           :extensions #js ["md" "markdown" "mdown" "txt" "text" "org"]}]})
-          paths (or (some-> res .-filePaths array-seq) [])]
-    (if (or (string/blank? vault-root) (empty? paths))
+                                        :filters #js [#js {:name "Documents & text"
+                                                           :extensions #js ["md" "markdown" "mdown" "txt" "text" "org"
+                                                                            "docx" "xlsx" "xls" "xlsm" "csv" "tsv" "pptx" "pdf"]}]})
+          paths (or (some-> res .-filePaths array-seq) [])
+          results (if (or (string/blank? vault-root) (empty? paths))
+                    []
+                    (let [eggs-dir (.join node-path vault-root "eggs")]
+                      (p/all
+                       (mapv (fn [path]
+                               (let [ext (string/lower-case (.extname node-path path))]
+                                 (try
+                                   (if (contains? office-extensions ext)
+                                     (let [odir (originals-dir vault-root)]
+                                       (fs/mkdirSync odir #js {:recursive true})
+                                       (let [orig (unique-path odir (.basename node-path path))]
+                                         (fs/copyFileSync path orig)
+                                         (convert-kept-original! vault-root orig)))
+                                     (write-egg-content eggs-dir (.basename node-path path)
+                                                        (fs/readFileSync path "utf8")))
+                                   (catch :default e
+                                     {:ok false :reason (.-message e) :name (.basename node-path path)}))))
+                             paths))))]
+    (if (empty? paths)
       #js {:canceled true :added #js [] :duplicates #js [] :rejected #js []}
-      (let [eggs-dir (.join node-path vault-root "eggs")
-            results  (mapv (fn [path]
-                             (try
-                               (write-egg-content eggs-dir (.basename node-path path)
-                                                  (fs/readFileSync path "utf8"))
-                               (catch :default e
-                                 {:ok false :reason (.-message e) :name (.basename node-path path)})))
-                           paths)]
-        (clj->js {:canceled   false
-                  :added      (->> results (filter #(and (:ok %) (not (:duplicate %)))) (mapv :name))
-                  :duplicates (->> results (filter :duplicate) (mapv :name))
-                  :rejected   (->> results (remove :ok) (mapv #(or (:name %) "a file")))})))))
+      (clj->js {:canceled   false
+                :added      (->> results (filter #(and (:ok %) (not (:duplicate %)))) (mapv :name))
+                :duplicates (->> results (filter :duplicate) (mapv :name))
+                :rejected   (->> results (remove :ok) (mapv #(or (:name %) "a file")))}))))
 
 (defn- count-files
   "Count of files under `dir` (recursively) matching `pred` (a fn of the

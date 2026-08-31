@@ -3,6 +3,19 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [Unreleased]
+
+- **Drop in Word, Excel, PowerPoint and PDF files** — the Peck and Hatch
+  views now take `.docx`, `.xlsx` / `.xls` / `.csv`, `.pptx` and `.pdf`
+  alongside Markdown and text. Kip converts each to a compact Markdown
+  version on the way in — Word keeps its headings and lists, a spreadsheet
+  becomes a table per sheet, a deck becomes its slide text and notes, a PDF
+  its text — so Hatch reads a few kilobytes of prose instead of choking on
+  megabytes of binary, and the LLM bill for hatching a document drops
+  accordingly. The original file is kept aside (outside your graph, so it
+  doesn't sync or clutter `eggs/`). Old `.doc` / `.ppt` and OpenDocument
+  files ask you to re-save as the modern format.
+
 ## [0.4.1] — 2026-08-31
 
 - **Fixed: Dropbox sync failed on any file with an accent, em dash or other

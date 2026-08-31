@@ -54,7 +54,7 @@
                        (str (string/join ", " duplicates) " already in your coop.") :info true))
                     (when (seq rejected)
                       (notification/show!
-                       (str "Skipped " (count rejected) " file(s) — Kip reads Markdown and text only.")
+                       (str "Skipped " (count rejected) " file(s) — Kip takes Markdown / text and Office / PDF (.docx, .xlsx, .pptx, .pdf).")
                        :warning true))
                     (when (or (seq added) (seq duplicates))
                       (coop/refresh-counts!)

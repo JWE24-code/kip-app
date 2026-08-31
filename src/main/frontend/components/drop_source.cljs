@@ -1,9 +1,10 @@
 (ns frontend.components.drop-source
-  "Drag a Markdown / text file onto the Peck view or the Hatch panel and it
-  lands in <graph>/eggs/ as a Hatch source — no need to leave the app and use
-  the OS file manager. `drop-zone` wraps its children: an overlay shows while a
-  file is dragged over, a notification reports the result on drop. PDF/Word are
-  rejected with a note (the retrieval layer can't read them yet)."
+  "Drag a Markdown / text / Office / PDF file onto the Peck view or the Hatch
+  panel and it lands in <graph>/eggs/ as a Hatch source — no need to leave the
+  app and use the OS file manager. A .docx / .xlsx / .pptx / .pdf is converted
+  to Markdown on the way in (scripts/office-extract.js). `drop-zone` wraps its
+  children: an overlay shows while a file is dragged over, a notification
+  reports the result on drop."
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.ipc :as ipc]
@@ -16,6 +17,10 @@
             [rum.core :as rum]))
 
 (def ^:private accepted-exts #{"md" "markdown" "mdown" "txt" "text" "org"})
+(def ^:private office-exts #{"docx" "xlsx" "xls" "xlsm" "csv" "tsv" "pptx" "pdf"})
+(def ^:private legacy-hints
+  {"doc" ".docx" "ppt" ".pptx" "odt" ".docx" "odp" ".pptx" "ods" ".xlsx"
+   "rtf" ".docx" "pages" ".docx" "key" ".pptx" "numbers" ".xlsx"})
 
 (defn- vault-root [] (config/get-repo-dir (state/get-current-repo)))
 
@@ -30,27 +35,71 @@
 (defn- files-seq [^js e]
   (some-> e .-dataTransfer .-files js/Array.from seq))
 
-(defn- notify-added! [name]
-  (notification/show!
-   [:div.text-sm
-    [:div "Added " [:b name] " to " (glossary/term "eggs/") "."]
-    [:button.text-xs.underline.opacity-80.hover:opacity-100.mt-1
-     {:on-click (fn []
-                  (notification/clear-all!)
-                  (state/pub-event! [:modal/show-hatch]))}
-     "Hatch it now →"]]
-   :success false))
+(defn- notify-added!
+  ([name] (notify-added! name nil))
+  ([name detail]
+   (notification/show!
+    [:div.text-sm
+     [:div "Added " [:b name] " to " (glossary/term "eggs/") "."]
+     (when detail [:div.text-xs.opacity-70.mt-0.5 detail])
+     [:button.text-xs.underline.opacity-80.hover:opacity-100.mt-1
+      {:on-click (fn []
+                   (notification/clear-all!)
+                   (state/pub-event! [:modal/show-hatch]))}
+      "Hatch it now →"]]
+    :success false)))
+
+(defn- array-buffer->base64 [buf]
+  (let [bytes (js/Uint8Array. buf)
+        len   (.-length bytes)
+        step  8192]
+    (loop [i 0 acc ""]
+      (if (< i len)
+        (recur (+ i step)
+               (str acc (.apply js/String.fromCharCode nil
+                                (.subarray bytes i (min len (+ i step))))))
+        (js/btoa acc)))))
+
+(defn- add-office! [^js file on-added]
+  (let [name (.-name file)]
+    (-> (.arrayBuffer file)
+        (p/then (fn [buf]
+                  (ipc/ipc "wikiAddOfficeSource" (vault-root) name (array-buffer->base64 buf))))
+        (p/then (fn [r]
+                  (let [{:keys [ok name kind warnings reason]} (bean/->clj r)]
+                    (if ok
+                      (do (notify-added! name (str "converted from " (or kind "document")
+                                                   (when (seq warnings) (str " — " (first warnings)))))
+                          (coop/refresh-counts!)
+                          (when on-added (on-added name)))
+                      (notification/show!
+                       (str "Couldn't convert " (.-name file) ": " reason) :error true)))))
+        (p/catch (fn [err]
+                   (notification/show! (str "Couldn't read " name ": " err) :error true))))))
 
 (defn- add-one! [^js file on-added]
   (let [name (.-name file)
         ext  (ext-of name)]
-    (if-not (contains? accepted-exts ext)
+    (cond
+      (contains? office-exts ext)
+      (add-office! file on-added)
+
+      (contains? legacy-hints ext)
       (notification/show!
        [:div.text-sm
-        "Can't add " [:b name] " — Kip reads Markdown and text files ("
-        [:code ".md"] ", " [:code ".txt"] ", " [:code ".org"] "). "
-        "PDF and Word support is on the way."]
+        "Can't add " [:b name] " — re-save it as a " [:code (get legacy-hints ext)]
+        " and drop that instead."]
        :warning true)
+
+      (not (contains? accepted-exts ext))
+      (notification/show!
+       [:div.text-sm
+        "Can't add " [:b name] " — Kip takes Markdown / text ("
+        [:code ".md"] ", " [:code ".txt"] ", " [:code ".org"] ") and Office / PDF ("
+        [:code ".docx"] ", " [:code ".xlsx"] ", " [:code ".pptx"] ", " [:code ".pdf"] ")."]
+       :warning true)
+
+      :else
       (-> (.text file)
           (p/then #(ipc/ipc "wikiAddEgg" (vault-root) name %))
           (p/then (fn [r]

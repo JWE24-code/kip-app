@@ -582,6 +582,9 @@
 (defmethod handle :wikiAddEgg [_ [_ vault-root filename content]]
   (wiki/add-egg! vault-root filename content))
 
+(defmethod handle :wikiAddOfficeSource [_ [_ vault-root filename base64]]
+  (wiki/add-office-source! vault-root filename base64))
+
 (defmethod handle :wikiPickEggs [_ [_ vault-root]]
   (wiki/pick-and-add-eggs! vault-root))
 
