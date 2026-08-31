@@ -32,7 +32,10 @@
             [rum.core :as rum]
             [logseq.shui.ui :as ui]))
 
-(def ^:private poll-ms 1000)
+;; Polled while a turn runs: the ⚙ activity feed and the streaming answer
+;; (`:partialAnswer` in peck-progress.json) both come from here. 200ms so the
+;; streamed text reads as live — it's a small local-file read over IPC.
+(def ^:private poll-ms 200)
 
 ;; Session-only conversation, lifted out of component-local state so a
 ;; mod+shift+p toggle (which unmounts peck-main) and the sidebar/main split
@@ -310,6 +313,14 @@
                            :background "transparent" :border "none" :padding "3px 0" :margin-top "6px"}}
           "↻ Regenerate"])]])])
 
+(rum/defc streaming-message
+  "The answer as it streams in, from peck-progress.json's :partialAnswer. Same
+  markdown renderer as a settled :assistant turn, with a trailing caret; it's
+  swapped for the real message once the turn resolves."
+  [text]
+  [:div.prose.prose-sm.max-w-none
+   (block/inline-text citation-config :markdown (str text " ▍"))])
+
 (defn- first-run-showing? [llm counts]
   (and (not (first-run/dismissed?))
        (not (first-run/ready? llm counts (first-run/steps llm counts)))))
@@ -374,7 +385,8 @@
         input (rum/react *input)
         submit! #(send-message! *loading? *progress *poll-id)
         regen! (fn [msg] (regenerate! msg *loading? *progress *poll-id))
-        activity (get @*progress :activity)]
+        activity (get @*progress :activity)
+        partial-answer (get @*progress :partialAnswer)]
     [:div.flex.flex-col {:style {:height "100%"}}
      [:div.flex-1.overflow-y-auto.px-2.pt-2
       (llm-banner/provider-banner)
@@ -385,7 +397,9 @@
                      messages))
       (when @*loading?
         [:div.py-2
-         [:div.text-sm.opacity-60 "Thinking…"]
+         (if (string/blank? partial-answer)
+           [:div.text-sm.opacity-60 "Thinking…"]
+           (streaming-message partial-answer))
          (when (seq activity)
            (telemetry/activity-feed (reverse activity)))])]
      [:div.flex.gap-2.p-2.border-t.border-gray-06
