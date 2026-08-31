@@ -3,6 +3,13 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [Unreleased]
+
+- **New app icon** — Kip now wears its own egg mark (the same one on the
+  website and the PWA) in the taskbar, the installer, the window and the
+  favicon, instead of the leftover Logseq logo. `resources/icons/gen-kip-icons.mjs`
+  regenerates the set from the mark.
+
 ## [0.4.2] — 2026-08-31
 
 - **The answer streams in** — a Peck answer now appears word by word as the
