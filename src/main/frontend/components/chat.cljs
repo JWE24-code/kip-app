@@ -321,6 +321,17 @@
   [:div.prose.prose-sm.max-w-none
    (block/inline-text citation-config :markdown (str text " ▍"))])
 
+;; --- autoscroll: keep the newest turn / streaming text in view, but let the
+;; user scroll up to read back without being yanked to the bottom.
+(def ^:private stick-threshold-px 48)
+
+(defn- near-bottom? [^js el]
+  (and el (< (- (.-scrollHeight el) (.-scrollTop el) (.-clientHeight el))
+             stick-threshold-px)))
+
+(defn- scroll-to-bottom! [^js el]
+  (when el (set! (.-scrollTop el) (.-scrollHeight el))))
+
 (defn- first-run-showing? [llm counts]
   (and (not (first-run/dismissed?))
        (not (first-run/ready? llm counts (first-run/steps llm counts)))))
@@ -370,8 +381,19 @@
   (rum/local false ::loading?)
   (rum/local nil ::progress)
   (rum/local nil ::poll-id)
+  (rum/local nil ::scroll-el)
+  (rum/local true ::stick?)
   {:will-mount (fn [state]
                  (llm-handler/refresh!)
+                 state)
+   :did-mount (fn [state]
+                (scroll-to-bottom! @(::scroll-el state))
+                state)
+   ;; every append and every streaming tick re-renders this component; stay
+   ;; pinned to the bottom unless the user has scrolled up to read back.
+   :did-update (fn [state]
+                 (when @(::stick? state)
+                   (scroll-to-bottom! @(::scroll-el state)))
                  state)
    :will-unmount (fn [state]
                    (stop-poll! (get state ::progress) (get state ::poll-id))
@@ -380,15 +402,22 @@
   (let [*loading? (get state ::loading?)
         *progress (get state ::progress)
         *poll-id (get state ::poll-id)
+        *scroll-el (get state ::scroll-el)
+        *stick? (get state ::stick?)
         _ (state/sub :kip/llm)  ; so the 👍/👎 widget appears/hides live on a provider switch
         messages (rum/react *messages)
         input (rum/react *input)
-        submit! #(send-message! *loading? *progress *poll-id)
-        regen! (fn [msg] (regenerate! msg *loading? *progress *poll-id))
+        ;; a fresh send or a regenerate is the user acting — always ride it down
+        submit! #(do (reset! *stick? true) (send-message! *loading? *progress *poll-id))
+        regen! (fn [msg] (reset! *stick? true) (regenerate! msg *loading? *progress *poll-id))
         activity (get @*progress :activity)
         partial-answer (get @*progress :partialAnswer)]
     [:div.flex.flex-col {:style {:height "100%"}}
      [:div.flex-1.overflow-y-auto.px-2.pt-2
+      {:ref #(when (and % (not @*scroll-el)) (reset! *scroll-el %))
+       :on-scroll (fn [_]
+                    (let [nb (boolean (near-bottom? @*scroll-el))]
+                      (when (not= nb @*stick?) (reset! *stick? nb))))}
       (llm-banner/provider-banner)
       (if (empty? messages)
         (empty-state)
