@@ -5,6 +5,19 @@ changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGE
 
 ## [Unreleased]
 
+- **Peck searches the web when your notes come up short** — ask a question
+  your nest doesn't cover and Kip no longer just shrugs: it runs a web search
+  and answers from that, offering the results as a source you can hatch. Uses
+  the built-in web search (DuckDuckGo, no key needed); it stays out of the way
+  on a regenerate and when a skill already searched. Turn off web search in
+  Settings → Skills to keep it strictly notes-only.
+- **Peck follows the answer as it arrives** — the conversation now scrolls
+  itself to the newest turn and rides the streaming text down, and lets go
+  the moment you scroll up to read back.
+- **Peck understands other languages** — a question typed without a "?" in
+  German, French, Spanish, Dutch, Italian or Portuguese is now answered
+  instead of being filed into your nest as a fact. Non-English page titles
+  also keep their letters ("Größe" was becoming "gr-e").
 - **New app icon** — Kip now wears its own egg mark (the same one on the
   website and the PWA) in the taskbar, the installer, the window and the
   favicon, instead of the leftover Logseq logo. `resources/icons/gen-kip-icons.mjs`
