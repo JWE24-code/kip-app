@@ -3,6 +3,16 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [Unreleased]
+
+- **The answer streams in** — a Peck answer now appears word by word as the
+  model writes it, instead of after a wait then all at once. Works on the
+  Anthropic and OpenAI-compatible (OpenAI / DeepSeek / local / custom)
+  providers; the managed Kip backend still returns the answer in one piece
+  for now. Pairs with the retrieval-layer speedups (skip the key-term pass
+  when the direct search is already confident; skip the skills tool-loop
+  when the nest can answer on its own).
+
 ## [0.4.0] — 2026-08-31
 
 - **Subscribe to a calendar** — the Reminders panel gains a *Calendar feeds*
