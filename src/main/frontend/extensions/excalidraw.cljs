@@ -555,8 +555,11 @@
        [:div.ls-center (ui/loading)]
 
        (false? loading?)
-       (when data
-         [:<>
+       ;; render even when data is nil (a just-created whiteboard whose file
+       ;; write hasn't landed yet, or a missing/blank file) — excalidraw treats
+       ;; :initial-data nil as an empty scene, and the editor stays usable
+       ;; instead of showing a blank div.
+       [:<>
           ;; headless: hide excalidraw's chrome — our toolbar replaces it. On
           ;; narrow containers excalidraw renders its mobile variant, which uses
           ;; its own classes (App-toolbar/App-bottom-bar) outside the
@@ -610,7 +613,7 @@
                                         (gobj/get app-state "editingElement")
                                         (gobj/get app-state "editingGroupId")
                                         (gobj/get app-state "editingLinearElement"))
-                            ((::save! state) elements app-state files)))})]])
+                            ((::save! state) elements app-state files)))})]]
 
        :else
        [:div.ls-center (ui/loading)])]))

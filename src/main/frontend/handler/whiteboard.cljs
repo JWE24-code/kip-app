@@ -90,5 +90,8 @@
    (create-new-whiteboard-and-redirect! (str (d/squuid))))
   ([name]
    (when-not config/publishing?
-     (create-new-whiteboard-page! name)
-     (route-handler/redirect-to-whiteboard! name {:new-whiteboard? true}))))
+     ;; wait for the .excalidraw file to be written before routing, so the
+     ;; editor's initial load reads real content instead of racing the write.
+     (p/do!
+      (create-new-whiteboard-page! name)
+      (route-handler/redirect-to-whiteboard! name {:new-whiteboard? true})))))
