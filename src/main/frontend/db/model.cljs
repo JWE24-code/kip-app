@@ -1622,11 +1622,7 @@ independent of format as format specific heading characters are stripped"
   (cond
     (string? page)
     (let [page (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page)])]
-      (or
-       (= "whiteboard" (:block/type page))
-       (when-let [file (:block/file page)]
-         (when-let [path (:file/path (db-utils/entity (:db/id file)))]
-           (gp-config/whiteboard? path)))))
+      (= "whiteboard" (:block/type page)))
 
     (seq page)
     (= "whiteboard" (:block/type page))
@@ -1705,11 +1701,3 @@ independent of format as format specific heading characters are stripped"
       [?page :block/name]
       [?page :block/type "whiteboard"]]
     (conn/get-db repo)))
-
-(defn get-whiteboard-id-nonces
-  [repo page-name]
-  (->> (get-page-blocks-no-cache repo page-name {:keys [:block/uuid :block/properties]})
-       (filter #(:logseq.tldraw.shape (:block/properties %)))
-       (map (fn [{:block/keys [uuid properties]}]
-              {:id (str uuid)
-               :nonce (get-in properties [:logseq.tldraw.shape :nonce])}))))

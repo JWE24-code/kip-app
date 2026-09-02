@@ -315,10 +315,6 @@
 
      :handbook/route-chan                   (async/chan (async/sliding-buffer 1))
 
-     :whiteboard/onboarding-whiteboard?     (or (storage/get :ls-onboarding-whiteboard?) false)
-     :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)
-     :whiteboard/last-persisted-at          {}
-     :whiteboard/pending-tx-data            {}
      :history/page-only-mode?               false
      ;; db tx-id -> editor cursor
      :history/tx->editor-cursor             {}})))
@@ -1682,17 +1678,6 @@ Similar to re-frame subscriptions"
     (when-let [hooks (sub :plugin/installed-hooks)]
       (contains? hooks (str "hook:editor:slot_" type)))))
 
-(defn active-tldraw-app
-  []
-  (when-let [tldraw-el (.querySelector js/document.body ".logseq-tldraw[data-tlapp]")]
-    (gobj/get js/window.tlapps (.. tldraw-el -dataset -tlapp))))
-
-(defn tldraw-editing-logseq-block?
-  []
-  (when-let [app (active-tldraw-app)]
-    (and (= 1 (.. app -selectedShapesArray -length))
-         (= (.. app -editingShape) (.. app -selectedShapesArray (at 0))))))
-
 (defn set-graph-syncing?
   [value]
   (set-state! :graph/syncing? value))
@@ -1747,14 +1732,6 @@ Similar to re-frame subscriptions"
      ;; not in editing mode
      ;; Is this a good idea to put whiteboard check here?
      (not (get-edit-input-id)))))
-
-(defn whiteboard-idle?
-  "Check if whiteboard is idle."
-  [repo]
-  (when repo
-    (>= (- (util/time-ms) (or (get-in @state [:whiteboard/last-persisted-at repo])
-                              (- (util/time-ms) 10000)))
-        3000)))
 
 (defn set-nfs-refreshing!
   [value]
@@ -1871,14 +1848,9 @@ Similar to re-frame subscriptions"
   [args]
   (set-state! :editor/args args))
 
-(defn editing-whiteboard-portal?
-  []
-  (and (active-tldraw-app) (tldraw-editing-logseq-block?)))
-
 (defn block-component-editing?
   []
-  (and (:block/component-editing-mode? @state)
-       (not (editing-whiteboard-portal?))))
+  (:block/component-editing-mode? @state))
 
 (defn set-block-component-editing-mode!
   [value]
@@ -2191,15 +2163,6 @@ Similar to re-frame subscriptions"
          (= #{:repo :old-path :new-path} (set (keys v)))]}
   (async/offer! (get-file-rename-event-chan) v))
 
-(defn set-onboarding-whiteboard!
-  [v]
-  (set-state! :whiteboard/onboarding-whiteboard? v)
-  (storage/set :ls-onboarding-whiteboard? v))
-
-(defn get-onboarding-whiteboard?
-  []
-  (get-in @state [:whiteboard/onboarding-whiteboard?]))
-
 (defn get-local-container-root-url
   []
   (when (mobile-util/native-ios?)
@@ -2226,15 +2189,6 @@ Similar to re-frame subscriptions"
       (when (apply not= (map :identity [inflated-file (get-current-pdf)]))
         (set-state! :pdf/current nil)
         (js/setTimeout #(settle-file!) 16)))))
-
-(defn focus-whiteboard-shape
-  ([shape-id]
-   (focus-whiteboard-shape (active-tldraw-app) shape-id))
-  ([tln shape-id]
-   (when-let [^js api (gobj/get tln "api")]
-     (when (and shape-id (parse-uuid shape-id))
-       (. api selectShapes shape-id)
-       (. api zoomToSelection)))))
 
 (defn set-user-info!
   [info]

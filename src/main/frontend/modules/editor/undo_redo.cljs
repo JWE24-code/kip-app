@@ -204,8 +204,6 @@
                                 tx-meta
                                 (select-keys e [:pagination-blocks-range])))
       (set-editor-content!)
-      (when (:whiteboard/transact? tx-meta)
-        (state/pub-event! [:whiteboard/undo e]))
       (assoc e
              :txs-op new-txs
              :editor-cursor editor-cursor))))
@@ -223,8 +221,6 @@
                                 tx-meta
                                 (select-keys e [:pagination-blocks-range])))
       (set-editor-content!)
-      (when (:whiteboard/transact? tx-meta)
-        (state/pub-event! [:whiteboard/redo e]))
       (assoc e
              :txs-op new-txs
              :editor-cursor editor-cursor))))

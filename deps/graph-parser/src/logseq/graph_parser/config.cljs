@@ -44,11 +44,11 @@
   [path]
   (string/starts-with? path default-draw-directory))
 
-(defn whiteboard?
+(defn whiteboard-excalidraw?
   [path]
   (and path
        (string/includes? path (str default-whiteboards-directory "/"))
-       (string/ends-with? path ".edn")))
+       (string/ends-with? path ".excalidraw")))
 
 ;; TODO: rename
 (defonce mldoc-support-formats

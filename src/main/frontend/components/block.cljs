@@ -70,7 +70,6 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]
-            [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [logseq.shui.core :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
@@ -523,11 +522,6 @@
          (:db/id page-entity)
          :page))
 
-      (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
-      (whiteboard-handler/add-new-block-portal-shape!
-       page-name
-       (whiteboard-handler/closest-shape (.-target e)))
-
       whiteboard-page?
       (route-handler/redirect-to-whiteboard! page-name)
 
@@ -665,9 +659,9 @@
                                       (let [page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])]
                                         (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name {:redirect? false})
                                         (let [page-blocks-cp (state/get-page-blocks-cp)
-                                              tldraw-preview (state/get-component :whiteboard/tldraw-preview)]
+                                              whiteboard-preview (state/get-component :whiteboard/preview)]
                                           (if whiteboard-page?
-                                            (tldraw-preview page-name)
+                                            (whiteboard-preview page-name)
                                             (page-blocks-cp (state/get-current-repo) page {:sidebar? sidebar? :preview? true}))))])))]
 
     (if (or (not manual?) open?)
@@ -842,7 +836,7 @@
             (not= (util/page-name-sanity-lc (get config :id ""))
                   page-name))
        (if whiteboard-page?
-         ((state/get-component :whiteboard/tldraw-preview) page-name)
+         ((state/get-component :whiteboard/preview) page-name)
          (let [page (model/get-page page-name)
                blocks (db/get-paginated-blocks (state/get-current-repo) (:db/id page))]
            (blocks-container blocks (assoc config
@@ -916,11 +910,6 @@
                      (state/get-current-repo)
                      (:db/id block)
                      :block-ref)
-
-                    (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
-                    (whiteboard-handler/add-new-block-portal-shape!
-                     (:block/uuid block)
-                     (whiteboard-handler/closest-shape (.-target e)))
 
                     :else
                     (match [block-type (util/electron?)]
@@ -1694,9 +1683,6 @@
 (defn- bullet-on-click
   [e block uuid]
   (cond
-    (gp-whiteboard/shape-block? block)
-    (route-handler/redirect-to-whiteboard! (get-in block [:block/page :block/name]) {:block-id uuid})
-
     (gobj/get e "shiftKey")
     (do
       (state/sidebar-add-block!
@@ -1704,12 +1690,6 @@
        (:db/id block)
        :block)
       (util/stop e))
-
-    (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
-    (do (whiteboard-handler/add-new-block-portal-shape!
-         uuid
-         (whiteboard-handler/closest-shape (.-target e)))
-        (util/stop e))
 
     :else
     (when uuid (route-handler/redirect-to-page! uuid))))
@@ -2855,7 +2835,6 @@
         embed? (:embed? config)
         page-embed? (:page-embed? config)
         reference? (:reference? config)
-        whiteboard-block? (gp-whiteboard/shape-block? block)
         block-id (str "ls-block-" blocks-container-id "-" uuid)
         has-child? (first (:block/_parent (db/entity (:db/id block))))
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to)
@@ -2928,12 +2907,10 @@
       (when @*show-left-menu?
         (block-left-menu config block))
 
-      (if whiteboard-block?
-        (block-reference {} (str uuid) nil)
-        ;; Not embed self
-        (let [hide-block-refs-count? (and (:embed? config)
-                                          (= (:block/uuid block) (:embed-id config)))]
-          (block-content-or-editor config block edit-input-id block-id edit? hide-block-refs-count? selected?)))
+      ;; Not embed self
+      (let [hide-block-refs-count? (and (:embed? config)
+                                        (= (:block/uuid block) (:embed-id config)))]
+        (block-content-or-editor config block edit-input-id block-id edit? hide-block-refs-count? selected?))
 
       (when @*show-right-menu?
         (block-right-menu config block edit?))]
@@ -3166,8 +3143,7 @@
     (let [{:keys [lines language]} options
           attr (when language
                  {:data-lang language})
-          code (apply str lines)
-          [inside-portal? set-inside-portal?] (rum/use-state nil)]
+          code (apply str lines)]
       (cond
         html-export?
         (highlight/html-export attr code)
@@ -3175,12 +3151,8 @@
         :else
         (let [language (if (contains? #{"edn" "clj" "cljc" "cljs" "clojurescript"} language) "clojure" language)]
           [:div.ui-fenced-code-editor
-           {:ref (fn [el]
-                   (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))}
            (cond
-             (nil? inside-portal?) nil
-
-             (or (:slide? config) inside-portal?)
+             (:slide? config)
              (highlight/highlight (str (random-uuid))
                                   {:class     (str "language-" language)
                                    :data-lang language}

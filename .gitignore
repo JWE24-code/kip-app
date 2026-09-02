@@ -17,7 +17,6 @@ node_modules/
 static/**
 !static/yarn.lock
 out/
-dist/
 tmp
 cljs-test-runner-out
 
@@ -69,3 +68,6 @@ deps/shui/.lsp
 deps/shui/.lsp-cache
 deps/shui/.clj-kondo
 deps/shui/shui-graph/logseq/bak
+
+# Claude Code local settings
+.claude/settings.local.json

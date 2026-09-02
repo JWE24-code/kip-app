@@ -16,58 +16,28 @@
 
 (def batch-write-interval 1000)
 
-(def whiteboard-blocks-pull-keys-with-persisted-ids
-  '[:block/properties
-    :block/uuid
-    :block/content
-    :block/format
-    :block/created-at
-    :block/updated-at
-    :block/collapsed?
-    {:block/page      [:block/uuid]}
-    {:block/left      [:block/uuid]}
-    {:block/parent    [:block/uuid]}])
-
-(defn- cleanup-whiteboard-block
-  [block]
-  (if (get-in block [:block/properties :ls-type] false)
-    (dissoc block
-            :db/id
-            :block/uuid ;; shape block uuid is read from properties
-            :block/collapsed?
-            :block/content
-            :block/format
-            :block/left
-            :block/page
-            :block/parent) ;; these are auto-generated for whiteboard shapes
-    (dissoc block :db/id :block/page)))
-
-
 (defn do-write-file!
   [repo page-db-id outliner-op]
   (let [page-block (db/pull repo '[*] page-db-id)
         page-db-id (:db/id page-block)
-        whiteboard? (= "whiteboard" (:block/type page-block))
         blocks-count (model/get-page-blocks-count repo page-db-id)
         blocks-just-deleted? (and (zero? blocks-count)
                                   (contains? #{:delete-blocks :move-blocks} outliner-op))]
-    (when (or (>= blocks-count 1) blocks-just-deleted?)
-      (if (or (and (> blocks-count 500)
-                   (not (state/input-idle? repo {:diff 3000}))) ;; long page
-              ;; when this whiteboard page is just being updated
-              (and whiteboard? (not (state/whiteboard-idle? repo))))
-        (async/put! (state/get-file-write-chan) [repo page-db-id outliner-op (tc/to-long (t/now))])
-        (let [pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])
-              blocks (model/get-page-blocks-no-cache repo (:block/name page-block) {:pull-keys pull-keys})
-              blocks (if whiteboard? (map cleanup-whiteboard-block blocks) blocks)]
-          (when-not (and (= 1 (count blocks))
-                         (string/blank? (:block/content (first blocks)))
-                         (nil? (:block/file page-block)))
-            (let [tree-or-blocks (if whiteboard? blocks
-                                     (tree/blocks->vec-tree repo blocks (:block/name page-block)))]
-              (if page-block
-                (file/save-tree! page-block tree-or-blocks blocks-just-deleted?)
-                (js/console.error (str "can't find page id: " page-db-id))))))))))
+    ;; whiteboard pages own their files (written by the whiteboard editor);
+    ;; the outliner must never write them, or it would clobber the drawing
+    (when-not (= "whiteboard" (:block/type page-block))
+      (when (or (>= blocks-count 1) blocks-just-deleted?)
+        (if (and (> blocks-count 500)
+                 (not (state/input-idle? repo {:diff 3000}))) ;; long page
+          (async/put! (state/get-file-write-chan) [repo page-db-id outliner-op (tc/to-long (t/now))])
+          (let [blocks (model/get-page-blocks-no-cache repo (:block/name page-block))]
+            (when-not (and (= 1 (count blocks))
+                           (string/blank? (:block/content (first blocks)))
+                           (nil? (:block/file page-block)))
+              (let [tree-or-blocks (tree/blocks->vec-tree repo blocks (:block/name page-block))]
+                (if page-block
+                  (file/save-tree! page-block tree-or-blocks blocks-just-deleted?)
+                  (js/console.error (str "can't find page id: " page-db-id)))))))))))
 
 (defn write-files!
   [pages]

@@ -201,7 +201,7 @@
       (async/go-loop [tx []]
         (if-let [item (async/<! chan)]
           (let [[idx file] item
-                whiteboard? (gp-config/whiteboard? (:file/path file))
+                whiteboard? (gp-config/whiteboard-excalidraw? (:file/path file))
                 yield-for-ui? (or (not large-graph?)
                                   (zero? (rem idx 10))
                                   (<= (- total idx) 10)

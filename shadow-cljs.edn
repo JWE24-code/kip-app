@@ -5,7 +5,7 @@
  ;; "." for /static
  :dev-http {3001 ["static" "."]}
 
- :js-options {:js-package-dirs ["node_modules" "tldraw/apps"]}
+ :js-options {:js-package-dirs ["node_modules"]}
 
  :builds
  {:app {:target :browser
@@ -22,9 +22,6 @@
                    :depends-on #{:main}}
                   :excalidraw
                   {:entries [frontend.extensions.excalidraw]
-                   :depends-on #{:main}}
-                  :tldraw
-                  {:entries [frontend.extensions.tldraw]
                    :depends-on #{:main}}}
 
         :output-dir "./static/js"
@@ -104,9 +101,6 @@
                           :depends-on #{:main}}
                          :excalidraw
                          {:entries [frontend.extensions.excalidraw]
-                          :depends-on #{:main}}
-                         :tldraw
-                         {:entries [frontend.extensions.tldraw]
                           :depends-on #{:main}}}
 
                :output-dir "./static/js/publishing"

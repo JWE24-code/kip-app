@@ -89,15 +89,11 @@
 (defn redirect-to-whiteboard!
   ([name]
    (redirect-to-whiteboard! name nil))
-  ([name {:keys [block-id new-whiteboard? click-from-recent?]}]
-   ;; Always skip onboarding when loading an existing whiteboard
-   (when-not new-whiteboard? (state/set-onboarding-whiteboard! true))
+  ([name {:keys [block-id click-from-recent?]}]
    (recent-handler/add-page-to-recent! (state/get-current-repo) name click-from-recent?)
-   (if (= name (state/get-current-whiteboard))
-     (state/focus-whiteboard-shape block-id)
-     (redirect! {:to :whiteboard
-                 :path-params {:name (str name)}
-                 :query-params (merge {:block-id block-id})}))))
+   (redirect! {:to :whiteboard
+               :path-params {:name (str name)}
+               :query-params (merge {:block-id block-id})})))
 
 (defn get-title
   [name path-params]

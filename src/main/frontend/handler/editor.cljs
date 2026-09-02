@@ -3192,11 +3192,6 @@
       :else
       (js/document.execCommand "copy"))))
 
-(defn whiteboard?
-  []
-  (and (state/whiteboard-route?)
-       (.closest (.-activeElement js/document) ".logseq-tldraw")))
-
 (defn shortcut-cut
   "shortcut cut action:
   * when in selection mode, cut selected blocks
@@ -3211,9 +3206,6 @@
                            (gdom/getElement (state/get-edit-input-id))))
     (keydown-backspace-handler true e)
 
-    (whiteboard?)
-    (.cut (state/active-tldraw-app))
-
     :else
     nil))
 
@@ -3222,9 +3214,6 @@
   (cond
     (state/selection?)
     (shortcut-delete-selection e)
-
-    (and (whiteboard?) (not (state/editing?)))
-    (.deleteShapes (.-api ^js (state/active-tldraw-app)))
 
     :else
     nil))
@@ -3526,9 +3515,6 @@
             doall)
        (and clear-selection? (clear-selection!)))
 
-     (whiteboard?)
-     (.setCollapsed (.-api ^js (state/active-tldraw-app)) false)
-
      :else
      ;; expand one level
      (let [blocks-with-level (all-blocks-with-level {})
@@ -3562,9 +3548,6 @@
                        collapse-block!)))
             doall)
        (and clear-selection? (clear-selection!)))
-
-     (whiteboard?)
-     (.setCollapsed (.-api ^js (state/active-tldraw-app)) true)
 
      :else
      ;; collapse by one level from outside
@@ -3609,11 +3592,6 @@
                (doseq [block-id block-ids] (expand-block! block-id))
                (doseq [block-id block-ids] (collapse-block! block-id))))))
        (and clear-selection? (clear-selection!)))
-
-     (whiteboard?)
-      ;; TODO: Looks like detecting the whiteboard selection's collapse state will take more work.
-      ;; Leaving unimplemented for now.
-     nil
 
      :else
       ;; If no block is being edited or selected, the "toggle" action doesn't make sense,
@@ -3712,11 +3690,6 @@
       ;; Focusing other input element, e.g. when editing page title.
       (contains? #{"INPUT" "TEXTAREA"} target-element)
       nil
-
-      (whiteboard?)
-      (do
-        (util/stop e)
-        (.selectAll (.-api ^js (state/active-tldraw-app))))
 
       :else
       (do

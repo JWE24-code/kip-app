@@ -75,7 +75,7 @@
                 ;; logseq files aren't saved under :block/file
                 (remove #(string/includes? % (str graph-dir "/" gp-config/app-name "/")))
                 ;; edn files being listed in docs by parse-graph aren't graph files
-                (remove #(and (not (gp-config/whiteboard? %)) (string/ends-with? % ".edn")))
+                (remove #(string/ends-with? % ".edn"))
                 set)
            (->> (d/q '[:find (pull ?b [* {:block/file [:file/path]}])
                        :where [?b :block/name] [?b :block/file]]

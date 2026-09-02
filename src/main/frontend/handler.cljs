@@ -187,7 +187,7 @@
   []
   (state/set-page-blocks-cp! page/page-blocks-cp)
   (state/set-component! :block/linked-references reference/block-linked-references)
-  (state/set-component! :whiteboard/tldraw-preview whiteboard/tldraw-preview)
+  (state/set-component! :whiteboard/preview whiteboard/whiteboard-preview)
   (state/set-component! :block/single-block block/single-block-cp)
   (state/set-component! :block/container block/block-container)
   (state/set-component! :block/embed block/block-embed)
