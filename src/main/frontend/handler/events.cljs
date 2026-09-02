@@ -70,7 +70,6 @@
             [frontend.util.persist-var :as persist-var]
             [goog.dom :as gdom]
             [logseq.db.schema :as db-schema]
-            [logseq.graph-parser.config :as gp-config]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -762,13 +761,6 @@
           (route-handler/redirect! {:to :page
                                     :path-params {:name (:block/name page-entity)}}))))))
 
-(defmethod handle :whiteboard/onboarding [[_ opts]]
-  (state/set-modal!
-   (fn [close-fn] (whiteboard/onboarding-welcome close-fn))
-   (merge {:close-btn?      false
-           :center?         true
-           :close-backdrop? false} opts)))
-
 (defmethod handle :file-sync/onboarding-tip [[_ type opts]]
   (let [type (keyword type)]
     (state/set-modal!
@@ -792,10 +784,6 @@
   (mobile/init!)
   (when-not (mobile-util/native-ios?)
     (state/pub-event! [:graph/ready (state/get-current-repo)])))
-
-(defmethod handle :whiteboard-link [[_ shapes]]
-  (route-handler/go-to-search! :whiteboard/link)
-  (state/set-state! :whiteboard/linked-shapes shapes))
 
 (defmethod handle :whiteboard-go-to-link [[_ link]]
   (route-handler/redirect! {:to :whiteboard
@@ -887,38 +875,6 @@
   (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]
     (ui-handler/re-render-root!)))
 
-(rum/defcs file-id-conflict-item <
-  (rum/local false ::resolved?)
-  [state repo file data]
-  (let [resolved? (::resolved? state)
-        id (last (:assertion data))]
-    [:li {:key file}
-     [:div
-      [:a {:on-click #(js/window.apis.openPath file)} file]
-      (if @resolved?
-        [:div.flex.flex-row.items-center
-         (ui/icon "circle-check" {:style {:font-size 20}})
-         [:div.ml-1 "Resolved"]]
-        [:div
-         [:p
-          (str "It seems that another whiteboard file already has the ID \"" id
-               "\". You can fix it by changing the ID in this file with another UUID.")]
-         [:p
-          "Or, let me"
-          (ui/button "Fix"
-                     :on-click (fn []
-                                 (let [dir (config/get-repo-dir repo)]
-                                   (p/let [content (fs/read-file dir file)]
-                                     (let [new-content (string/replace content (str id) (str (random-uuid)))]
-                                       (p/let [_ (fs/write-plain-text-file! repo
-                                                                            dir
-                                                                            file
-                                                                            new-content
-                                                                            {})]
-                                         (reset! resolved? true))))))
-                     :class "inline mx-1")
-          "it."]])]]))
-
 (defmethod handle :file/parse-and-load-error [[_ repo parse-errors]]
   (state/pub-event! [:notification/show
                      {:content
@@ -927,31 +883,18 @@
                        [:ol.my-2
                         (for [[file error] parse-errors]
                           (let [data (ex-data error)]
-                            (cond
-                              (and (gp-config/whiteboard? file)
-                                   (= :transact/upsert (:error data))
-                                   (uuid? (last (:assertion data))))
-                              (rum/with-key (file-id-conflict-item repo file data) file)
-
-                              :else
-                              (do
-                                (state/pub-event! [:capture-error {:error error
-                                                                   :payload {:type :file/parse-and-load-error}}])
-                                [:li.my-1 {:key file}
-                                 [:a {:on-click #(js/window.apis.openPath file)} file]
-                                 [:p (.-message error)]]))))]
+                            (do
+                              (state/pub-event! [:capture-error {:error error
+                                                                 :payload {:type :file/parse-and-load-error}}])
+                              [:li.my-1 {:key file}
+                               [:a {:on-click #(js/window.apis.openPath file)} file]
+                               [:p (.-message error)]])))]
                        [:p "Don't forget to re-index your graph when all the conflicts are resolved."]]
                       :status :error}]))
 
 (defmethod handle :run/cli-command [[_ command content]]
   (when (and command (not (string/blank? content)))
     (shell-handler/run-cli-command-wrapper! command content)))
-
-(defmethod handle :whiteboard/undo [[_ e]]
-  (whiteboard-handler/undo! e))
-
-(defmethod handle :whiteboard/redo [[_ e]]
-  (whiteboard-handler/redo! e))
 
 (defmethod handle :editor/quick-capture [[_ args]]
   (quick-capture/quick-capture args))

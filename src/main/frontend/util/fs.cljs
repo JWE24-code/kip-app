@@ -42,7 +42,7 @@
           (not (string/blank? (node-path/extname path)))
           (not
            (some #(string/ends-with? path %)
-                 [".md" ".markdown" ".org" ".js" ".edn" ".css"]))))))))
+                 [".md" ".markdown" ".org" ".js" ".edn" ".css" ".excalidraw"]))))))))
 
 (defn read-graphs-txid-info
   [root]

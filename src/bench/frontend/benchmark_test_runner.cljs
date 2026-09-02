@@ -8,7 +8,12 @@
             [fipp.edn :as fipp]))
 
 (def onboarding
-  (edn/read-string (slurped "resources/whiteboard/onboarding.edn")))
+  ;; representative edn document used by the pprint benchmarks
+  (edn/read-string
+   "{:pages ({:block/format :markdown, :block/original-name \"Foo\",
+              :block/properties {:title \"my page\"}}),
+     :blocks ({:block/content \"foo content a\", :block/format :markdown},
+              {:block/content \"foo content b\", :block/format :markdown})}"))
 
 (deftest test-pp-str
   (testing "pp-str benchmark"

@@ -3,6 +3,15 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [Unreleased]
+
+- **App updates no longer break the desktop launcher** — if you launch Kip
+  through a stable symlink (`~/Applications/Kip.AppImage` pointing at the
+  versioned file, the way `Kip.desktop` does), every self-update used to leave
+  that symlink aimed at the deleted old version, so the launcher silently did
+  nothing until you relaunched by hand. The updater now repoints any symlink
+  that referenced the old file the moment it installs the new one (kip-app#98).
+
 ## [0.4.3] — 2026-08-31
 
 - **Peck searches the web when your notes come up short** — ask a question

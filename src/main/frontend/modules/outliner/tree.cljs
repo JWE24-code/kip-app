@@ -2,8 +2,7 @@
   (:require [frontend.db :as db]
             [frontend.db.model :as model]
             [clojure.string :as string]
-            [frontend.state :as state]
-            [logseq.graph-parser.whiteboard :as gp-whiteboard]))
+            [frontend.state :as state]))
 
 (defprotocol INode
   (-get-id [this])
@@ -29,8 +28,7 @@
   [blocks root]
   (let [id-map (fn [m] {:db/id (:db/id m)})
         root (id-map root)
-        blocks (remove gp-whiteboard/shape-block? blocks)
-        parent-blocks (group-by :block/parent blocks) ;; exclude whiteboard shapes
+        parent-blocks (group-by :block/parent blocks)
         sort-fn (fn [parent]
                   (db/sort-by-left (get parent-blocks parent) parent))
         block-children (fn block-children [parent level]

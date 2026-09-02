@@ -24,6 +24,20 @@
 
     (docs-graph-helper/docs-graph-assertions db graph-dir (map :file/path files))))
 
+(deftest parse-files-indexes-excalidraw-whiteboards
+  (testing "whiteboards/*.excalidraw files become :block/type \"whiteboard\" pages"
+    (load-test-files [{:file/path "whiteboards/my board.excalidraw"
+                       :file/content "{\"type\":\"excalidraw\",\"version\":2,\"elements\":[],\"appState\":{}}"}
+                      {:file/path "whiteboards/6a97c89b-788e-4d4f-b20c-39225f1d3501.excalidraw"
+                       :file/content "{\"type\":\"excalidraw\",\"version\":2,\"elements\":[],\"appState\":{}}"}
+                      {:file/path "pages/regular.md"
+                       :file/content "- just a note"}])
+    ;; get-all-whiteboards' query already constrains :block/type "whiteboard"
+    (let [whiteboards (model/get-all-whiteboards test-helper/test-db)]
+      (is (= #{"my board" "6a97c89b-788e-4d4f-b20c-39225f1d3501"}
+             (set (map :block/original-name whiteboards)))
+          "both .excalidraw files produced a whiteboard page, with file-stem casing"))))
+
 (deftest parse-files-and-load-to-db-with-block-refs-on-reload
   (testing "Refs to blocks on a page are retained if that page is reloaded"
     (let [test-uuid "16c90195-6a03-4b3f-839d-095a496d9acd"

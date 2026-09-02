@@ -2,7 +2,6 @@
   "Whiteboard related components"
   (:require [cljs.math :as math]
             [frontend.components.content :as content]
-            [frontend.components.onboarding.quick-tour :as quick-tour]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
             [frontend.context.i18n :refer [t]]
@@ -11,7 +10,6 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
-            [frontend.modules.shortcut.core :as shortcut]
             [frontend.rum :refer [use-bounding-client-rect use-breakpoint
                                   use-click-outside]]
             [frontend.state :as state]
@@ -22,32 +20,41 @@
             [shadow.loader :as loader]
             [frontend.config :as config]))
 
-(defonce tldraw-loaded? (atom false))
-(rum/defc tldraw-app < rum/reactive
+(defonce excalidraw-loaded? (atom false))
+(rum/defc whiteboard-editor-app < rum/reactive
   {:init (fn [state]
-           (p/let [_ (loader/load :tldraw)]
-             (reset! tldraw-loaded? true))
+           (p/let [_ (loader/load :excalidraw)]
+             (reset! excalidraw-loaded? true))
            state)}
-  [name shape-id]
-  (let [loaded? (rum/react tldraw-loaded?)
-        draw-component (when loaded?
-                         (resolve 'frontend.extensions.tldraw/tldraw-app))]
-    (when draw-component
-      (draw-component name shape-id))))
+  [name block-id]
+  (let [loaded? (rum/react excalidraw-loaded?)
+        editor (when loaded?
+                 (resolve 'frontend.extensions.excalidraw/whiteboard-editor))]
+    (when editor
+      (editor name block-id))))
 
 ;; TODO: make it reactive to db changes
-(rum/defc tldraw-preview < rum/reactive
+(rum/defcs whiteboard-preview < rum/reactive
   {:init (fn [state]
-           (p/let [_ (loader/load :tldraw)]
-             (reset! tldraw-loaded? true))
-           state)}
-  [page-name]
-  (let [loaded? (rum/react tldraw-loaded?)
-        tldr (whiteboard-handler/page-name->tldr! page-name)
-        generate-preview (when loaded?
-                           (resolve 'frontend.extensions.tldraw/generate-preview))]
-    (when generate-preview
-      (generate-preview tldr))))
+           (let [[page-name] (:rum/args state)
+                 *html (atom nil)]
+             (p/let [_ (loader/load :excalidraw)
+                     preview-svg (resolve 'frontend.extensions.excalidraw/whiteboard-preview-svg)
+                     file-path (whiteboard-handler/whiteboard-file-path page-name)
+                     html (and preview-svg file-path (preview-svg file-path))]
+               (when html (reset! *html html)))
+             (assoc state ::html *html)))}
+  [state _page-name]
+  (let [html (rum/react (get state ::html))]
+    [:div.whiteboard-preview
+     {:style {:width "100%" :height "100%"
+              :display "flex" :align-items "center" :justify-content "center"
+              :overflow "hidden"}
+      :ref (fn [el]
+             (when (and el html)
+               (aset el "innerHTML" html)
+               (when-let [svg (.-firstElementChild el)]
+                 (.setAttribute svg "style" "max-width:100%;height:auto;"))))}]))
 
 ;; TODO: use frontend.ui instead of making a new one
 (rum/defc dropdown
@@ -179,7 +186,7 @@
      (references-count page-name nil {:hover? true})]]
    (ui/lazy-visible
     (fn [] [:div.p-4.h-64.flex.justify-center
-            (tldraw-preview page-name)]))])
+            (whiteboard-preview page-name)]))])
 
 (rum/defc dashboard-create-card
   []
@@ -286,33 +293,10 @@
                                                              (t :whiteboard/reference-count refs-count)
                                                              (ui/icon (if open? "references-hide" "references-show")
                                                                       {:extension? true})])})]]
-     (tldraw-app page-name block-id)]))
+     (whiteboard-editor-app page-name block-id)]))
 
-(rum/defc whiteboard-route <
-(shortcut/mixin :shortcut.handler/whiteboard false)
+(rum/defc whiteboard-route
   [route-match]
   (let [name (get-in route-match [:parameters :path :name])
         {:keys [block-id]} (get-in route-match [:parameters :query])]
     (whiteboard-page name block-id)))
-
-(rum/defc onboarding-welcome
-  [close-fn]
-  [:div.cp__whiteboard-welcome
-   [:span.head-bg]
-
-   [:h1.text-2xl.font-bold.flex-col.sm:flex-row
-    (t :on-boarding/welcome-whiteboard-modal-title)]
-
-   [:p (t :on-boarding/welcome-whiteboard-modal-description)]
-
-   [:div.pt-6.flex.justify-center.space-x-2.sm:justify-end
-    (ui/button (t :on-boarding/welcome-whiteboard-modal-skip)
-               :on-click close-fn
-               :background "gray"
-               :class "opacity-60 skip-welcome")
-    (ui/button (t :on-boarding/welcome-whiteboard-modal-start)
-               :on-click (fn []
-                           (quick-tour/ready
-                            (fn []
-                              (quick-tour/start-whiteboard)
-                              (close-fn)))))]])

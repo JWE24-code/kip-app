@@ -8,7 +8,7 @@
 
 (def ^:api js-files
   "js files from publishing release build"
-  ["main.js" "code-editor.js" "excalidraw.js" "tldraw.js"])
+  ["main.js" "code-editor.js" "excalidraw.js"])
 
 (def ^:api static-dirs
   "dirs under static dir to copy over"

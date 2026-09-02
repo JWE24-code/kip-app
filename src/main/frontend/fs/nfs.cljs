@@ -257,6 +257,7 @@
                  (not (:skip-compare? opts))
                  (not contents-matched?)
                  (not (contains? #{"excalidraw" "edn" "css"} ext))
+                 (not (config/whiteboard-managed-path? path))
                  (not (string/includes? path "/.recycle/")))
               (state/pub-event! [:file/not-matched-from-disk path disk-content content])
               (p/let [_ (verify-permission repo true)

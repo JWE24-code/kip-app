@@ -332,6 +332,15 @@
   []
   (or (state/get-whiteboards-directory) default-whiteboards-directory))
 
+(defn whiteboard-managed-path?
+  "True for files inside the whiteboards directory. These are written by the
+   whiteboard editor itself (the .excalidraw source of truth and its exported
+   svg); the fs layer must never prompt the file-conflict diff for them, as
+   e.g. the dropbox sync can transiently land older bytes on the disk."
+  [rpath]
+  (and (string? rpath)
+       (string/starts-with? rpath (str (get-whiteboards-directory) "/"))))
+
 (defonce local-repo "local")
 
 (defn demo-graph?

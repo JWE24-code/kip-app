@@ -100,8 +100,8 @@ Options available:
                (cond (contains? gp-config/mldoc-support-formats format)
                  (extract/extract file content extract-options')
 
-                 (gp-config/whiteboard? file)
-                 (extract/extract-whiteboard-edn file content extract-options')
+                 (gp-config/whiteboard-excalidraw? file)
+                 (extract/extract-whiteboard-json file content extract-options')
 
                  :else nil)
                block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
@@ -137,7 +137,9 @@ Options available:
   (let [support-files (filter
                        (fn [file]
                          (let [format (gp-util/get-format (:file/path file))]
-                           (contains? (set/union #{:edn :css} gp-config/mldoc-support-formats) format)))
+                           ;; :excalidraw covers whiteboard files (whiteboards/*.excalidraw),
+                           ;; which extract-whiteboard-json turns into whiteboard pages
+                           (contains? (set/union #{:edn :css :excalidraw} gp-config/mldoc-support-formats) format)))
                        files)
         support-files (sort-by :file/path support-files)
         {journals true non-journals false} (group-by (fn [file] (string/includes? (:file/path file) "journals/")) support-files)

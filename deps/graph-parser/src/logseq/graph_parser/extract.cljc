@@ -15,8 +15,7 @@
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.config :as gp-config]
             #?(:org.babashka/nbb [logseq.graph-parser.log :as log]
-               :default [lambdaisland.glogi :as log])
-            [logseq.graph-parser.whiteboard :as gp-whiteboard]))
+               :default [lambdaisland.glogi :as log])))
 
 (defn- filepath->page-name
   [filepath]
@@ -245,39 +244,23 @@
          :blocks blocks
          :ast ast}))))
 
-(defn extract-whiteboard-edn
-  "Extracts whiteboard page from given edn file
-   Whiteboard page edn is a subset of page schema
-   - it will only contain a single page (for now). The page properties are stored under :logseq.tldraw.* properties and contain 'bindings' etc
-   - blocks will be adapted to tldraw shapes. All blocks's parent is the given page."
+(defn extract-whiteboard-json
+  "Extracts an excalidraw-based whiteboard page from the given json file.
+   The file itself is the source of truth for the drawing, so the content is
+   not parsed into blocks: the page name is derived from the file stem and the
+   page is only indexed so that it shows up in search/backlinks."
   [file content {:keys [verbose] :or {verbose true}}]
   (let [_ (when verbose (println "Parsing start: " file))
-        {:keys [pages blocks]} (gp-util/safe-read-string content)
-        blocks (map
-                (fn [block]
-                  (-> block
-                      (gp-util/dissoc-in [:block/parent :block/name])
-                      (gp-util/dissoc-in [:block/left :block/name])))
-                blocks)
-        serialized-page (first pages)
-        ;; whiteboard edn file should normally have valid :block/original-name, :block/name, :block/uuid
-        page-name (-> (or (:block/name serialized-page)
-                          (filepath->page-name file))
-                      (gp-util/page-name-sanity-lc))
-        original-name (or (:block/original-name serialized-page)
-                          page-name)
-        page-block (merge {:block/name page-name
-                           :block/original-name original-name
-                           :block/type "whiteboard"
-                           :block/file {:file/path (gp-util/path-normalize file)}}
-                          serialized-page)
-        page-block (gp-whiteboard/migrate-page-block page-block)
-        blocks (->> blocks
-                    (map gp-whiteboard/migrate-shape-block)
-                    (map #(merge % (gp-whiteboard/with-whiteboard-block-props % page-name))))
+        original-name (filepath->page-name file)
+        page-name (gp-util/page-name-sanity-lc original-name)
+        page-block {:block/name page-name
+                    :block/original-name original-name
+                    :block/type "whiteboard"
+                    :block/file {:file/path (gp-util/path-normalize file)}}
         _ (when verbose (println "Parsing finished: " file))]
     {:pages (list page-block)
-     :blocks blocks}))
+     :blocks []}))
+
 
 (defn- with-block-uuid
   [pages]
