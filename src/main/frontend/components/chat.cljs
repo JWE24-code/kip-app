@@ -288,7 +288,8 @@
          [:span {:style {:color "#c0392b"}} (str "Couldn't file: " (:error s))]
          [:span
           (if (= (:action s) "update") "appended to " "filed as ")
-          (block/inline-text citation-config :markdown (str "[[" (:slug s) "]]") )]])
+          (block/inline-text citation-config :markdown (str "[[" (:slug s) "]]"))
+          (when (:path s) [:span {:style {:opacity 0.6}} (str "  ·  " (:path s))])]])
 
       (= s :saving)
       [:span {:style {:font-size "9px" :opacity 0.5 :margin-top "6px"}} "filing…"]
