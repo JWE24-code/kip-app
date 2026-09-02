@@ -560,60 +560,60 @@
        ;; :initial-data nil as an empty scene, and the editor stays usable
        ;; instead of showing a blank div.
        [:<>
-          ;; headless: hide excalidraw's chrome — our toolbar replaces it. On
-          ;; narrow containers excalidraw renders its mobile variant, which uses
-          ;; its own classes (App-toolbar/App-bottom-bar) outside the
-          ;; layer-ui__wrapper, so hide both families. The App-bottom-bar stays
-          ;; visible though: on selection it carries excalidraw's style panel
-          ;; (stroke, fill, opacity...); its main-menu button is removed.
-          [:style
-           ".whiteboard-editor .excalidraw .layer-ui__wrapper,"
-           ".whiteboard-editor .excalidraw .App-toolbar-container,"
-           ".whiteboard-editor .excalidraw .mobile-misc-tools-container,"
-           ".whiteboard-editor .excalidraw .dropdown-menu-button { display: none; }"]
-          (toolbar file-path)
-          (style-panel)
-          [:div.whiteboard-canvas
-           {:ref ref
-            :style {:position "absolute" :top 0 :right 0 :bottom 0 :left 0}
-            :on-mouse-down (fn [e]
-                             (when-let [^js canvas (.-firstChild (rum/deref ref))]
-                               (.focus canvas)))}
-           (excalidraw
-            {:initial-data data
-             :theme (excalidraw-theme (state/sub :ui/theme))
-             :zen-mode-enabled true ; hide the excalidraw chrome, we render our own toolbar
-             :grid-mode-enabled false
-             :view-mode-enabled false
-             :UIOptions (clj->js {:canvasActions
-                                  {:clearCanvas false
-                                   :export false
-                                   :load false
-                                   :saveToActiveFile false
-                                   :saveAsImage false
-                                   :toggleTheme false
-                                   :changeCanvasBackground false}})
-             ;; 0.16 exposes the imperative api via ref; the excalidrawAPI
-             ;; prop only exists from 0.17 on
-             :ref (fn [api]
-                    (when api
-                      (reset! *excalidraw-api api)
-                      (reset! *active-tool "selection")))
-             :on-change (fn [elements app-state files]
-                          (reset! *scene-elements elements)
-                          (when-let [type (some-> (gobj/get app-state "activeTool")
-                                                  (gobj/get "type"))]
-                            (reset! *active-tool type))
-                          (reset! *selection-styles
-                                  (compute-selection-styles
-                                   elements
-                                   (set (js/Object.keys (gobj/get app-state "selectedElementIds" #js {})))))
-                          (when-not (or (= "down" (gobj/get app-state "cursorButton"))
-                                        (gobj/get app-state "draggingElement")
-                                        (gobj/get app-state "editingElement")
-                                        (gobj/get app-state "editingGroupId")
-                                        (gobj/get app-state "editingLinearElement"))
-                            ((::save! state) elements app-state files)))})]]
+        ;; headless: hide excalidraw's chrome — our toolbar replaces it. On
+        ;; narrow containers excalidraw renders its mobile variant, which uses
+        ;; its own classes (App-toolbar/App-bottom-bar) outside the
+        ;; layer-ui__wrapper, so hide both families. The App-bottom-bar stays
+        ;; visible though: on selection it carries excalidraw's style panel
+        ;; (stroke, fill, opacity...); its main-menu button is removed.
+        [:style
+         ".whiteboard-editor .excalidraw .layer-ui__wrapper,"
+         ".whiteboard-editor .excalidraw .App-toolbar-container,"
+         ".whiteboard-editor .excalidraw .mobile-misc-tools-container,"
+         ".whiteboard-editor .excalidraw .dropdown-menu-button { display: none; }"]
+        (toolbar file-path)
+        (style-panel)
+        [:div.whiteboard-canvas
+         {:ref ref
+          :style {:position "absolute" :top 0 :right 0 :bottom 0 :left 0}
+          :on-mouse-down (fn [e]
+                           (when-let [^js canvas (.-firstChild (rum/deref ref))]
+                             (.focus canvas)))}
+         (excalidraw
+          {:initial-data data
+           :theme (excalidraw-theme (state/sub :ui/theme))
+           :zen-mode-enabled true ; hide the excalidraw chrome, we render our own toolbar
+           :grid-mode-enabled false
+           :view-mode-enabled false
+           :UIOptions (clj->js {:canvasActions
+                                {:clearCanvas false
+                                 :export false
+                                 :load false
+                                 :saveToActiveFile false
+                                 :saveAsImage false
+                                 :toggleTheme false
+                                 :changeCanvasBackground false}})
+           ;; 0.16 exposes the imperative api via ref; the excalidrawAPI
+           ;; prop only exists from 0.17 on
+           :ref (fn [api]
+                  (when api
+                    (reset! *excalidraw-api api)
+                    (reset! *active-tool "selection")))
+           :on-change (fn [elements app-state files]
+                        (reset! *scene-elements elements)
+                        (when-let [type (some-> (gobj/get app-state "activeTool")
+                                                (gobj/get "type"))]
+                          (reset! *active-tool type))
+                        (reset! *selection-styles
+                                (compute-selection-styles
+                                 elements
+                                 (set (js/Object.keys (gobj/get app-state "selectedElementIds" #js {})))))
+                        (when-not (or (= "down" (gobj/get app-state "cursorButton"))
+                                      (gobj/get app-state "draggingElement")
+                                      (gobj/get app-state "editingElement")
+                                      (gobj/get app-state "editingGroupId")
+                                      (gobj/get app-state "editingLinearElement"))
+                          ((::save! state) elements app-state files)))})]]
 
        :else
        [:div.ls-center (ui/loading)])]))
