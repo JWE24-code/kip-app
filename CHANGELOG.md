@@ -5,6 +5,14 @@ changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGE
 
 ## [Unreleased]
 
+## [0.4.4] — 2026-09-02
+
+- **Whiteboards now run on Excalidraw** — the tldraw-based whiteboard has been
+  replaced with an Excalidraw canvas. Whiteboards are stored as plain
+  `.excalidraw` files in `whiteboards/` (with a sibling `.svg` for previews and
+  embeds), so they open in any Excalidraw editor too. Existing whiteboards keep
+  working; the old tldraw toolchain and its bundled ~40k-line build are gone
+  (kip-app#102).
 - **App updates no longer break the desktop launcher** — if you launch Kip
   through a stable symlink (`~/Applications/Kip.AppImage` pointing at the
   versioned file, the way `Kip.desktop` does), every self-update used to leave
