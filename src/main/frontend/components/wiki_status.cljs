@@ -36,7 +36,12 @@
 
 (defn- fetch-pending! [*pending]
   (-> (ipc/ipc "wikiIngestPreview" (vault-root))
-      (p/then (fn [r] (reset! *pending (count (:pending (bean/->clj r))))))
+      (p/then (fn [r] (let [s (bean/->clj r)]
+                        ;; total vs changed kept apart (kip-app#113): an
+                        ;; "immutable" egg edited since its hatch is a
+                        ;; different signal from a fresh drop.
+                        (reset! *pending {:total (count (:pending s))
+                                          :changed (or (:changedCount s) 0)}))))
       (p/catch (fn [_] (reset! *pending nil)))))
 
 (defn- fetch-deep-last! [*deep-last]
@@ -121,6 +126,7 @@
                         (map #(str (:slug %) " — " (string/join ", " (:badTargets %))) (:brokenLinks report)))
         (groom-category "Dead-end pages" (:deadEnds report))])
      (groom-category "Orphan pages" (:orphans report))
+     (groom-category "Sources changed since hatch" (:changedSources report))
      (groom-category "Filesystem drift" drift-items)
      (groom-category "Near-duplicate slugs" duplicate-items)
      (groom-category "Possible contradictions" contradiction-items)
@@ -129,7 +135,8 @@
         (ui/button {:variant :outline :size :sm :on-click #(open-report! (:reportPath report))} "Open report file")])]))
 
 ;; The "Your coop" block at the top of Coop status — read-only counts + when
-;; things last ran. `summary` from wikiCoopSummary; `pending` a count or nil.
+;; things last ran. `summary` from wikiCoopSummary; `pending` a
+;; {:total n :changed n} map (or nil) — see fetch-pending!.
 (rum/defc coop-overview < rum/static
   [summary pending]
   (let [{:keys [eggs entities concepts sources lastHatchAt lastGroomAt]} summary
@@ -139,10 +146,13 @@
      [:div.text-sm.opacity-80.space-y-0.5
       [:div (str (or eggs 0) " source " (if (= 1 eggs) "file" "files") " in ")
        (glossary/term "eggs/")
-       (when (and pending (pos? pending))
+       (when (and pending (pos? (:total pending 0)))
          [:span " · "
           [:a.underline {:on-click #(state/pub-event! [:modal/show-hatch])}
-           (str pending " not yet hatched — hatch now")]])]
+           (str (:total pending) " not yet hatched"
+                (when (pos? (:changed pending 0))
+                  (str " (" (:changed pending) " edited since hatch)"))
+                " — hatch now")]])]
       [:div (str nest-total " ")
        (glossary/term "nest" "nest")
        (str " " (if (= 1 nest-total) "page" "pages"))

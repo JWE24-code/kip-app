@@ -407,10 +407,14 @@
           [:div.my-2
            (when-not started?
              [:div.text-sm.opacity-70.mb-2
-              (str (count (:pending preview)) " file(s) pending, ~" (:totalKb preview) " KB total.")
+              (str (count (:pending preview)) " file(s) pending"
+                   (when-let [changed (:changedCount preview)]
+                     (when (pos? changed) (str ", " changed " edited since hatch")))
+                   ", ~" (:totalKb preview) " KB total.")
               [:ul.list-disc.pl-5.mt-1 {:class "max-h-40 overflow-y-auto"}
-               (for [[i {:keys [source kind kb]}] (map-indexed vector (:pending preview))]
-                 [:li.text-xs.opacity-70 {:key i} (str "[" kind "] " source " (" kb " KB)")])]])
+               (for [[i {:keys [source kind kb status]}] (map-indexed vector (:pending preview))]
+                 [:li.text-xs.opacity-70 {:key i}
+                  (str "[" kind (when (= status "changed") " · edited since hatch") "] " source " (" kb " KB)")])]])
            (checkbox-row "Review each source's pages before writing" @*review? #(swap! *review? not))
            (checkbox-row "Record LLM activity (thinking + timings)" @*trace? #(swap! *trace? not))
            (checkbox-row "Classic mode — one LLM call per page (slower; for comparison)" @*classic? #(swap! *classic? not))

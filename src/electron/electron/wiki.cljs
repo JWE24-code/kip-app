@@ -161,7 +161,9 @@
 (defn hatch-preview!
   "What a 'Hatch sources' run would touch — new/changed files in eggs/,
   journals/, pages/, plus the oversized and empty ones it skips. No LLM
-  calls. Resolves to {:pending [...] :oversized [...] :empty [...] :totalKb n}."
+  calls. Resolves to {:pending [{:source :kind :kb :status}] :oversized [...]
+  :empty [...] :changedCount n :totalKb n} — status distinguishes a brand-new
+  source from one edited since its last hatch (kip-app#113)."
   [vault-root]
   (run-node-script! (script "hatch-all.js") vault-root ["--preview"]))
 
@@ -478,6 +480,20 @@
                        trace? (conj "--trace")
                        (not (string/blank? arena-compare-to)) (conj "--arena-compare-to" arena-compare-to)
                        (seq history) (conj "--history" (js/JSON.stringify (clj->js history)))))))
+
+(defn peck-file!
+  "Files a settled Peck answer back into the nest (kip-app#112) — the post-hoc
+  `--file-answer` entrypoint on chat.js, which calls fileAnswerToNest with
+  log:false: the turn's `peck` clucks row was already written at ask time.
+  `candidate-slugs` is what the turn returned (its citedSlugs/candidateSlugs
+  now cross the IPC boundary untouched); empty is fine. Resolves to
+  {:filed true :action :slug :path ...} — the resolvePage result."
+  [vault-root question answer candidate-slugs]
+  (run-node-script! (script "chat.js") vault-root
+                    ["--file-answer"
+                     (js/JSON.stringify #js {:question question
+                                             :answer answer
+                                             :candidateSlugs (clj->js (or candidate-slugs []))})]))
 
 (defn peck-progress!
   "Reads <coop>/.roost/peck-progress.json, written continuously by chat.js

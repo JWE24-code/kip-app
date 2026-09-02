@@ -65,7 +65,7 @@
    :pages pages})
 
 (defn- turn->message [result]
-  (let [{:keys [intent answer learned note pages steps callId arenaId webSource]} result]
+  (let [{:keys [intent answer learned note pages steps callId arenaId webSource citedSlugs candidateSlugs]} result]
     (cond
       (= intent "statement")
       (if learned
@@ -74,7 +74,11 @@
 
       answer
       {:role :assistant :text answer :steps steps :call-id callId :arena-id arenaId
-       :web-source webSource :answer? true}
+       :web-source webSource :answer? true
+       ;; kept on the message so "file into the nest" has its inputs
+       ;; (kip-app#112) — cited vs candidate is also the retrieval-breadth
+       ;; signal the evidence view (#117) will want.
+       :cited-slugs citedSlugs :candidate-slugs candidateSlugs}
 
       (= intent "reminder")
       {:role :assistant :text "Reminder noted — check the Reminders panel." :steps steps}
@@ -261,8 +265,45 @@
                          :border "none" :padding "3px 0"}}
         "↓ Save these web results as a source"])]))
 
+;; --- file the answer back into the nest (kip-app#112) — the vault-pattern
+;; move: a synthesis worth keeping becomes a page. Offered on settled answers
+;; that came from the nest (not web-backed, at least one candidate page).
+;; Files via chat.js --file-answer, which logs nothing: the turn's `peck`
+;; clucks row was written at ask time.
+(rum/defcs file-answer-widget < (rum/local nil ::st)
+  [state {:keys [q text candidate-slugs]}]
+  (let [*st (::st state)
+        file! (fn []
+                (reset! *st :saving)
+                (-> (ipc/ipc "wikiPeckFile" (vault-root) q text candidate-slugs)
+                    (p/then (fn [r] (reset! *st (bean/->clj r))))
+                    (p/catch (fn [e] (reset! *st {:error (str e)})))))
+        s @*st]
+    (cond
+      (map? s)
+      [:span {:style {:font-size "9px" :letter-spacing "0.1em"
+                      :font-family "ui-monospace, SFMono-Regular, Menlo, monospace"
+                      :opacity 0.6 :margin-top "6px"}}
+       (if (:error s)
+         [:span {:style {:color "#c0392b"}} (str "Couldn't file: " (:error s))]
+         [:span
+          (if (= (:action s) "update") "appended to " "filed as ")
+          (block/inline-text citation-config :markdown (str "[[" (:slug s) "]]") )]])
+
+      (= s :saving)
+      [:span {:style {:font-size "9px" :opacity 0.5 :margin-top "6px"}} "filing…"]
+
+      :else
+      [:button {:on-click file!
+                :title "Keep this answer as a nest page (concept, tagged from-peck)"
+                :style {:font-size "9px" :letter-spacing "0.1em" :text-transform "uppercase"
+                        :font-family "ui-monospace, SFMono-Regular, Menlo, monospace"
+                        :opacity 0.6 :cursor "pointer" :background "transparent"
+                        :border "none" :padding "3px 0" :margin-top "6px"}}
+       "⬇ File into the nest"])))
+
 (rum/defc message-cp
-  [{:keys [role text pages steps call-id arena-id web-source answer? regen?] :as msg}
+  [{:keys [role text pages steps call-id arena-id web-source answer? regen? candidate-slugs] :as msg}
    {:keys [on-regenerate busy?]}]
   [:div.py-2
    (case role
@@ -303,6 +344,10 @@
        ;; the same answer.
        (when (and call-id (not arena-id) (pref-signals/enabled?))
          (rate-widget call-id))
+       ;; nest-sourced answers only: a web-backed answer's sources aren't nest
+       ;; pages, and an answer with zero candidate pages has nothing to file.
+       (when (and answer? (seq candidate-slugs) (nil? web-source))
+         (file-answer-widget msg))
        (when (and answer? on-regenerate)
          [:button {:on-click #(when-not busy? (on-regenerate msg))
                    :disabled (boolean busy?)

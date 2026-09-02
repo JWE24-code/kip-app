@@ -615,6 +615,12 @@
 (defmethod handle :wikiChat [_ [_ vault-root question trace? arena-compare-to history]]
   (wiki/peck! vault-root question (boolean trace?) arena-compare-to history))
 
+;; File a settled answer back into the nest (kip-app#112) — the renderer's
+;; "file into the nest" control on a Peck answer. Thin pass; the audit row
+;; was already written at ask time, so no second clucks entry.
+(defmethod handle :wikiPeckFile [_ [_ vault-root question answer candidate-slugs]]
+  (wiki/peck-file! vault-root question answer candidate-slugs))
+
 ;; A verdict on an arena A/B pair (kip-app#73) — winner is "a" | "b" | "tie"
 ;; | "skip". electron.preference-signals gates on the kip provider and POSTs
 ;; to /v1/arena/<id>/verdict; a no-op otherwise.
