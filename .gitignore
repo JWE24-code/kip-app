@@ -48,11 +48,6 @@ ios/App/App/capacitor.config.json
 
 startup.png
 
-# NOTE: src/main/frontend/tldraw-logseq.js (the built tldraw whiteboard bundle)
-# is COMMITTED in this fork — upstream gitignores it and rebuilds it in CI, but
-# Kip changes tldraw rarely, so committing the ~1.3 MB bundle keeps the tldraw
-# toolchain (zx/tsup + the monorepo) out of the app build. Rebuild + recommit it
-# when you touch app/tldraw/ — see docs/BUILD.md.
 /src/test/docs*
 ~*~
 
