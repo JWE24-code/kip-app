@@ -251,10 +251,10 @@
    page is only indexed so that it shows up in search/backlinks."
   [file content {:keys [verbose] :or {verbose true}}]
   (let [_ (when verbose (println "Parsing start: " file))
-        page-name (-> (filepath->page-name file)
-                      (gp-util/page-name-sanity-lc))
+        original-name (filepath->page-name file)
+        page-name (gp-util/page-name-sanity-lc original-name)
         page-block {:block/name page-name
-                    :block/original-name page-name
+                    :block/original-name original-name
                     :block/type "whiteboard"
                     :block/file {:file/path (gp-util/path-normalize file)}}
         _ (when verbose (println "Parsing finished: " file))]
