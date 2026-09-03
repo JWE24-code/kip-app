@@ -5,6 +5,7 @@
             [frontend.components.chat :as chat]
             [frontend.components.exports :as exports]
             [frontend.components.reminders :as reminders]
+            [frontend.components.todos :as todos]
             [frontend.components.telemetry :as telemetry]
             [frontend.components.onboarding :as onboarding]
             [frontend.components.page :as page]
@@ -200,6 +201,10 @@
     :reminders
     [[:.flex.items-center (ui/icon "bell" {:class "text-md mr-2"}) "Reminders"]
      (reminders/reminders-panel)]
+
+    :todos
+    [[:.flex.items-center (ui/icon "list-checks" {:class "text-md mr-2"}) "Todos"]
+     (todos/todos-panel)]
 
     ["" [:span]]))
 

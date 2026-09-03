@@ -103,6 +103,11 @@
           :options {:on-click #(state/sidebar-add-block! current-repo "reminders" :reminders)}
           :icon (ui/icon "bell")})
 
+       (when current-repo
+         {:title "Todos"
+          :options {:on-click #(state/sidebar-add-block! current-repo "todos" :todos)}
+          :icon (ui/icon "list-checks")})
+
        (when-not config/publishing?
          {:title [:div.flex-row.flex.justify-between.items-center
                   [:span "Discussions"]]
