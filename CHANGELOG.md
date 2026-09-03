@@ -5,6 +5,15 @@ changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGE
 
 ## [Unreleased]
 
+## [0.4.9] — 2026-09-03
+
+- **Settings cleanup** — General drops the native title bar, custom global
+  config, and custom/export theme (keeps custom graph config, accent color,
+  Dropbox, language, and theme mode). LLM drops the connector installer (keeps
+  the "Have a Kip backend key?" opt-in). Advanced now holds network proxy,
+  clear cache, journals, default home page, whiteboards, and flashcards — the
+  Features tab is gone. Flashcards default to off.
+
 ## [0.4.8] — 2026-09-03
 
 - **Tasks panel in the right sidebar** — a view over your graph's open todos
