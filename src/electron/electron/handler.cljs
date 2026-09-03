@@ -639,6 +639,9 @@
 (defmethod handle :wikiRemindersAdd [_ [_ vault-root text]]
   (wiki/reminders-add! vault-root text))
 
+(defmethod handle :wikiRemindersAddTodo [_ [_ vault-root opts]]
+  (wiki/reminders-add-todo! vault-root opts))
+
 (defmethod handle :wikiRemindersCancel [_ [_ vault-root id]]
   (wiki/reminders-cancel! vault-root id))
 
