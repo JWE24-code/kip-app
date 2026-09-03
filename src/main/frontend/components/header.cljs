@@ -106,7 +106,7 @@
        (when current-repo
          {:title "Todos"
           :options {:on-click #(state/sidebar-add-block! current-repo "todos" :todos)}
-          :icon (ui/icon "list-checks")})
+          :icon (ui/icon "list-check")})
 
        (when-not config/publishing?
          {:title [:div.flex-row.flex.justify-between.items-center

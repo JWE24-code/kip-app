@@ -203,7 +203,7 @@
      (reminders/reminders-panel)]
 
     :todos
-    [[:.flex.items-center (ui/icon "list-checks" {:class "text-md mr-2"}) "Todos"]
+    [[:.flex.items-center (ui/icon "list-check" {:class "text-md mr-2"}) "Todos"]
      (todos/todos-panel)]
 
     ["" [:span]]))
