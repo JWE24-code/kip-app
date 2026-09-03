@@ -65,7 +65,7 @@
    :pages pages})
 
 (defn- turn->message [result]
-  (let [{:keys [intent answer learned note pages steps callId arenaId webSource citedSlugs candidateSlugs lintWarnings]} result]
+  (let [{:keys [intent answer learned note pages steps callId arenaId webSource citedSlugs candidateSlugs lintWarnings sources]} result]
     (cond
       (= intent "statement")
       (if learned
@@ -80,7 +80,9 @@
        ;; signal the evidence view (#117) will want.
        :cited-slugs citedSlugs :candidate-slugs candidateSlugs
        ;; groom's findings for the pages this answer cited (kip-app#116)
-       :lint-warnings lintWarnings}
+       :lint-warnings lintWarnings
+       ;; the pages the answer leaned on, listed under it (kip#49)
+       :sources sources}
 
       (= intent "reminder")
       {:role :assistant :text "Reminder noted — check the Reminders panel." :steps steps}
@@ -318,8 +320,18 @@
       (block/inline-text citation-config :markdown (str "[[" slug "]]"))
       " — " note])])
 
+(rum/defc sources-cp
+  "The pages a Peck answer leaned on, listed under the answer (kip#49)."
+  [sources]
+  [:div {:style {:font-size "11px" :opacity 0.75 :margin-top "6px"
+                 :border-left "2px solid var(--ls-border-color, #e5e7eb)" :padding-left "8px"}}
+   [:div {:style {:font-weight 500 :margin-bottom "2px"}} "Sources"]
+   (for [{:keys [slug]} sources]
+     [:div {:key slug :style {:margin "2px 0"}}
+      (block/inline-text citation-config :markdown (str "[[" slug "]]"))])])
+
 (rum/defc message-cp
-  [{:keys [role text pages steps call-id arena-id web-source answer? regen? candidate-slugs lint-warnings] :as msg}
+  [{:keys [role text pages steps call-id arena-id web-source answer? regen? candidate-slugs lint-warnings sources] :as msg}
    {:keys [on-regenerate busy?]}]
   [:div.py-2
    (case role
@@ -351,6 +363,7 @@
          "↻ regenerated"])
       (when (seq steps) (steps-line steps))
       [:div.prose.prose-sm.max-w-none (block/inline-text citation-config :markdown text)]
+      (when (seq sources) (sources-cp sources))
       (when (seq lint-warnings) (lint-warnings-cp lint-warnings))
       (when (and (:filename web-source) (:content web-source))
         (web-source-widget web-source))

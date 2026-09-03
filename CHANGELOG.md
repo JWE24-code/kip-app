@@ -5,6 +5,17 @@ changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGE
 
 ## [Unreleased]
 
+## [0.4.6] — 2026-09-03
+
+- **Cleaner answers, sources listed underneath** — Peck answers are now clean,
+  readable prose instead of sentences studded with `[[page]]` links. The pages
+  an answer drew from are listed in a "Sources" section below it, each a
+  clickable link.
+- **Faster Peck** — skill calls run in parallel, a short-lived cache avoids
+  re-running a lookup the same question already made, and an upfront planning
+  step batches what the answer needs before it runs. Most questions come back
+  in fewer round-trips.
+
 ## [0.4.5] — 2026-09-03
 
 - **Keep a Peck answer in your nest** — a settled answer that came from your
