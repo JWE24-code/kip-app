@@ -5,6 +5,8 @@ changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGE
 
 ## [Unreleased]
 
+## [0.4.5] — 2026-09-03
+
 - **Keep a Peck answer in your nest** — a settled answer that came from your
   notes now has a "⬇ File into the nest" control: it becomes a `concept` page
   tagged `from-peck`, so Peck can find it next time you ask. Hidden for
