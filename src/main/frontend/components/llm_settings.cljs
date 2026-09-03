@@ -341,16 +341,10 @@
             [:div.text-sm.my-1.text-green-500 "Connection OK."]
             [:div.my-1 (llm-banner/error-view error)]))
 
-        (if can-add?
-          (add-connector-view *providers *selected *installing? *install-message *url)
-          [:div.text-xs.opacity-50.mt-4.pt-3.border-t.border-gray-200.dark:border-gray-700
-           "Open a folder as your graph to install a connector."])
-
         (when (and can-add? (not @*opted-in?) (or managed-hidden? (not has-managed?)))
-          [:div.text-xs.mt-2.opacity-70
+          [:div.text-xs.mt-4.pt-3.border-t.border-gray-200.dark:border-gray-700.opacity-70
            [:a.underline {:on-click (fn []
-                                      (reset! *opted-in? true)
-                                      (when has-managed? (reset! *selected managed-id)))}
+                                       (reset! *opted-in? true)
+                                       (when has-managed? (reset! *selected managed-id)))}
             "Have a Kip backend key?"]
-           " Install the Kip connector package (ask your Kip admin for the "
-           [:code ".tgz"] "), then pick " [:b "Kip (managed)"] "."])])]))
+           " Enable " [:b "Kip (managed)"] " in the provider list, then enter your key."])])]))

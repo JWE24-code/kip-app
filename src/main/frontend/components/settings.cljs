@@ -448,22 +448,6 @@
 ;;             (let [value (not enable-block-timestamps?)]
 ;;               (config-handler/set-config! :feature/enable-block-timestamps? value)))))
 
-(defn zotero-settings-row []
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    {:for "zotero_settings"}
-    "Zotero"]
-   [:div.mt-1.sm:mt-0.sm:col-span-2
-    [:div
-     (ui/button
-       (t :settings)
-       :class "text-sm"
-       :style {:margin-top "0px"}
-       :on-click
-       (fn []
-         (state/close-settings!)
-         (route-handler/redirect! {:to :zotero-setting})))]]])
-
 (rum/defcs dropbox-app-key-advanced < rum/reactive (rum/local false ::open?) (rum/local "" ::val)
   [state custom?]
   (let [*open? (::open? state) *val (::val state)]
@@ -689,13 +673,9 @@
      (version-row t version)
      (language-row t preferred-language)
      (theme-modes-row t switch-theme system-theme? dark?)
-     (when (and (util/electron?) (not util/mac?)) (native-titlebar-row t))
      (when show-radix-themes? (accent-color-row false))
      (when (util/electron?) (dropbox-sync-row current-repo))
-     (when (config/global-config-enabled?) (edit-global-config-edn))
-     (when current-repo (edit-config-edn))
-     (when current-repo (edit-custom-css))
-     (when current-repo (edit-export-css))]))
+     (when current-repo (edit-config-edn))]))
 
 (rum/defcs settings-editor < rum/reactive
   [_state _current-repo]
@@ -728,26 +708,8 @@
        (shortcut-tooltip-row t enable-shortcut-tooltip?))
      (when-not (or (util/mobile?) (mobile-util/native-platform?))
        (tooltip-row t enable-tooltip?))
-     (timetracking-row t enable-timetracking?)
-     (enable-all-pages-public-row t enable-all-pages-public?)]))
-
-(rum/defc settings-advanced < rum/reactive
-  [current-repo]
-  (let [instrument-disabled? (state/sub :instrument/disabled?)
-        developer-mode? (state/sub [:ui/developer-mode?])
-        https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])]
-    [:div.panel-wrap.is-advanced
-     (when (and (or util/mac? util/win32?) (util/electron?)) (app-auto-update-row t))
-     (usage-diagnostics-row t instrument-disabled?)
-     (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
-     (when (util/electron?) (https-user-agent-row https-agent-opts))
-     (when (util/electron?) (auto-chmod-row t))
-     (when (and (util/electron?) (not (config/demo-graph? current-repo))) (filename-format-row))
-     (clear-cache-row t)
-
-     (ui/admonition
-       :warning
-       [:p (t :settings-page/clear-cache-warning)])]))
+      (timetracking-row t enable-timetracking?)
+      (enable-all-pages-public-row t enable-all-pages-public?)]))
 
 (rum/defc whiteboards-enabled-switcher
   [enabled?]
@@ -760,15 +722,19 @@
 (defn whiteboards-switcher-row [enabled?]
   (row-with-button-action
    {:left-label (t :settings-page/enable-whiteboards)
-    :action (whiteboards-enabled-switcher enabled?)}))
+     :action (whiteboards-enabled-switcher enabled?)}))
 
-(rum/defc settings-features < rum/reactive
+(rum/defc settings-advanced < rum/reactive
   []
-  (let [current-repo (state/get-current-repo)
-        enable-journals? (state/enable-journals? current-repo)
-        enable-flashcards? (state/enable-flashcards? current-repo)
-        enable-whiteboards? (state/enable-whiteboards? current-repo)]
-    [:div.panel-wrap.is-features.mb-8
+  (let [https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])
+        repo (state/get-current-repo)
+        enable-journals? (state/enable-journals? repo)
+        enable-flashcards? (state/enable-flashcards? repo)
+        enable-whiteboards? (state/enable-whiteboards? repo)]
+    [:div.panel-wrap.is-advanced
+     (when (util/electron?) (https-user-agent-row https-agent-opts))
+     (clear-cache-row t)
+
      (journal-row enable-journals?)
      (when (not enable-journals?)
        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
@@ -784,13 +750,7 @@
                              (when (= "Enter" (util/ekey e))
                                (update-home-page e)))}]]]])
      (whiteboards-switcher-row enable-whiteboards?)
-     (when (and (util/electron?) config/feature-plugin-system-on?)
-       (plugin-system-switcher-row))
-     (when (util/electron?)
-       (http-server-switcher-row))
-     (flashcards-switcher-row enable-flashcards?)
-     (zotero-settings-row)]))
-
+     (flashcards-switcher-row enable-flashcards?)]))
 
 (def DEFAULT-ACTIVE-TAB-STATE [:general :general])
 
@@ -857,7 +817,6 @@
                ;;   [:assets "assets" (t :settings-page/tab-assets) (ui/icon "box")])
 
                [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb")]
-               [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature")]
 
                (when plugins-of-settings
                  [:plugins-setting "plugins" (t :settings-of-plugins) (ui/icon "puzzle")])]]
@@ -902,9 +861,6 @@
          (assets/settings-content)
 
          :advanced
-         (settings-advanced current-repo)
-
-         :features
-         (settings-features)
+         (settings-advanced)
 
          nil)]]]))
