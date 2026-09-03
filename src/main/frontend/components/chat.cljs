@@ -65,7 +65,7 @@
    :pages pages})
 
 (defn- turn->message [result]
-  (let [{:keys [intent answer learned note pages steps callId arenaId webSource citedSlugs candidateSlugs]} result]
+  (let [{:keys [intent answer learned note pages steps callId arenaId webSource citedSlugs candidateSlugs lintWarnings]} result]
     (cond
       (= intent "statement")
       (if learned
@@ -78,7 +78,9 @@
        ;; kept on the message so "file into the nest" has its inputs
        ;; (kip-app#112) — cited vs candidate is also the retrieval-breadth
        ;; signal the evidence view (#117) will want.
-       :cited-slugs citedSlugs :candidate-slugs candidateSlugs}
+       :cited-slugs citedSlugs :candidate-slugs candidateSlugs
+       ;; groom's findings for the pages this answer cited (kip-app#116)
+       :lint-warnings lintWarnings}
 
       (= intent "reminder")
       {:role :assistant :text "Reminder noted — check the Reminders panel." :steps steps}
@@ -289,7 +291,7 @@
          [:span
           (if (= (:action s) "update") "appended to " "filed as ")
           (block/inline-text citation-config :markdown (str "[[" (:slug s) "]]"))
-          (when (:path s) [:span {:style {:opacity 0.6}} (str "  ·  " (:path s))])]])
+          (when (:path s) [:span {:style {:opacity 0.6}} (str "  ·  " (:path s))])])]
 
       (= s :saving)
       [:span {:style {:font-size "9px" :opacity 0.5 :margin-top "6px"}} "filing…"]
@@ -303,8 +305,21 @@
                         :border "none" :padding "3px 0" :margin-top "6px"}}
        "⬇ File into the nest"])))
 
+(rum/defc lint-warnings-cp
+  "groom's findings for the pages a Peck answer cited (kip-app#116) — shown
+  under the answer so a claim drawn from a flagged page (orphaned, contradicted,
+  a near-duplicate, …) carries that caveat."
+  [warnings]
+  [:div {:style {:font-size "11px" :opacity 0.75 :margin-top "6px"
+                 :border-left "2px solid var(--ls-warning-color, #d97706)" :padding-left "8px"}}
+   (for [{:keys [slug kind note]} warnings]
+     [:div {:key (str slug "/" kind) :style {:margin "2px 0"}}
+      "⚠ "
+      (block/inline-text citation-config :markdown (str "[[" slug "]]"))
+      " — " note])])
+
 (rum/defc message-cp
-  [{:keys [role text pages steps call-id arena-id web-source answer? regen? candidate-slugs] :as msg}
+  [{:keys [role text pages steps call-id arena-id web-source answer? regen? candidate-slugs lint-warnings] :as msg}
    {:keys [on-regenerate busy?]}]
   [:div.py-2
    (case role
@@ -336,6 +351,7 @@
          "↻ regenerated"])
       (when (seq steps) (steps-line steps))
       [:div.prose.prose-sm.max-w-none (block/inline-text citation-config :markdown text)]
+      (when (seq lint-warnings) (lint-warnings-cp lint-warnings))
       (when (and (:filename web-source) (:content web-source))
         (web-source-widget web-source))
       (when (and arena-id (pref-signals/enabled?))

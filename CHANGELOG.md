@@ -5,6 +5,27 @@ changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGE
 
 ## [Unreleased]
 
+- **Keep a Peck answer in your nest** — a settled answer that came from your
+  notes now has a "⬇ File into the nest" control: it becomes a `concept` page
+  tagged `from-peck`, so Peck can find it next time you ask. Hidden for
+  web-backed answers and answers with no source pages. Every question you ask
+  in the panel is also recorded once in the Coop activity view, the way the
+  CLI already did (kip-app#112).
+- **Peck flags its own shaky sources** — if an answer leans on a page your
+  last groom flagged (orphaned, contradicted, a near-duplicate, drifted from
+  disk), a short "⚠" note now appears under the answer naming the problem.
+  Nothing shows for a clean answer or a nest you've never groomed
+  (kip-app#116).
+- **Peck won't quietly pick a side** — when the pages behind an answer
+  disagree on a date or a value, Peck now says so and cites both instead of
+  presenting one as settled fact. Groom's known contradictions for the pages
+  in play are fed into the answer too (kip-app#116).
+- **Hatch updates read what's already on the page** — when a source touches a
+  page you already have, the update is now written as a delta against the
+  existing content instead of a fresh restatement drafted blind, so pages stop
+  accumulating near-duplicate paragraphs that a later groom has to flag
+  (kip-app#114).
+
 ## [0.4.4] — 2026-09-02
 
 - **Whiteboards now run on Excalidraw** — the tldraw-based whiteboard has been
