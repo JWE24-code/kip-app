@@ -25,6 +25,7 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as db-model]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.property :as editor-property]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -113,6 +114,13 @@
     (.toISOString
      (js/Date. (js/parseInt y 10) (dec (js/parseInt m 10)) (js/parseInt d 10) 9 0 0))))
 
+(defn- pad2 [n]
+  (if (< n 10) (str "0" n) (str n)))
+
+(defn- today-str []
+  (let [{:keys [year month day]} (date/get-local-date)]
+    (str year "-" (pad2 month) "-" (pad2 day))))
+
 (defn- vault-root []
   (config/get-repo-dir (state/get-current-repo)))
 
@@ -159,14 +167,22 @@
     (when (util/electron?)
       (cancel-reminder! reminder-id))))
 
+;; The day-end acknowledgment: stamp each carried-over item `carried:: <today>`
+;; so it re-buckets to Today. The block stays on its original journal day (the
+;; record), but now shows it was consciously carried forward.
+(defn- carry-over! [items]
+  (editor-property/batch-add-block-property! (mapv :block/uuid items) :carried (today-str)))
+
 ;; --- rendering --------------------------------------------------------------
 
 (defn- bucket [today-int b]
-  (let [d (due->int (get-in b [:block/properties :due]))
+  (let [due (due->int (get-in b [:block/properties :due]))
+        carried (due->int (get-in b [:block/properties :carried]))
         jd (get-in b [:block/page :block/journal-day])]
     (cond
-      (and d (<= d today-int)) :due
-      (and d (> d today-int)) :upcoming
+      (and due (<= due today-int)) :due
+      (and due (> due today-int)) :upcoming
+      (and carried (= carried today-int)) :today
       (and jd (< jd today-int)) :carried
       (and jd (= jd today-int)) :today
       :else :backlog)))
@@ -185,6 +201,7 @@
                       "")
         text (text-of block)
         due (get-in block [:block/properties :due])
+        carried? (contains? (:block/properties block) :carried)
         reminder? (contains? (:block/properties block) :reminder)]
     [:div.py-1.px-1.rounded.group.flex.items-start.gap-2
      {:class "hover:bg-gray-03"}
@@ -193,6 +210,7 @@
        (block/inline-text {} :markdown text)]
       [:div.text-xs.opacity-40.truncate.pt-0.5
        page-name
+       (when carried? [:span " · carried"])
        (when due [:span (str " · due " due)])
        (when reminder? [:span.inline-flex.align-middle.ml-1 (ui/icon "bell" {:size 11 :class "opacity-40"})])]]
      (ui/button {:icon "check" :icon-props {:size 14} :variant :ghost :size :xs
@@ -203,9 +221,11 @@
 (rum/defcs todos-panel < rum/reactive db-mixins/query
   (rum/local "" ::input)
   (rum/local "" ::due)
+  (rum/local nil ::flash)
   [state]
   (let [*input (::input state)
         *due (::due state)
+        *flash (::flash state)
         repo (state/sub :git/current-repo)
         today-int (db-util/date->int (js/Date.))
         todos (when repo
@@ -258,14 +278,22 @@
           (str (or done-today 0) " done · " (count todos) " open"
                (when (seq (:carried groups))
                  (str " · " (count (:carried groups)) " carried")))]
+         (when @*flash
+           [:div.text-xs.opacity-70.px-1.pb-1 @*flash])
          (for [[k label] section-order
                :let [items (if (= k :due)
                              (sort-by #(due->int (get-in % [:block/properties :due])) (get groups k))
                              (get groups k))]
                :when (seq items)]
            [:div {:key (name k)}
-            [:div.text-xs.uppercase.tracking-wide.opacity-40.px-1.pt-1.pb-1
-             (str label " (" (count items) ")")]
+            [:div.flex.items-center.justify-between.px-1.pt-1.pb-1
+             [:div.text-xs.uppercase.tracking-wide.opacity-40 (str label " (" (count items) ")")]
+             (when (= k :carried)
+               (ui/button {:size :xs
+                           :on-click #(do (carry-over! items)
+                                          (reset! *flash (str "Carried " (count items) " over to today"))
+                                          (js/setTimeout (fn [] (reset! *flash nil)) 2500))}
+                          "Carry over →"))]
             [:div.space-y-0.5
              (for [b items]
                (rum/with-key (todo-row b) (str (:block/uuid b))))]])])]]))
