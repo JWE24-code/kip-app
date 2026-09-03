@@ -5,6 +5,19 @@ changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGE
 
 ## [Unreleased]
 
+## [0.4.8] — 2026-09-03
+
+- **Tasks panel in the right sidebar** — a view over your graph's open todos
+  (`TODO`/`DOING`/`NOW`/`LATER`). Quick-capture into today's journal with
+  automatic linking to the pages a todo mentions; checking off flips it to
+  `DONE` in place. An optional due date groups items into Due / Today / Carried
+  over / Upcoming / Backlog, and a "Carry over" button moves leftovers onto
+  today's plate. Due-dated todos fire as a reminder at 09:00 on the due date
+  (checking off cancels it).
+- **Hatch no longer re-hatches synced sources** — a source hatched on another
+  device is recognized from the synced nest and skipped, instead of colliding
+  with pages that already exist.
+
 ## [0.4.7] — 2026-09-03
 
 - **One source folder** — `eggs/` is gone; `pages/` is now the single place for
