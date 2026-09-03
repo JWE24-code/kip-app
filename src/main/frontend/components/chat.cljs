@@ -65,7 +65,8 @@
    :pages pages})
 
 (defn- turn->message [result]
-  (let [{:keys [intent answer learned note pages steps callId arenaId webSource citedSlugs candidateSlugs lintWarnings]} result]
+  (let [{:keys [intent answer learned note pages steps callId arenaId webSource
+                citedSlugs candidateSlugs deadCitations lintWarnings]} result]
     (cond
       (= intent "statement")
       (if learned
@@ -75,10 +76,10 @@
       answer
       {:role :assistant :text answer :steps steps :call-id callId :arena-id arenaId
        :web-source webSource :answer? true
-       ;; kept on the message so "file into the nest" has its inputs
-       ;; (kip-app#112) — cited vs candidate is also the retrieval-breadth
-       ;; signal the evidence view (#117) will want.
-       :cited-slugs citedSlugs :candidate-slugs candidateSlugs
+       ;; kept on the message: "file into the nest" needs candidate-slugs
+       ;; (kip-app#112); cited vs candidate + dead links are the evidence row
+       ;; (kip-app#117).
+       :cited-slugs citedSlugs :candidate-slugs candidateSlugs :dead-citations deadCitations
        ;; groom's findings for the pages this answer cited (kip-app#116)
        :lint-warnings lintWarnings}
 
@@ -305,6 +306,37 @@
                         :border "none" :padding "3px 0" :margin-top "6px"}}
        "⬇ File into the nest"])))
 
+(rum/defcs evidence-row
+  "Under a nest answer (kip-app#117): how many of the retrieved pages the
+  answer actually cited, the rest behind an 'also retrieved' toggle, and any
+  [[link]] in the answer that points at a page that doesn't exist. Shown only
+  when there's something to say — retrieval was broader than the citations, or
+  a citation is dead."
+  < (rum/local false ::open)
+  [state {:keys [cited-slugs candidate-slugs dead-citations]}]
+  (let [*open (::open state)
+        cited (set cited-slugs)
+        also (vec (remove cited candidate-slugs))
+        links (fn [slugs] (block/inline-text citation-config :markdown
+                                             (string/join "  ·  " (map #(str "[[" % "]]") slugs))))
+        mono {:font-size "10px" :font-family "ui-monospace, SFMono-Regular, Menlo, monospace"
+              :opacity 0.6 :letter-spacing "0.04em"}]
+    [:div {:style (assoc mono :margin-top "6px")}
+     [:div (str (count cited-slugs) " of " (count candidate-slugs)
+                (if (= 1 (count candidate-slugs)) " page cited" " pages cited"))
+      (when (seq cited-slugs) [:span "  ·  " (links cited-slugs)])]
+     (when (seq also)
+       [:div {:style {:margin-top "2px"}}
+        [:button {:on-click #(swap! *open not)
+                  :style {:background "transparent" :border "none" :padding 0 :cursor "pointer"
+                          :font "inherit" :color "inherit" :opacity 0.9}}
+         (str (if @*open "▾ " "▸ ") "also retrieved (" (count also) ")")]
+        (when @*open [:span "  " (links also)])])
+     (when (seq dead-citations)
+       [:div {:style {:margin-top "2px" :color "var(--ls-warning-color, #d97706)"}}
+        (str "⚠ cites " (if (= 1 (count dead-citations)) "a page" "pages")
+             " that don't exist: " (string/join ", " dead-citations))])]))
+
 (rum/defc lint-warnings-cp
   "groom's findings for the pages a Peck answer cited (kip-app#116) — shown
   under the answer so a claim drawn from a flagged page (orphaned, contradicted,
@@ -319,7 +351,8 @@
       " — " note])])
 
 (rum/defc message-cp
-  [{:keys [role text pages steps call-id arena-id web-source answer? regen? candidate-slugs lint-warnings] :as msg}
+  [{:keys [role text pages steps call-id arena-id web-source answer? regen?
+           cited-slugs candidate-slugs dead-citations lint-warnings] :as msg}
    {:keys [on-regenerate busy?]}]
   [:div.py-2
    (case role
@@ -351,6 +384,10 @@
          "↻ regenerated"])
       (when (seq steps) (steps-line steps))
       [:div.prose.prose-sm.max-w-none (block/inline-text citation-config :markdown text)]
+      (when (and answer? (nil? web-source)
+                 (or (seq dead-citations)
+                     (< (count cited-slugs) (count candidate-slugs))))
+        (evidence-row msg))
       (when (seq lint-warnings) (lint-warnings-cp lint-warnings))
       (when (and (:filename web-source) (:content web-source))
         (web-source-widget web-source))

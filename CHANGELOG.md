@@ -5,6 +5,13 @@ changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGE
 
 ## [Unreleased]
 
+- **See what an answer rested on** — under a Peck answer, a small line now
+  shows how many of the retrieved pages it actually cited ("3 of 5 pages
+  cited"), with the rest tucked behind an "also retrieved" toggle. If the
+  answer cites a page that doesn't exist, that's flagged in amber instead of
+  rendering as a dead link. A filed answer also gets a `## Sources` section
+  with the pages it didn't cite inline (kip-app#117).
+
 ## [0.4.5] — 2026-09-03
 
 - **Keep a Peck answer in your nest** — a settled answer that came from your
