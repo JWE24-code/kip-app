@@ -5,6 +5,13 @@ changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGE
 
 ## [Unreleased]
 
+## [0.4.7] — 2026-09-03
+
+- **One source folder** — `eggs/` is gone; `pages/` is now the single place for
+  your notes and everything you drop in (Office/PDF converted to Markdown on
+  the way in). The app's glossary, onboarding and drop/paste flows all point at
+  `pages/`.
+
 ## [0.4.6] — 2026-09-03
 
 - **Cleaner answers, sources listed underneath** — Peck answers are now clean,
