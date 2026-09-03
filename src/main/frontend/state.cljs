@@ -630,7 +630,7 @@ Similar to re-frame subscriptions"
   ([]
    (enable-flashcards? (get-current-repo)))
   ([repo]
-   (not (false? (:feature/enable-flashcards? (sub-config repo))))))
+   (true? (:feature/enable-flashcards? (sub-config repo)))))
 
 (defn enable-sync?
   []
