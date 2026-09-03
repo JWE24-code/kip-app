@@ -532,6 +532,18 @@
 (defn reminders-add! [vault-root text]
   (run-node-script! (script "reminders.js") vault-root ["add" text "--json"]))
 
+(defn reminders-add-todo!
+  "Create a reminder for a due-dated todo (frontend.components.todos). Unlike
+  reminders-add!, the todo already has a structured title + due date, so pass
+  them explicitly instead of round-tripping through the natural-language
+  parser. source \"todo\" and lead 0 (fire at the due time) let the todos panel
+  cancel it by id when the todo is checked off."
+  [vault-root {:keys [title event-at]}]
+  (run-node-script! (script "reminders.js") vault-root
+                    (cond-> ["add" "--json" "--source" "todo" "--lead" "0"]
+                      (some? title)    (conj "--title" title)
+                      (some? event-at) (conj "--event-at" event-at))))
+
 (defn reminders-cancel! [vault-root id]
   (run-node-script! (script "reminders.js") vault-root ["cancel" (str id) "--json"]))
 
