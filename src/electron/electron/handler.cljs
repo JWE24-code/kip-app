@@ -579,14 +579,14 @@
 (defmethod handle :wikiIngestMetrics [_ [_ vault-root]]
   (wiki/hatch-metrics! vault-root))
 
-(defmethod handle :wikiAddEgg [_ [_ vault-root filename content]]
-  (wiki/add-egg! vault-root filename content))
+(defmethod handle :wikiAddSource [_ [_ vault-root filename content]]
+  (wiki/add-source! vault-root filename content))
 
 (defmethod handle :wikiAddOfficeSource [_ [_ vault-root filename base64]]
   (wiki/add-office-source! vault-root filename base64))
 
-(defmethod handle :wikiPickEggs [_ [_ vault-root]]
-  (wiki/pick-and-add-eggs! vault-root))
+(defmethod handle :wikiPickSources [_ [_ vault-root]]
+  (wiki/pick-and-add-sources! vault-root))
 
 (defmethod handle :wikiCoopCounts [_ [_ vault-root]]
   (wiki/coop-counts! vault-root))

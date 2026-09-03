@@ -239,13 +239,13 @@
      (when (some? @*picked) [:span {:style {:opacity 0.45}} "logged"])]))
 
 ;; --- web-search → source (kip-app#81) — when a turn ran web-search, offer to
-;; keep its results as an eggs/ source doc so they can be hatched into the nest.
+;; keep its results as a pages/ source doc so they can be hatched into the nest.
 (rum/defcs web-source-widget < (rum/local nil ::st)
   [state {:keys [filename content]}]
   (let [*st (::st state)
         save! (fn []
                 (reset! *st :saving)
-                (-> (ipc/ipc "wikiAddEgg" (vault-root) filename content)
+                (-> (ipc/ipc "wikiAddSource" (vault-root) filename content)
                     (p/then (fn [r] (reset! *st (bean/->clj r))))
                     (p/catch (fn [e] (reset! *st {:ok false :reason (str e)})))))
         s @*st]
@@ -256,7 +256,7 @@
          [:span {:style {:opacity 0.6}}
           (if (:duplicate s)
             (str "Already in your sources as " (:name s) ".")
-            (str "Saved to eggs/" (:name s) " — run Hatch to add it to your nest."))]
+            (str "Saved to pages/" (:name s) " — run Hatch to add it to your nest."))]
          [:span {:style {:color "#c0392b"}} (str "Couldn't save: " (or (:reason s) "unknown error"))])
 
        (= s :saving) [:span {:style {:opacity 0.5}} "Saving…"]

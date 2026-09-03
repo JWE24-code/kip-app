@@ -1,6 +1,6 @@
 (ns frontend.components.ingest
-  "The Hatch workflow's UI: turns new-or-changed files in eggs/, journals/
-  and pages/ into nest pages, in batches, with no per-file review. Backed by
+  "The Hatch workflow's UI: turns new-or-changed files in pages/ and
+  journals/ into nest pages, in batches, with no per-file review. Backed by
   scripts/hatch-all.js via the :wikiIngestPreview / :wikiIngestBatch /
   :wikiIngestProgress IPC channels (electron.wiki shells out — same
   one-code-path approach as the Coop status and Peck panels).
@@ -41,14 +41,14 @@
       (p/catch (fn [e] (reset! *error (str e))))
       (p/finally (fn [] (reset! *busy? false)))))
 
-(defn- pick-eggs! [*preview *error *busy?]
-  (-> (ipc/ipc "wikiPickEggs" (vault-root))
+(defn- pick-sources! [*preview *error *busy?]
+  (-> (ipc/ipc "wikiPickSources" (vault-root))
       (p/then (fn [r]
                 (let [{:keys [canceled added duplicates rejected]} (bean/->clj r)]
                   (when-not canceled
                     (when (seq added)
                       (notification/show!
-                       (str "Added " (string/join ", " added) " to eggs/.") :success true))
+                       (str "Added " (string/join ", " added) " to pages/.") :success true))
                     (when (seq duplicates)
                       (notification/show!
                        (str (string/join ", " duplicates) " already in your coop.") :info true))
@@ -305,21 +305,21 @@
      {:on-added (fn [_] (when-not demo? (load-preview! *preview *error *busy?)))}
      [:div.w-full.mx-auto {:class "md:max-w-[600px]"}
       [:h2#modal-headline.text-xl.mb-3 "Hatch sources"]
-     [:p.text-sm.opacity-70.mb-3
-      "Turns new or changed files in " (glossary/term "eggs/") ", " [:code "journals/"] " and "
-      [:code "pages/"] " into nest pages — no per-file review. Runs in batches of "
-      (str batch-size) "."]
+      [:p.text-sm.opacity-70.mb-3
+       "Turns new or changed files in " (glossary/term "pages/") " and "
+       [:code "journals/"] " into nest pages — no per-file review. Runs in batches of "
+       (str batch-size) "."]
 
      (if demo?
        [:div.text-sm.opacity-70.my-2
-        "Open a folder as your graph first — " (glossary/term "eggs/")
+        "Open a folder as your graph first — " (glossary/term "pages/")
         " and the rest of the coop live inside it. Use the graph menu at the top left."]
        [:<>
 
      (when-not @*busy?
        [:div.mb-3
         (ui/button {:variant :outline :size :sm
-                    :on-click #(pick-eggs! *preview *error *busy?)}
+                    :on-click #(pick-sources! *preview *error *busy?)}
                    "Add source…")
         (ui/button {:variant :outline :size :sm :class "ml-2"
                     :on-click #(swap! *paste? not)}

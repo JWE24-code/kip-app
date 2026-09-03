@@ -800,7 +800,7 @@
          [:div.text-sm.opacity-50.text-center {:style {:padding "3rem 1rem"}}
           "No journals yet. Press "
           [:code (if util/mac? "⌘1" "Ctrl+1")]
-          " for Peck, or drop a file in the graph's eggs/ folder and run Hatch."])])))
+           " for Peck, or drop a file in the graph's pages/ folder and run Hatch."])])))
 
 (defn- hide-context-menu-and-clear-selection
   [e]

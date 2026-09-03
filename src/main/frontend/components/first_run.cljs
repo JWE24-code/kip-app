@@ -28,8 +28,8 @@
   [{:label "Set an LLM provider"
     :done? (boolean (:configured? llm))
     :on-click #(state/open-settings! :llm)}
-   {:label "Add a source"
-    :done? (pos? (:eggs counts 0))
+    {:label "Add a source"
+     :done? (pos? (:sourceFiles counts 0))
     :note "drop a Markdown or text file anywhere on this panel"}
    {:label "Hatch it into The Nest"
     :done? (pos? (:nestPages counts 0))

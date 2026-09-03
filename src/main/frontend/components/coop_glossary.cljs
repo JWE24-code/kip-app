@@ -6,7 +6,7 @@
 
 (def glosses
   "Folder name (no slash, no dot) → what it actually is."
-  {"eggs"     "your source documents — drop files here"
+  {"pages"    "your notes and source documents — everything Kip reads and hatches"
    "nest"     "the cross-linked wiki Kip builds from them"
    "clucks"   "Kip's activity log"
    "roost"    "the search index — disposable, rebuilt any time"
@@ -17,16 +17,16 @@
 
 (defn term
   "A `<code>` tag for a metaphor folder name with its gloss as a tooltip.
-  `(term \"eggs/\")` or `(term \"eggs\" \"the eggs folder\")`."
+  `(term \"pages/\")` or `(term \"pages\" \"the pages folder\")`."
   ([label] (term label label))
   ([k label]
    (let [g (get glosses (key-for k))]
      [:code (cond-> {} g (assoc :title g)) label])))
 
 (defn legend
-  "eggs = … · nest = … · clucks = … — for the help panel and coop-map."
+  "pages = … · nest = … · clucks = … — for the help panel and coop-map."
   []
   [:div.text-xs.opacity-60.leading-relaxed
-   (->> ["eggs" "nest" "clucks" "roost" "henhouse"]
+   (->> ["pages" "nest" "clucks" "roost" "henhouse"]
         (map (fn [k] (str k " = " (get glosses k))))
         (string/join "  ·  "))])

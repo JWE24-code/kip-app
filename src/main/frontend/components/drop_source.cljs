@@ -1,6 +1,6 @@
 (ns frontend.components.drop-source
   "Drag a Markdown / text / Office / PDF file onto the Peck view or the Hatch
-  panel and it lands in <graph>/eggs/ as a Hatch source — no need to leave the
+  panel and it lands in <graph>/pages/ as a Hatch source — no need to leave the
   app and use the OS file manager. A .docx / .xlsx / .pptx / .pdf is converted
   to Markdown on the way in (scripts/office-extract.js). `drop-zone` wraps its
   children: an overlay shows while a file is dragged over, a notification
@@ -40,7 +40,7 @@
   ([name detail]
    (notification/show!
     [:div.text-sm
-     [:div "Added " [:b name] " to " (glossary/term "eggs/") "."]
+     [:div "Added " [:b name] " to " (glossary/term "pages/") "."]
      (when detail [:div.text-xs.opacity-70.mt-0.5 detail])
      [:button.text-xs.underline.opacity-80.hover:opacity-100.mt-1
       {:on-click (fn []
@@ -101,7 +101,7 @@
 
       :else
       (-> (.text file)
-          (p/then #(ipc/ipc "wikiAddEgg" (vault-root) name %))
+           (p/then #(ipc/ipc "wikiAddSource" (vault-root) name %))
           (p/then (fn [r]
                     (let [{:keys [ok name duplicate reason]} (bean/->clj r)]
                       (cond
