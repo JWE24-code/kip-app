@@ -38,7 +38,7 @@
   (-> (ipc/ipc "wikiIngestPreview" (vault-root))
       (p/then (fn [r] (let [s (bean/->clj r)]
                         ;; total vs changed kept apart (kip-app#113): an
-                        ;; "immutable" egg edited since its hatch is a
+                        ;; "immutable" source edited since its hatch is a
                         ;; different signal from a fresh drop.
                         (reset! *pending {:total (count (:pending s))
                                           :changed (or (:changedCount s) 0)}))))
@@ -139,13 +139,13 @@
 ;; {:total n :changed n} map (or nil) — see fetch-pending!.
 (rum/defc coop-overview < rum/static
   [summary pending]
-  (let [{:keys [eggs entities concepts sources lastHatchAt lastGroomAt]} summary
+  (let [{:keys [sourceFiles entities concepts sources lastHatchAt lastGroomAt]} summary
         nest-total (+ (or entities 0) (or concepts 0) (or sources 0))]
     [:div.mb-4
      [:h3.text-lg.font-medium.mb-1 "Your coop"]
      [:div.text-sm.opacity-80.space-y-0.5
-      [:div (str (or eggs 0) " source " (if (= 1 eggs) "file" "files") " in ")
-       (glossary/term "eggs/")
+      [:div (str (or sourceFiles 0) " source " (if (= 1 sourceFiles) "file" "files") " in ")
+       (glossary/term "pages/")
        (when (and pending (pos? (:total pending 0)))
          [:span " · "
           [:a.underline {:on-click #(state/pub-event! [:modal/show-hatch])}

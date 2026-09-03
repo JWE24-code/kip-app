@@ -32,7 +32,7 @@
       [:h2#modal-headline.text-xl.mb-1 "Welcome to Kip"]
       [:div.text-xs.opacity-60.mb-2 brand/slogan]]
      [:div.text-sm.opacity-80.space-y-2.my-3
-      [:p "Drop documents into " (glossary/term "eggs/") " and Kip hatches them into "
+       [:p "Drop documents into " (glossary/term "pages/") " and Kip hatches them into "
        (glossary/term "nest/") " — a cross-linked wiki of entity, concept and source pages."]
       [:p "Then " [:b "peck"] " it: ask a question and get an answer that cites the "
        [:code "[[pages]]"] " it came from, or tell Kip a fact to file away."]

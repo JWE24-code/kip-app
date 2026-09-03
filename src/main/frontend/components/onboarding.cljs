@@ -27,7 +27,7 @@
 
    [:p.mt-4.mb-1 [:b "How it fits together"]]
    [:ul.text-sm.opacity-80
-    [:li [:b "Hatch"] " — a file you drop in " (glossary/term "eggs/") " becomes linked "
+    [:li [:b "Hatch"] " — a file you drop in " (glossary/term "pages/") " becomes linked "
      [:code "entity"] " / " [:code "concept"] " / " [:code "source"] " pages under The Nest."]
     [:li [:b "Peck"] " — ask the nest a question (answers cite " [:code "[[pages]]"]
      "), or tell it a fact or an upcoming meeting."]
@@ -35,7 +35,7 @@
 
    [:p.mt-4.mb-1 [:b "The coop"]]
    [:ul.text-sm.opacity-80
-    [:li (glossary/term "eggs/") " — the source documents you add"]
+    [:li (glossary/term "pages/") " — your notes and the source documents you add"]
     [:li (glossary/term "nest/") " — the LLM-maintained wiki"]
     [:li (glossary/term "clucks/") " — the activity log"]
     [:li (glossary/term "henhouse" ".henhouse/") " — LLM provider + skills config"]

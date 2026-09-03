@@ -21,7 +21,7 @@
 
   Every call takes the current graph's directory as `vault-root` and exports
   it as KIP_COOP_ROOT for the child, so the scripts operate on the coop
-  (eggs/, nest/, clucks/, .roost/) inside the open graph — see
+  (pages/, nest/, clucks/, .roost/) inside the open graph — see
   scripts/lib/paths.js."
   (:require ["child_process" :as child-process]
             ["crypto" :as crypto]
@@ -159,7 +159,7 @@
        (catch :default _ (resolve* nil))))))
 
 (defn hatch-preview!
-  "What a 'Hatch sources' run would touch — new/changed files in eggs/,
+  "What a 'Hatch sources' run would touch — new/changed files in pages/,
   journals/, pages/, plus the oversized and empty ones it skips. No LLM
   calls. Resolves to {:pending [{:source :kind :kb :status}] :oversized [...]
   :empty [...] :changedCount n :totalKb n} — status distinguishes a brand-new
@@ -227,7 +227,7 @@
        (resolve* (js/JSON.parse (fs/readFileSync (roost-file vault-root "hatch-metrics.json") "utf8")))
        (catch :default _ (resolve* nil))))))
 
-(def ^:private egg-extensions
+(def ^:private source-extensions
   "Text formats Hatch reads as-is — a source dropped onto the app is either one
   of these or an Office/PDF file (office-extensions), converted to Markdown
   first (add-office-source!)."
@@ -242,43 +242,43 @@
   {".doc" ".docx" ".ppt" ".pptx" ".odt" ".docx" ".odp" ".pptx"
    ".ods" ".xlsx" ".rtf" ".docx" ".pages" ".docx" ".key" ".pptx" ".numbers" ".xlsx"})
 
-(defn- unique-egg-path
-  "eggs/<filename>, or eggs/<stem> (2)<ext>, (3)<ext>… when the name is taken."
-  [eggs-dir filename]
+(defn- unique-source-path
+  "pages/<filename>, or pages/<stem> (2)<ext>, (3)<ext>… when the name is taken."
+  [sources-dir filename]
   (let [ext  (.extname node-path filename)
         stem (subs filename 0 (- (count filename) (count ext)))]
     (loop [n 1]
       (let [nm   (if (= n 1) filename (str stem " (" n ")" ext))
-            full (.join node-path eggs-dir nm)]
+            full (.join node-path sources-dir nm)]
         (if (fs/existsSync full) (recur (inc n)) [nm full])))))
 
-(defn- write-egg-content
+(defn- write-source-content
   "Sync core: validate the extension, skip a byte-identical file already in
-  `eggs-dir`, otherwise write `content` under a non-colliding name. Returns a
+  `sources-dir`, otherwise write `content` under a non-colliding name. Returns a
   CLJS map: {:ok true :name ...} / {:ok true :name ... :duplicate ...} /
   {:ok false :reason ...}."
-  [eggs-dir basename content]
+  [sources-dir basename content]
   (let [ext (string/lower-case (or (.extname node-path basename) ""))]
-    (if-not (contains? egg-extensions ext)
+    (if-not (contains? source-extensions ext)
       {:ok false :reason "unsupported" :ext ext}
       (do
-        (fs/mkdirSync eggs-dir #js {:recursive true})
-        (if-let [dup (->> (fs/readdirSync eggs-dir)
+        (fs/mkdirSync sources-dir #js {:recursive true})
+        (if-let [dup (->> (fs/readdirSync sources-dir)
                           (filter (fn [nm]
-                                    (let [p (.join node-path eggs-dir nm)]
+                                    (let [p (.join node-path sources-dir nm)]
                                       (and (try (.isFile (fs/statSync p)) (catch :default _ false))
                                            (= content (fs/readFileSync p "utf8"))))))
                           first)]
           {:ok true :name dup :duplicate dup}
-          (let [[nm full] (unique-egg-path eggs-dir basename)]
+          (let [[nm full] (unique-source-path sources-dir basename)]
             (fs/writeFileSync full content "utf8")
             {:ok true :name nm}))))))
 
-(defn add-egg!
-  "Write `content` (a dropped file's text) into <graph>/eggs/ under `filename`,
+(defn add-source!
+  "Write `content` (a dropped file's text) into <graph>/pages/ under `filename`,
   so it becomes a Hatch source. Resolves:
     {:ok true  :name <name>}                     — written
-    {:ok true  :name <name> :duplicate <name>}   — identical text already in eggs/
+    {:ok true  :name <name> :duplicate <name>}   — identical text already in pages/
     {:ok false :reason \"no-graph\"}
     {:ok false :reason \"unsupported\" :ext <ext>}
     {:ok false :reason <message>}"
@@ -288,18 +288,18 @@
      (try
        (if (or (string/blank? vault-root) (string/blank? filename) (not (coop-dir? vault-root)))
          (resolve* #js {:ok false :reason "no-graph"})
-         (resolve* (clj->js (write-egg-content (.join node-path vault-root "eggs")
+         (resolve* (clj->js (write-source-content (.join node-path vault-root "pages")
                                                (.basename node-path filename)
                                                content))))
        (catch :default e
-         (log-error (str "add-egg! " filename ": " (.-message e)))
+         (log-error (str "add-source! " filename ": " (.-message e)))
          (resolve* #js {:ok false :reason (.-message e)}))))))
 
 ;; --- Office / PDF drop-ins (kip-app#91) ------------------------------------
 ;; A .docx/.xlsx/.pptx/.pdf can't be hatched as text. scripts/office-extract.js
-;; converts it to compact Markdown; the .md goes into eggs/ as the source, and
+;; converts it to compact Markdown; the .md goes into pages/ as the source, and
 ;; the untouched original is kept in the app's userData (NOT the graph — so it
-;; doesn't sync or clutter eggs/).
+;; doesn't sync or clutter pages/).
 
 (defn- originals-dir
   "userData/kip-source-originals/<graph-hash>/ — where a converted file's
@@ -319,15 +319,15 @@
 
 (defn- convert-kept-original!
   "Given an original file already parked at `orig-abs`, convert it to Markdown
-  in <graph>/eggs/ via office-extract.js. Resolves a CLJS map:
+  in <graph>/pages/ via office-extract.js. Resolves a CLJS map:
     {:ok true :name <name.md> :kind <fmt> :warnings [...]}
     {:ok false :reason <message> :name <original>}"
   [vault-root orig-abs]
-  (let [eggs-dir (.join node-path vault-root "eggs")
+  (let [sources-dir (.join node-path vault-root "pages")
         base     (.basename node-path orig-abs)
         ext      (.extname node-path base)
-        md-out   (unique-path eggs-dir (str (subs base 0 (- (count base) (count ext))) ".md"))]
-    (fs/mkdirSync eggs-dir #js {:recursive true})
+        md-out   (unique-path sources-dir (str (subs base 0 (- (count base) (count ext))) ".md"))]
+    (fs/mkdirSync sources-dir #js {:recursive true})
     (-> (run-node-script! (script "office-extract.js") vault-root [orig-abs md-out "--json"])
         (p/then (fn [r]
                   (let [r (js->clj r :keywordize-keys true)]
@@ -344,7 +344,7 @@
 
 (defn add-office-source!
   "Decode `base64` (a dropped .docx/.xlsx/.pptx/.pdf), park the original under
-  userData, and convert it to a Markdown Hatch source in <graph>/eggs/.
+  userData, and convert it to a Markdown Hatch source in <graph>/pages/.
   Resolves:
     {:ok true :name <name.md> :kind <fmt> :warnings [...]}
     {:ok false :reason \"no-graph\" | \"unsupported\" | <message> [:ext :hint]}"
@@ -372,9 +372,9 @@
          (log-error (str "add-office-source! " filename ": " (.-message e)))
          (resolve* #js {:ok false :reason (.-message e)}))))))
 
-(defn pick-and-add-eggs!
+(defn pick-and-add-sources!
   "Open a native file picker (Markdown / text / Office / PDF, multi-select) and
-  add the chosen files to <graph>/eggs/ — text as-is, Office/PDF converted to
+  add the chosen files to <graph>/pages/ — text as-is, Office/PDF converted to
   Markdown. Resolves
   {:canceled bool :added [names] :duplicates [names] :rejected [names]}."
   [vault-root]
@@ -387,7 +387,7 @@
           paths (or (some-> res .-filePaths array-seq) [])
           results (if (or (string/blank? vault-root) (empty? paths))
                     []
-                    (let [eggs-dir (.join node-path vault-root "eggs")]
+                    (let [sources-dir (.join node-path vault-root "pages")]
                       (p/all
                        (mapv (fn [path]
                                (let [ext (string/lower-case (.extname node-path path))]
@@ -398,7 +398,7 @@
                                        (let [orig (unique-path odir (.basename node-path path))]
                                          (fs/copyFileSync path orig)
                                          (convert-kept-original! vault-root orig)))
-                                     (write-egg-content eggs-dir (.basename node-path path)
+                                     (write-source-content sources-dir (.basename node-path path)
                                                         (fs/readFileSync path "utf8")))
                                    (catch :default e
                                      {:ok false :reason (.-message e) :name (.basename node-path path)}))))
@@ -422,16 +422,16 @@
 
 (defn coop-counts!
   "Cheap fs read for the first-run checklist: how many source files sit in
-  eggs/ and how many pages exist under nest/ (index.md, which is generated,
+  pages/ and how many pages exist under nest/ (index.md, which is generated,
   doesn't count). Both 0 before the folders are created. No subprocess."
   [vault-root]
   (p/create
    (fn [resolve* _reject]
      (if (string/blank? vault-root)
-       (resolve* #js {:eggs 0 :nestPages 0})
-       (resolve* #js {:eggs      (count-files (.join node-path vault-root "eggs")
-                                              #(contains? egg-extensions (string/lower-case (.extname node-path %))))
-                      :nestPages (count-files (.join node-path vault-root "nest")
+        (resolve* #js {:sourceFiles 0 :nestPages 0})
+        (resolve* #js {:sourceFiles      (count-files (.join node-path vault-root "pages")
+                                               #(contains? source-extensions (string/lower-case (.extname node-path %))))
+                       :nestPages (count-files (.join node-path vault-root "nest")
                                               #(and (= ".md" (string/lower-case (.extname node-path %)))
                                                     (not= "index.md" (.basename node-path %))))})))))
 
@@ -447,7 +447,7 @@
 
 (defn coop-summary!
   "A read-only snapshot of the open coop for the 'Your coop' panel: sources in
-  eggs/, nest pages by type, and the last hatch / last groom times (ms epoch,
+  pages/, nest pages by type, and the last hatch / last groom times (ms epoch,
   nil if never). Plain fs reads — no subprocess."
   [vault-root]
   (p/create
@@ -455,8 +455,8 @@
      (if (string/blank? vault-root)
        (resolve* #js {})
        (let [nest (.join node-path vault-root "nest")]
-         (resolve* #js {:eggs        (count-files (.join node-path vault-root "eggs")
-                                                  #(contains? egg-extensions (string/lower-case (.extname node-path %))))
+          (resolve* #js {:sourceFiles        (count-files (.join node-path vault-root "pages")
+                                                   #(contains? source-extensions (string/lower-case (.extname node-path %))))
                         :entities    (count-files (.join node-path nest "entities") md-file?)
                         :concepts    (count-files (.join node-path nest "concepts") md-file?)
                         :sources     (count-files (.join node-path nest "sources") md-file?)

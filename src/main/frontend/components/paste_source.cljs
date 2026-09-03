@@ -1,8 +1,8 @@
 (ns frontend.components.paste-source
   "Paste raw text — an article, notes, a transcript that isn't already a file —
-  and save it into <graph>/eggs/ as a Markdown source, hatchable like any other.
-  A title + textarea panel; writes eggs/<slug>.md with minimal YAML frontmatter
-  via the :wikiAddEgg IPC (electron.wiki/add-egg!)."
+  and save it into <graph>/pages/ as a Markdown source, hatchable like any other.
+  A title + textarea panel; writes pages/<slug>.md with minimal YAML frontmatter
+  via the :wikiAddSource IPC (electron.wiki/add-source!)."
   (:require [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.config :as config]
@@ -24,7 +24,7 @@
       (string/replace #"^-+|-+$" "")
       (as-> s (if (string/blank? s) "pasted-note" (subs s 0 (min 80 (count s)))))))
 
-(defn- egg-content [title body]
+(defn- source-content [title body]
   (str "---\n"
        "title: " (string/replace (string/trim title) #"\n" " ") "\n"
        "added: " (.toISOString (js/Date.)) "\n"
@@ -41,14 +41,14 @@
       :else
       (do
         (reset! *busy? true)
-        (-> (ipc/ipc "wikiAddEgg" (vault-root) (str (slugify title) ".md") (egg-content title body))
+        (-> (ipc/ipc "wikiAddSource" (vault-root) (str (slugify title) ".md") (source-content title body))
             (p/then (fn [r]
                       (let [{:keys [ok name duplicate reason]} (js->clj r :keywordize-keys true)]
                         (cond
                           (and ok duplicate)
                           (notification/show! (str "That text is already in your coop as " duplicate ".") :info true)
                           ok
-                          (do (notification/show! (str "Saved as eggs/" name ".") :success true)
+                          (do (notification/show! (str "Saved as pages/" name ".") :success true)
                               (coop/refresh-counts!)
                               (reset! *title "") (reset! *body "")
                               (when on-saved (on-saved name)))
@@ -78,4 +78,4 @@
       (ui/button {:variant :ghost :size :sm :on-click #(when on-cancel (on-cancel))} "Cancel")
       (ui/button {:size :sm :disabled @*busy?
                   :on-click #(save! *title *body *busy? opts)}
-                 (if @*busy? "Saving…" "Save to eggs/"))]]))
+                 (if @*busy? "Saving…" "Save to pages/"))]]))

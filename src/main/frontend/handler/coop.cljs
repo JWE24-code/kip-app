@@ -1,6 +1,6 @@
 (ns frontend.handler.coop
   "Small reads of the open coop for the first-run checklist — how many source
-  files are in eggs/ and how many pages exist under nest/. Cached in the app
+  files are in pages/ and how many pages exist under nest/. Cached in the app
   db under :kip/coop-counts so the Peck empty state can show what's left to do
   before Kip is useful."
   (:require [cljs-bean.core :as bean]
@@ -13,7 +13,7 @@
   (config/get-repo-dir (state/get-current-repo)))
 
 (defn refresh-counts!
-  "Re-read eggs/ and nest/ counts into :kip/coop-counts. Never throws."
+  "Re-read pages/ and nest/ counts into :kip/coop-counts. Never throws."
   []
   (-> (ipc/ipc "wikiCoopCounts" (vault-root))
       (p/then (fn [r]

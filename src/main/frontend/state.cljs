@@ -123,9 +123,9 @@
      ;; save). :loaded? false until the first read resolves.
      :kip/llm                               {:loaded? false :configured? false}
 
-     ;; Cached eggs/ + nest/ counts for the Peck first-run checklist —
+     ;; Cached pages/ + nest/ counts for the Peck first-run checklist —
      ;; frontend.handler.coop/refresh-counts!.
-     :kip/coop-counts                       {:loaded? false :eggs 0 :nestPages 0}
+     :kip/coop-counts                       {:loaded? false :sourceFiles 0 :nestPages 0}
 
      ;; Result of the polite update check (frontend.handler.update) —
      ;; {:current :latest :url :notes :newer? :dismissed? :checking?}.

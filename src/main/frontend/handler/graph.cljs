@@ -83,7 +83,7 @@
 
 (defn build-global-graph
   "Scoped to the nest/ subtree — the LLM-maintained entity/concept/source
-  pages and the [[wikilinks]] between them. journals/, pages/, eggs/ and
+  pages and the [[wikilinks]] between them. journals/, pages/ and
   clucks/ files are all parsed into the DB as pages too, but excluded from
   this view."
   [theme {:keys [journal? orphan-pages? builtin-pages? excluded-pages?]}]
