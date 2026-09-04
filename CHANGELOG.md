@@ -5,6 +5,11 @@ changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGE
 
 ## [Unreleased]
 
+- **Answer evidence under each Peck answer** — an "Evidence" strip now shows
+  which retrieved pages the answer did *not* cite inline, and flags any
+  `[[link]]` that resolves to no nest page at all (a citation the model made
+  up) instead of leaving it a silent dead link.
+
 ## [0.4.9] — 2026-09-03
 
 - **Settings cleanup** — General drops the native title bar, custom global
