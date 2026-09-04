@@ -239,23 +239,41 @@
           (p/resolved (assoc-in st [:files rel] {:rev (:rev entry) :hash local-now}))
 
           :else
-          (p/let [local-changed? (and local-now recorded (not= (:hash recorded) local-now))
-                  dl (dbx/download (:path_display entry))
-                  dl-hash (dropbox-content-hash (:buffer dl))]
-            (fs/mkdirSync (node-path/dirname abs) #js {:recursive true})
-            (if (and local-changed? (= "manual" (:conflictMode st)))
-              (let [cn (conflict-name rel (subs (.toISOString (js/Date.)) 0 10))
-                    cabs (abs-path graph-path cn)]
-                (note-pull-write! cabs dl-hash)
-                (fs/writeFileSync cabs (:buffer dl))
-                (log (str "conflict — wrote " cn))
-                (p/resolved st))
-              (do
-                (when local-changed?
-                  (log (str "conflict — Dropbox copy of " rel " won")))
-                (note-pull-write! abs dl-hash)
-                (fs/writeFileSync abs (:buffer dl))
-                (p/resolved (assoc-in st [:files rel] {:rev (:rev dl) :hash dl-hash})))))))
+          (let [local-changed? (and local-now recorded (not= (:hash recorded) local-now))
+                manual? (= "manual" (:conflictMode st))
+                local-mtime (try (.-mtimeMs (fs/statSync abs)) (catch :default _ 0))
+                remote-mtime (try (.getTime (js/Date. (or (:client_modified entry) "")))
+                                  (catch :default _ 0))
+                ;; auto mode, both sides changed, local is newer — keep the local
+                ;; edit and let the pending push (chokidar already fired on it)
+                ;; upload it. Clobbering it here with a stale remote copy is what
+                ;; triggered Logseq's "file modified on disk" prompt mid-edit.
+                local-wins? (and local-changed?
+                                 (not manual?)
+                                 (pos? local-mtime)
+                                 (> local-mtime remote-mtime))]
+            (cond
+              local-wins?
+              (do (log (str "conflict — kept local " rel " (newer)"))
+                  (p/resolved st))
+
+              :else
+              (p/let [dl (dbx/download (:path_display entry))
+                      dl-hash (dropbox-content-hash (:buffer dl))]
+                (fs/mkdirSync (node-path/dirname abs) #js {:recursive true})
+                (if (and local-changed? manual?)
+                  (let [cn (conflict-name rel (subs (.toISOString (js/Date.)) 0 10))
+                        cabs (abs-path graph-path cn)]
+                    (note-pull-write! cabs dl-hash)
+                    (fs/writeFileSync cabs (:buffer dl))
+                    (log (str "conflict — wrote " cn))
+                    (p/resolved st))
+                  (do
+                    (when local-changed?
+                      (log (str "conflict — Dropbox copy of " rel " won")))
+                    (note-pull-write! abs dl-hash)
+                    (fs/writeFileSync abs (:buffer dl))
+                    (p/resolved (assoc-in st [:files rel] {:rev (:rev dl) :hash dl-hash})))))))))
 
       :else (p/resolved st))))
 
