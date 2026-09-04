@@ -3,6 +3,13 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [0.5.1] — 2026-09-04
+
+- **Fix: todos showing blank rows and no reminder bell** — a stateful-component
+  mixin was declared with the wrong macro, so each todo row received `nil`
+  instead of its block (empty text, no due date, no bell). Reminders were also
+  unreachable because the bell never rendered.
+
 ## [0.5.0] — 2026-09-04
 
 - **People & the addressbook** — a first-class `person` page type (with
