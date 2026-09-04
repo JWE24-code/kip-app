@@ -463,6 +463,148 @@
                         :lastHatchAt (metrics-at vault-root "hatch-metrics.json")
                         :lastGroomAt (metrics-at vault-root "groom-metrics.json")}))))))
 
+(defn- unquote-yaml
+  "Strip surrounding single/double quotes and trim, if present."
+  [s]
+  (let [s (string/trim (or s ""))]
+    (if (and (>= (count s) 2)
+             (or (and (= "'" (subs s 0 1)) (= "'" (subs s (dec (count s)))))
+                 (and (= "\"" (subs s 0 1)) (= "\"" (subs s (dec (count s)))))))
+      (subs s 1 (dec (count s)))
+      s)))
+
+(defn- parse-frontmatter
+  "Parse the `---`-delimited frontmatter hatch writes at the top of a nest page
+  into a flat map with keyword keys. Handles the scalar keys (`type`, `name`,
+  `email`, `org`, `role`, `phone`, `summary`) and the block lists (`tags`,
+  `aliases`). Returns {} when there is no frontmatter."
+  [raw]
+  (let [lines (string/split-lines (or raw ""))]
+    (if (not= "---" (first lines))
+      {}
+      (loop [rest (rest lines) acc {} list-key nil]
+        (if-let [line (first rest)]
+          (cond
+            (= "---" line)
+            acc
+
+            (re-find #"^\s*-\s+" line)
+            (let [item (unquote-yaml (string/replace line #"^\s*-\s+" ""))]
+              (recur (rest rest)
+                     (if list-key (update acc list-key (fnil conj []) item) acc)
+                     list-key))
+
+            (re-find #"^\w[\w-]*:\s*$" line)
+            (recur (rest rest) acc (keyword (string/replace line #":\s*$" "")))
+
+            (re-find #"^([\w-]+):\s*(.*)$" line)
+            (let [[_ k v] (re-matches #"^([\w-]+):\s*(.*)$" line)]
+              (recur (rest rest) (assoc acc (keyword k) (unquote-yaml v)) nil))
+
+            :else
+            (recur (rest rest) acc list-key))
+          acc)))))
+
+(defn people-list!
+  "Read-only snapshot of the coop's person pages (nest/people/*.md) for the
+  addressbook panel (kip-app#126): each entry is {:slug :name :email :org :role
+  :phone :aliases}, with :name falling back to the slug. Plain fs reads — no
+  subprocess."
+  [vault-root]
+  (p/create
+   (fn [resolve* _reject]
+     (if (string/blank? vault-root)
+       (resolve* #js {:people (clj->js [])})
+       (let [dir (.join node-path vault-root "nest" "people")]
+         (resolve*
+          #js {:people
+               (clj->js
+                (try
+                  (->> (fs/readdirSync dir)
+                       (filter md-file?)
+                       (map (fn [f]
+                              (let [slug (.name node-path f)
+                                    raw (fs/readFileSync (.join node-path dir f) "utf8")
+                                    fm (parse-frontmatter raw)]
+                                {:slug slug
+                                 :name (or (not-empty (:name fm)) slug)
+                                 :email (:email fm)
+                                 :org (:org fm)
+                                 :role (:role fm)
+                                 :phone (:phone fm)
+                                 :aliases (vec (:aliases fm))})))
+                       (sort-by (comp string/lower-case :name)))
+                  (catch :default _ []))) }))))))
+
+(defn- md-files-under
+  "All .md files under `dir` (recursively), skipping hidden directories."
+  [dir]
+  (try
+    (->> (fs/readdirSync dir #js {:recursive true})
+         (map #(.join node-path dir %))
+         (filter md-file?))
+    (catch :default _ [])))
+
+(defn- repoint-links!
+  "Rewrite [[drop-slug]] → [[keep-slug]] (plain and |aliased) across every .md
+  under `dir`. Returns the number of files touched."
+  [dir keep-slug drop-slug]
+  (let [re (js/RegExp. (str "\\[\\[" drop-slug "(?=[\\]|])") "g")
+        touched (atom 0)]
+    (doseq [f (md-files-under dir)]
+      (let [raw (fs/readFileSync f "utf8")]
+        (when (string/includes? raw (str "[[" drop-slug))
+          (fs/writeFileSync f (.replace raw re (str "[[" keep-slug)))
+          (swap! touched inc))))
+    @touched))
+
+(defn- merge-alias-frontmatter
+  "Return keep-raw with any of drop's aliases not already present appended to
+  its `aliases:` block (inserting the key when absent)."
+  [keep-raw keep-fm drop-fm]
+  (let [new-aliases (vec (remove (set (:aliases keep-fm)) (:aliases drop-fm)))]
+    (if (empty? new-aliases)
+      keep-raw
+      (if (re-find #"(?m)^aliases:" keep-raw)
+        (string/replace keep-raw #"(?m)^aliases:$"
+                        (str "aliases:"
+                             (apply str (map #(str "\n  - " %) new-aliases))))
+        (string/replace-first keep-raw #"(?m)^---\n"
+                              (str "---\naliases:\n"
+                                   (string/join "\n" (map #(str "  - " %) new-aliases))
+                                   "\n"))))))
+
+(defn people-merge!
+  "Merge two person pages that share an email (kip-app#126): append the
+  duplicate's body into the keeper, merge its aliases, delete the duplicate
+  file, and repoint [[drop-slug]] mentions to [[keep-slug]] across the coop.
+  Resolves to {:merged true :touched n}. Plain fs edits — no subprocess."
+  [vault-root keep-slug drop-slug]
+  (p/create
+   (fn [resolve* reject]
+     (if (or (string/blank? vault-root) (string/blank? keep-slug) (string/blank? drop-slug)
+             (= keep-slug drop-slug))
+       (reject (js/Error. "invalid merge"))
+       (try
+         (let [dir (.join node-path vault-root "nest" "people")
+               keep-path (.join node-path dir (str keep-slug ".md"))
+               drop-path (.join node-path dir (str drop-slug ".md"))
+               keep-raw (fs/readFileSync keep-path "utf8")
+               drop-raw (fs/readFileSync drop-path "utf8")
+               keep-fm (parse-frontmatter keep-raw)
+               drop-fm (parse-frontmatter drop-raw)
+               drop-body (string/replace drop-raw #"(?s)^---\n.*?\n---\n" "")
+               merged (merge-alias-frontmatter keep-raw keep-fm drop-fm)
+               divider (str "\n\n---\n_Merged " drop-slug " on " (.toISOString (js/Date.)) ":_\n\n")
+               new-raw (str (string/trimr merged) divider (string/trim drop-body) "\n")]
+           (fs/writeFileSync keep-path new-raw)
+           (fs/unlinkSync drop-path)
+           (resolve* #js {:merged true
+                          :touched (+ (repoint-links! (.join node-path vault-root "nest") keep-slug drop-slug)
+                                      (repoint-links! (.join node-path vault-root "pages") keep-slug drop-slug)
+                                      (repoint-links! (.join node-path vault-root "journals") keep-slug drop-slug))}))
+         (catch :default e (reject e)))))))
+
 (defn peck!
   "Runs the Peck workflow for `question` without filing the answer back.
   Resolves to {:answer :citedSlugs :candidateSlugs :steps :callId :arenaId}.

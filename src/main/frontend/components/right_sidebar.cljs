@@ -2,6 +2,7 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.components.block :as block]
+            [frontend.components.addressbook :as addressbook]
             [frontend.components.chat :as chat]
             [frontend.components.exports :as exports]
             [frontend.components.reminders :as reminders]
@@ -205,6 +206,10 @@
     :todos
     [[:.flex.items-center (ui/icon "list-check" {:class "text-md mr-2"}) "Todos"]
      (todos/todos-panel)]
+
+    :addressbook
+    [[:.flex.items-center (ui/icon "users" {:class "text-md mr-2"}) "People"]
+     (addressbook/addressbook-panel)]
 
     ["" [:span]]))
 

@@ -594,6 +594,12 @@
 (defmethod handle :wikiCoopSummary [_ [_ vault-root]]
   (wiki/coop-summary! vault-root))
 
+(defmethod handle :wikiPeopleList [_ [_ vault-root]]
+  (wiki/people-list! vault-root))
+
+(defmethod handle :wikiPeopleMerge [_ [_ vault-root keep-slug drop-slug]]
+  (wiki/people-merge! vault-root keep-slug drop-slug))
+
 (defmethod handle :checkForAppUpdate [_ [_ force?]]
   (update/check! {:force? (boolean force?)}))
 

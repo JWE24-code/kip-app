@@ -108,6 +108,11 @@
           :options {:on-click #(state/sidebar-add-block! current-repo "todos" :todos)}
           :icon (ui/icon "list-check")})
 
+       (when (and current-repo (util/electron?))
+         {:title "People"
+          :options {:on-click #(state/sidebar-add-block! current-repo "people" :addressbook)}
+          :icon (ui/icon "users")})
+
        (when-not config/publishing?
          {:title [:div.flex-row.flex.justify-between.items-center
                   [:span "Discussions"]]
