@@ -3,6 +3,17 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [0.4.11] — 2026-09-04
+
+- **Peck answer-depth toggle** — a Quick/Full control in the Peck panel.
+  Quick answers nest-only (index-first selection + answer, no skills tool
+  loop, no web fallback); Full keeps the multi-source path. Cost stays
+  internal — the toggle exposes depth, never dollars.
+- **Dropbox sync: no more "file modified on disk" prompts while editing** —
+  auto conflict mode now resolves by *last write wins* (mtime) instead of
+  always letting the Dropbox copy win, so a pull that races a mid-edit local
+  write no longer clobbers the file and trips Logseq's diff prompt.
+
 ## [0.4.10] — 2026-09-04
 
 - **Follow-ups in the tasks panel** — a dedicated Follow-ups section (todos
