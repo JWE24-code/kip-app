@@ -462,10 +462,7 @@
   (let [llm (state/sub :kip/llm)
         counts (state/sub :kip/coop-counts)]
     [:div.flex.flex-col.items-center.text-center.opacity-80.py-8.select-none
-     [:pre.font-mono.text-sm.mb-3
-      {:aria-hidden "true"
-       :style {:color "var(--ls-active-primary-color, #10b981)" :margin 0 :line-height 1.3}}
-      brand/egg-ascii]
+     [:div.mb-3 (brand/egg-logo 44)]
      [:div.text-sm.font-medium "Kip"]
      [:div.text-xs.opacity-60.mt-1 {:style {:max-width "24rem"}} brand/slogan]
      (if (first-run-showing? llm counts)

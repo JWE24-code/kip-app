@@ -25,10 +25,7 @@
   (let [done! (fn [] (mark-seen!) (close-fn))]
     [:div.w-full.mx-auto {:class "md:max-w-[440px]"}
      [:div.flex.flex-col.items-center.text-center
-      [:pre.font-mono.text-sm.mb-3
-       {:aria-hidden "true"
-        :style {:color "var(--ls-active-primary-color, #10b981)" :margin 0 :line-height 1.3}}
-       brand/egg-ascii]
+      [:div.mb-3 (brand/egg-logo 40)]
       [:h2#modal-headline.text-xl.mb-1 "Welcome to Kip"]
       [:div.text-xs.opacity-60.mb-2 brand/slogan]]
      [:div.text-sm.opacity-80.space-y-2.my-3
