@@ -3,7 +3,7 @@
 <p align="center">A pecking-first knowledge base — a fork of
 <a href="https://github.com/logseq/logseq">Logseq</a> with an LLM retrieval layer.</p>
 
-<p align="center"><a href="https://jwe24-code.github.io/kip-site/">kip website</a> ·
+<p align="center"><a href="https://www.kip-ai.be/">kip website</a> ·
 <a href="https://github.com/JWE24-code/kip-app/releases">releases</a> ·
 <a href="https://github.com/JWE24-code/kip">retrieval layer</a></p>
 
@@ -92,7 +92,7 @@ Questions and general feedback →
 [**Discussions**](https://github.com/JWE24-code/kip-app/discussions).
 Security → see [`SECURITY.md`](SECURITY.md).
 Changes → [CHANGELOG](CHANGELOG.md).
-Website → [jwe24-code.github.io/kip-site](https://jwe24-code.github.io/kip-site/).
+Website → [www.kip-ai.be](https://www.kip-ai.be/).
 
 ## Build from source
 

@@ -21,4 +21,4 @@ Type `Enter` for a new block, `Shift+Enter` for a new line, `/` for commands.
     - LATER Drop a document into `<graph>/eggs/`
     - LATER Hatch it — header *"…"* menu → *Hatch sources → Start*
     - LATER Peck — type a question in the prompt
-- More at the [Kip website](https://jwe24-code.github.io/kip-site/) · [Getting-started guide](https://github.com/JWE24-code/kip/blob/main/docs/GETTING-STARTED.md) · [Releases](https://github.com/JWE24-code/kip-app/releases)
+- More at the [Kip website](https://www.kip-ai.be/) · [Getting-started guide](https://github.com/JWE24-code/kip/blob/main/docs/GETTING-STARTED.md) · [Releases](https://github.com/JWE24-code/kip-app/releases)

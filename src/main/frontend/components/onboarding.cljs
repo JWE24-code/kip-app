@@ -18,7 +18,7 @@
   [:div.help.cp__sidebar-help-docs
    [:p.mt-4.mb-1 [:b "Getting started"]]
    [:ul
-    (link "kip website" "https://jwe24-code.github.io/kip-site/")
+    (link "kip website" "https://www.kip-ai.be/")
     (link "First-run walkthrough" "https://github.com/JWE24-code/kip/blob/main/docs/GETTING-STARTED.md")
     (link "Everything Kip adds on top of Logseq" "https://github.com/JWE24-code/kip/blob/main/docs/FEATURES.md")
     [:li [:a {:on-click (fn [] (state/sidebar-add-block! (state/get-current-repo)
