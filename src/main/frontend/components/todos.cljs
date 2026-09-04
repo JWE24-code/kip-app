@@ -14,7 +14,13 @@
    A captured todo with a due date also projects into the reminder engine
    (electron-only): a reminder is created at 09:00 on the due date and its id
    is stored on the block as a :reminder property, so checking the todo off
-   cancels the reminder."
+   cancels the reminder.
+
+   A *follow-up* is a \"check back with X on <date>\" item: a TODO block with a
+   :followup property (and, normally, a due date). Follow-ups live in their own
+   section, sorted by due date, and project into the reminder engine exactly
+   like a due-dated todo. The subject (X) is captured in the block text as a
+   [[...]] link, so it stays attached to the page/person it names."
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.ipc :as ipc]
@@ -140,26 +146,30 @@
 
 ;; --- actions ----------------------------------------------------------------
 
-(defn- insert-todo! [linked due-date reminder-id]
+(defn- insert-todo! [linked due-date followup? reminder-id]
   (editor-handler/api-insert-new-block!
    (str "TODO " linked)
    {:page (date/journal-name)
     :edit-block? false
     :properties (cond-> {}
                   (some? due-date) (assoc :due due-date)
+                  followup? (assoc :followup true)
                   (some? reminder-id) (assoc :reminder (str reminder-id)))}))
 
-(defn- add! [*input *due]
+(defn- add! [*input *due *followup]
   (let [text (string/trim @*input)
-        due-date (some-> @*due string/trim not-empty)]
+        due-date (some-> @*due string/trim not-empty)
+        followup? (boolean @*followup)]
     (when-not (string/blank? text)
       (reset! *input "")
       (reset! *due "")
+      (reset! *followup false)
       (let [repo (state/get-current-repo)
-            linked (auto-link-text repo text)]
+            linked (auto-link-text repo text)
+            body (if followup? (str "Check back with " linked) linked)]
         (if (and (util/electron?) due-date)
-          (add-reminder! text due-date #(insert-todo! linked due-date %))
-          (insert-todo! linked due-date nil))))))
+          (add-reminder! body due-date #(insert-todo! body due-date followup? %))
+          (insert-todo! body due-date followup? nil))))))
 
 (defn- check! [block]
   (editor-handler/set-marker block "DONE")
@@ -178,8 +188,10 @@
 (defn- bucket [today-int b]
   (let [due (due->int (get-in b [:block/properties :due]))
         carried (due->int (get-in b [:block/properties :carried]))
+        followup? (contains? (:block/properties b) :followup)
         jd (get-in b [:block/page :block/journal-day])]
     (cond
+      followup? :followups
       (and due (<= due today-int)) :due
       (and due (> due today-int)) :upcoming
       (and carried (= carried today-int)) :today
@@ -189,6 +201,7 @@
 
 (def ^:private section-order
   [[:due "Due"]
+   [:followups "Follow-ups"]
    [:today "Today"]
    [:carried "Carried over"]
    [:upcoming "Upcoming"]
@@ -221,10 +234,12 @@
 (rum/defcs todos-panel < rum/reactive db-mixins/query
   (rum/local "" ::input)
   (rum/local "" ::due)
+  (rum/local false ::followup)
   (rum/local nil ::flash)
   [state]
   (let [*input (::input state)
         *due (::due state)
+        *followup (::followup state)
         *flash (::flash state)
         repo (state/sub :git/current-repo)
         today-int (db-util/date->int (js/Date.))
@@ -258,21 +273,27 @@
      [:div.flex.gap-2.px-1.pb-2
       [:input.form-input.is-small.flex-1.text-sm
        {:type "text"
-        :placeholder "Add a todo — mention a page to link it"
+        :placeholder (if @*followup
+                       "Follow up with … (page or person)"
+                       "Add a todo — mention a page to link it")
         :value @*input
         :on-change #(reset! *input (.. % -target -value))
-        :on-key-down (fn [e] (when (= "Enter" (.-key e)) (add! *input *due)))}]
+        :on-key-down (fn [e] (when (= "Enter" (.-key e)) (add! *input *due *followup)))}]
       [:input.form-input.is-small.text-sm
        {:type "date"
         :style {:max-width "9em"}
         :value @*due
         :on-change #(reset! *due (.. % -target -value))}]
-      (ui/button {:size :xs :on-click #(add! *input *due)} "Add")]
+      (ui/button "Follow-up" {:size :xs :variant (if @*followup :default :ghost)
+                              :title "Toggle follow-up — check back with someone on a date"
+                              :on-click #(swap! *followup not)})
+      (ui/button "Add" {:size :xs :on-click #(add! *input *due *followup)})]
      [:div.flex-1.overflow-y-auto {:class "overflow-x-hidden"}
       (if (empty? todos)
         [:div.text-sm.opacity-50.px-2.py-6.leading-relaxed
          "No open todos. Add one — it lands in today's journal as a "
-         [:code "TODO"] " block. Give it a due date to get a reminder."]
+         [:code "TODO"] " block. Give it a due date to get a reminder, or toggle "
+         [:code "Follow-up"] " to schedule a check-back."]
         [:div
          [:div.text-xs.opacity-50.px-1.pb-1
           (str (or done-today 0) " done · " (count todos) " open"
@@ -281,9 +302,10 @@
          (when @*flash
            [:div.text-xs.opacity-70.px-1.pb-1 @*flash])
          (for [[k label] section-order
-               :let [items (if (= k :due)
-                             (sort-by #(due->int (get-in % [:block/properties :due])) (get groups k))
-                             (get groups k))]
+               :let [items (cond
+                             (= k :due) (sort-by #(due->int (get-in % [:block/properties :due])) (get groups k))
+                             (= k :followups) (sort-by #(or (due->int (get-in % [:block/properties :due])) 99999999) (get groups k))
+                             :else (get groups k))]
                :when (seq items)]
            [:div {:key (name k)}
             [:div.flex.items-center.justify-between.px-1.pt-1.pb-1
