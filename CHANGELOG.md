@@ -3,6 +3,12 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [0.5.2] — 2026-09-04
+
+- **"New person" in the People panel** — add a person directly (name, email,
+  org, role, phone, aliases) instead of only hatching them from sources. Writes
+  the same well-formed `nest/people/` page, deduped by email.
+
 ## [0.5.1] — 2026-09-04
 
 - **Fix: todos showing blank rows and no reminder bell** — a stateful-component
