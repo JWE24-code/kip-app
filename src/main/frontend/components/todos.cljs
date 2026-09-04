@@ -261,7 +261,7 @@
    [:upcoming "Upcoming"]
    [:backlog "Backlog"]])
 
-(rum/defc todo-row < rum/reactive
+(rum/defcs todo-row < rum/reactive
   (rum/local false ::picking)
   (rum/local "09:00" ::time)
   [state block]
