@@ -600,6 +600,9 @@
 (defmethod handle :wikiPeopleMerge [_ [_ vault-root keep-slug drop-slug]]
   (wiki/people-merge! vault-root keep-slug drop-slug))
 
+(defmethod handle :wikiPersonAdd [_ [_ vault-root fields]]
+  (wiki/person-add! vault-root fields))
+
 (defmethod handle :checkForAppUpdate [_ [_ force?]]
   (update/check! {:force? (boolean force?)}))
 

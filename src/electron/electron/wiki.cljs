@@ -605,6 +605,21 @@
                                       (repoint-links! (.join node-path vault-root "journals") keep-slug drop-slug))}))
          (catch :default e (reject e)))))))
 
+(defn person-add!
+  "Create (or dedupe) a person page in nest/people/ from structured fields —
+  the People panel's \"New person\" action. Shells out to scripts/add-person.js,
+  which reuses resolvePage's slugify + email dedupe and indexes the result.
+  Resolves to {:action :slug :path :type}."
+  [vault-root {:keys [name email org role phone aliases note]}]
+  (run-node-script! (script "add-person.js") vault-root
+                    (cond-> ["--name" (str (or name ""))]
+                      (seq email)   (conj "--email" email)
+                      (seq org)     (conj "--org" org)
+                      (seq role)    (conj "--role" role)
+                      (seq phone)   (conj "--phone" phone)
+                      (seq aliases) (conj "--aliases" (string/join "," aliases))
+                      (seq note)    (conj "--note" note))))
+
 (defn peck!
   "Runs the Peck workflow for `question` without filing the answer back.
   Resolves to {:answer :citedSlugs :candidateSlugs :steps :callId :arenaId}.

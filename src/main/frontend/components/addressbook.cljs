@@ -1,12 +1,12 @@
 (ns frontend.components.addressbook
   "The Addressbook panel (right-sidebar entry, see :addressbook in
-   frontend.components.right-sidebar). A read-only view over the coop's person
-   pages (nest/people/*.md) with a filter, sortable columns, click-through to
-   the person page, and a dedupe/merge affordance for persons sharing an
-   email (kip-app#126).
+   frontend.components.right-sidebar). A view over the coop's person pages
+   (nest/people/*.md) with a filter, sortable columns, click-through to the
+   person page, a \"New person\" form, and a dedupe/merge affordance for persons
+   sharing an email (kip-app#126).
 
-   Backed by the :wikiPeopleList / :wikiPeopleMerge IPC channels
-   (electron.wiki, plain fs reads of the frontmatter hatch writes)."
+   Backed by the :wikiPeopleList / :wikiPeopleMerge / :wikiPersonAdd IPC
+   channels (electron.wiki, fs reads/writes of the frontmatter hatch writes)."
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.ipc :as ipc]
@@ -46,6 +46,29 @@
   (-> (ipc/ipc "wikiPeopleMerge" (vault-root) keep-slug drop-slug)
       (p/finally refresh)))
 
+(defn- add-person! [*name *email *org *role *phone *aliases *adding refresh]
+  (let [name (string/trim @*name)]
+    (when-not (string/blank? name)
+      (-> (ipc/ipc "wikiPersonAdd" (vault-root)
+                   {:name name
+                    :email (string/trim @*email)
+                    :org (string/trim @*org)
+                    :role (string/trim @*role)
+                    :phone (string/trim @*phone)
+                    :aliases (->> (string/split @*aliases #",")
+                                  (map string/trim)
+                                  (remove string/blank?)
+                                  vec)})
+          (p/finally (fn []
+                       (reset! *name "")
+                       (reset! *email "")
+                       (reset! *org "")
+                       (reset! *role "")
+                       (reset! *phone "")
+                       (reset! *aliases "")
+                       (reset! *adding false)
+                       (refresh)))))))
+
 (defn- sort-key [k]
   (case k
     :org  (comp string/lower-case #(or (:org %) ""))
@@ -76,12 +99,26 @@
   (rum/local false ::loading?)
   (rum/local "" ::q)
   (rum/local :name ::sort)
+  (rum/local false ::adding)
+  (rum/local "" ::name)
+  (rum/local "" ::email)
+  (rum/local "" ::org)
+  (rum/local "" ::role)
+  (rum/local "" ::phone)
+  (rum/local "" ::aliases)
   {:will-mount (fn [state] (fetch! (::rows state) (::loading? state)) state)}
   [state]
   (let [*rows (::rows state)
         *loading? (::loading? state)
         *q (::q state)
         *sort (::sort state)
+        *adding (::adding state)
+        *name (::name state)
+        *email (::email state)
+        *org (::org state)
+        *role (::role state)
+        *phone (::phone state)
+        *aliases (::aliases state)
         rows @*rows
         refresh #(fetch! *rows *loading?)
         q @*q
@@ -95,8 +132,42 @@
        {:type "text" :placeholder "Filter by name, org, role, email…"
         :value @*q
         :on-change #(reset! *q (.. % -target -value))}]
+      (ui/button {:icon "user-plus" :icon-props {:size 14} :variant :ghost :size :xs
+                  :title "New person"
+                  :class (if @*adding "" "opacity-60")
+                  :on-click #(swap! *adding not)})
       (ui/button {:icon "refresh" :icon-props {:size 14} :variant :ghost :size :xs
                   :title "Refresh" :on-click refresh})]
+     (when @*adding
+       [:div.rounded.border.border-gray-05.p-2.mb-2.space-y-1
+        [:div.text-xs.font-medium "New person"]
+        [:input.form-input.is-small.w-full.text-sm
+         {:type "text" :placeholder "Name (required)"
+          :value @*name
+          :on-change #(reset! *name (.. % -target -value))}]
+        [:div.flex.gap-1
+         [:input.form-input.is-small.flex-1.text-sm
+          {:type "text" :placeholder "Email" :value @*email
+           :on-change #(reset! *email (.. % -target -value))}]
+         [:input.form-input.is-small.flex-1.text-sm
+          {:type "text" :placeholder "Phone" :value @*phone
+           :on-change #(reset! *phone (.. % -target -value))}]]
+        [:div.flex.gap-1
+         [:input.form-input.is-small.flex-1.text-sm
+          {:type "text" :placeholder "Org" :value @*org
+           :on-change #(reset! *org (.. % -target -value))}]
+         [:input.form-input.is-small.flex-1.text-sm
+          {:type "text" :placeholder "Role" :value @*role
+           :on-change #(reset! *role (.. % -target -value))}]]
+        [:input.form-input.is-small.w-full.text-sm
+         {:type "text" :placeholder "Aliases (comma-separated)" :value @*aliases
+          :on-change #(reset! *aliases (.. % -target -value))}]
+        [:div.flex.gap-1.justify-end
+         (ui/button {:size :xs :variant :ghost
+                     :on-click #(reset! *adding false)} "Cancel")
+         (ui/button {:size :xs
+                     :on-click #(add-person! *name *email *org *role *phone *aliases *adding refresh)}
+                    "Add person")]])
      [:div.flex-1.overflow-y-auto {:class "overflow-x-hidden"}
       (cond
         (and (nil? rows) @*loading?)
