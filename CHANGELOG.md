@@ -3,6 +3,19 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [0.5.0] — 2026-09-04
+
+- **People & the addressbook** — a first-class `person` page type (with
+  `name`/`email`/`org`/`role`/`phone`/`aliases`), hatched from documents that
+  name people, deduped by email, and indexed by alias so Peck matches `CDO`
+  ↔ `Chief Digital Officer`. A new **People** panel (right-sidebar) lists them
+  in a filterable, sortable table, opens the page on click, and offers a
+  one-click merge for same-email duplicates (mentions repointed).
+- **Follow-ups that remember who** — a follow-up naming a known person links
+  that person's page (and surfaces in its backlinks), closing the CRM loop.
+- **Opt-in todo reminders** — reminders are no longer created automatically; a
+  bell on each due-dated todo lets you set one at a chosen time.
+
 ## [0.4.12] — 2026-09-04
 
 - **Split Roost logo on the home screen** — the ASCII egg in the Peck empty
