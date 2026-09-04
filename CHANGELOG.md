@@ -3,8 +3,12 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
-## [Unreleased]
+## [0.4.10] — 2026-09-04
 
+- **Follow-ups in the tasks panel** — a dedicated Follow-ups section (todos
+  marked `followup::`), sorted by due date, and a capture toggle that records a
+  "Check back with [[X]]" todo with a due date and reminder. Also fixes the
+  Add button, whose label was dropped by a `ui/button` arg-order bug.
 - **Answer evidence under each Peck answer** — an "Evidence" strip now shows
   which retrieved pages the answer did *not* cite inline, and flags any
   `[[link]]` that resolves to no nest page at all (a citation the model made
