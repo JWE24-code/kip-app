@@ -104,6 +104,27 @@
             text
             candidates)))
 
+;; A follow-up names a *person* ("check back with Joeri"), whose page is keyed
+;; by slug, not the human name. Match the follow-up text against the people
+;; list (name + aliases) and wrap the first whole-word hit as [[slug]] so the
+;; follow-up block references the person page (kip-app#128).
+(defn- link-person [people text]
+  (let [candidates (->> people
+                        (mapcat (fn [p] (cons [(or (:name p) "") (:slug p)]
+                                              (map #(vector % (:slug p)) (:aliases p)))))
+                        (filter #(>= (count (first %)) 3))
+                        (sort-by (comp - count first)))]
+    (reduce (fn [s [nm slug]]
+              (if (string/includes? s "[[")
+                s
+                (if-let [idx (boundary-match-index s nm)]
+                  (str (subs s 0 idx)
+                       (page-ref/->page-ref slug)
+                       (subs s (+ idx (count nm))))
+                  s)))
+            text
+            candidates)))
+
 ;; --- dates ------------------------------------------------------------------
 ;; due dates are stored as `due:: YYYY-MM-DD` block properties and compared as
 ;; yyyyMMdd integers against the journal-day of the todo's page.
@@ -135,6 +156,11 @@
 
 (defn- vault-root []
   (config/get-repo-dir (state/get-current-repo)))
+
+(defn- fetch-people! [*people]
+  (-> (ipc/ipc "wikiPeopleList" (vault-root))
+      (p/then (fn [r] (reset! *people (vec (:people (bean/->clj r))))))
+      (p/catch (fn [_] (reset! *people [])))))
 
 ;; --- reminder projection ----------------------------------------------------
 
@@ -183,7 +209,7 @@
                   (some? due-date) (assoc :due due-date)
                   followup? (assoc :followup true))}))
 
-(defn- add! [*input *due *followup]
+(defn- add! [*input *due *followup *people]
   (let [text (string/trim @*input)
         due-date (some-> @*due string/trim not-empty)
         followup? (boolean @*followup)]
@@ -192,7 +218,10 @@
       (reset! *due "")
       (reset! *followup false)
       (let [repo (state/get-current-repo)
-            linked (auto-link-text repo text)
+            linked (if followup?
+                     (let [lp (link-person (or @*people []) text)]
+                       (if (string/includes? lp "[[") lp (auto-link-text repo text)))
+                     (auto-link-text repo text))
             body (if followup? (str "Check back with " linked) linked)]
         (insert-todo! body due-date followup?)))))
 
@@ -283,11 +312,16 @@
   (rum/local "" ::due)
   (rum/local false ::followup)
   (rum/local nil ::flash)
+  (rum/local nil ::people)
+  {:will-mount (fn [state]
+                 (fetch-people! (::people state))
+                 state)}
   [state]
   (let [*input (::input state)
         *due (::due state)
         *followup (::followup state)
         *flash (::flash state)
+        *people (::people state)
         repo (state/sub :git/current-repo)
         today-int (db-util/date->int (js/Date.))
         todos (when repo
@@ -325,7 +359,7 @@
                        "Add a todo — mention a page to link it")
         :value @*input
         :on-change #(reset! *input (.. % -target -value))
-        :on-key-down (fn [e] (when (= "Enter" (.-key e)) (add! *input *due *followup)))}]
+        :on-key-down (fn [e] (when (= "Enter" (.-key e)) (add! *input *due *followup *people)))}]
       [:input.form-input.is-small.text-sm
        {:type "date"
         :style {:max-width "9em"}
@@ -334,7 +368,7 @@
       (ui/button "Follow-up" {:size :xs :variant (if @*followup :default :ghost)
                               :title "Toggle follow-up — check back with someone on a date"
                               :on-click #(swap! *followup not)})
-      (ui/button "Add" {:size :xs :on-click #(add! *input *due *followup)})]
+      (ui/button "Add" {:size :xs :on-click #(add! *input *due *followup *people)})]
      [:div.flex-1.overflow-y-auto {:class "overflow-x-hidden"}
       (if (empty? todos)
          [:div.text-sm.opacity-50.px-2.py-6.leading-relaxed
