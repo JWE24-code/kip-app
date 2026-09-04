@@ -40,9 +40,10 @@
 ;; Session-only conversation, lifted out of component-local state so a
 ;; mod+shift+p toggle (which unmounts peck-main) and the sidebar/main split
 ;; both keep one shared history. Not persisted across restarts.
-(defonce *peck-session (atom {:messages [] :input ""}))
+(defonce *peck-session (atom {:messages [] :input "" :depth "full"}))
 (def ^:private *messages (rum/cursor-in *peck-session [:messages]))
 (def ^:private *input (rum/cursor-in *peck-session [:input]))
+(def ^:private *depth (rum/cursor-in *peck-session [:depth]))
 
 (defn prefill!
   "Drop `text` into the Peck input, ready for the user to send or edit. Used by
@@ -122,12 +123,13 @@
   "Run one Peck turn for `question` and hand the turn->message map (plus the
   originating `:q` and `:history`) to `on-result`. Shared by a fresh send and
   a regenerate. `opts`: {:arena-compare-to <prior call id, kip-app#73>,
-  :history [{:role :text} …] (kip-app#82)}."
-  [question on-result *loading? *progress *poll-id {:keys [arena-compare-to history]}]
+  :history [{:role :text} …] (kip-app#82), :depth \"quick\"|\"full\"
+  (epic #38 track #36)}."
+  [question on-result *loading? *progress *poll-id {:keys [arena-compare-to history depth]}]
   (when (and (not (string/blank? question)) (not @*loading?))
     (reset! *loading? true)
     (start-poll! *progress *poll-id)
-    (-> (ipc/ipc "wikiChat" (vault-root) question false arena-compare-to (or history []))
+    (-> (ipc/ipc "wikiChat" (vault-root) question false arena-compare-to (or history []) (or depth "full"))
         (p/then (fn [result]
                   (on-result (assoc (turn->message (bean/->clj result))
                                     :q question :history (vec history)))))
@@ -144,7 +146,7 @@
       (let [history (recent-history @*messages)]
         (reset! *input "")
         (swap! *messages conj {:role :user :text input})
-        (ask! input #(swap! *messages conj %) *loading? *progress *poll-id {:history history})))))
+        (ask! input #(swap! *messages conj %) *loading? *progress *poll-id {:history history :depth @*depth})))))
 
 (defn- regenerate!
   "Re-run the question that produced `msg`, appending a fresh answer below it.
@@ -159,7 +161,7 @@
     (let [arena-compare-to (when (and call-id (pref-signals/enabled?)) call-id)]
       (ask! q #(swap! *messages conj (assoc % :regen? true))
             *loading? *progress *poll-id
-            {:arena-compare-to arena-compare-to :history (vec history)}))))
+            {:arena-compare-to arena-compare-to :history (vec history) :depth @*depth}))))
 
 (defn- steps-line
   "A ⚙ line per skill the tool loop ran, above the answer."
@@ -479,6 +481,29 @@
              :on-click #(reset! *input p)}
             p])]])]))
 
+(rum/defc depth-toggle
+  "Answer-depth control (epic #38 track #36): Quick = nest-only (fast/cheap),
+  Full = the multi-source path (skills + web when warranted). Sticky per
+  session via *depth. Cost is never surfaced — this is a depth trade-off only."
+  < rum/static
+  [depth loading?]
+  [:div {:style {:display "inline-flex" :borderRadius "7px" :overflow "hidden"
+                 :border "1px solid var(--ls-border-color)" :fontSize "0.75rem"}}
+   (for [[v label] [["full" "Full"] ["quick" "Quick"]]]
+     (let [on? (= v depth)]
+       [:button
+        {:key v
+         :title (if (= v "quick")
+                  "Quick — nest only: faster, cheaper, no external sources"
+                  "Full — nest + skills + web search when the question needs it")
+         :disabled loading?
+         :on-click #(reset! *depth v)
+         :style {:padding "0.25rem 0.6rem" :border "none" :cursor "pointer"
+                 :fontWeight (if on? 600 400)
+                 :color (if on? "var(--ls-active-primary-color)" "var(--ls-secondary-text-color)")
+                 :background (if on? "var(--ls-tertiary-background-color)" "transparent")}}
+        label]))])
+
 (rum/defcs chat-panel
   < rum/reactive
   (rum/local false ::loading?)
@@ -510,6 +535,7 @@
         _ (state/sub :kip/llm)  ; so the 👍/👎 widget appears/hides live on a provider switch
         messages (rum/react *messages)
         input (rum/react *input)
+        depth (rum/react *depth)
         ;; a fresh send or a regenerate is the user acting — always ride it down
         submit! #(do (reset! *stick? true) (send-message! *loading? *progress *poll-id))
         regen! (fn [msg] (reset! *stick? true) (regenerate! msg *loading? *progress *poll-id))
@@ -534,17 +560,18 @@
            (streaming-message partial-answer))
          (when (seq activity)
            (telemetry/activity-feed (reverse activity)))])]
-     [:div.flex.gap-2.p-2.border-t.border-gray-06
-      [:input.form-input.flex-1.text-sm
-       {:type "text"
-        :placeholder "Ask a question, or tell it something new…"
-        :value input
-        :disabled @*loading?
-        :on-change #(reset! *input (.. % -target -value))
-        :on-key-down (fn [e] (when (and (= "Enter" (.-key e)) (not (.-shiftKey e)))
-                                (.preventDefault e)
-                                (submit!)))}]
-      (ui/button {:on-click submit! :disabled (or @*loading? (string/blank? input))} "Peck")]]))
+      [:div.flex.gap-2.p-2.border-t.border-gray-06
+       [:input.form-input.flex-1.text-sm
+        {:type "text"
+         :placeholder "Ask a question, or tell it something new…"
+         :value input
+         :disabled @*loading?
+         :on-change #(reset! *input (.. % -target -value))
+         :on-key-down (fn [e] (when (and (= "Enter" (.-key e)) (not (.-shiftKey e)))
+                                 (.preventDefault e)
+                                 (submit!)))}]
+       (depth-toggle depth @*loading?)
+       (ui/button {:on-click submit! :disabled (or @*loading? (string/blank? input))} "Peck")]]))
 
 (rum/defc peck-main
   "The full-width, centre-of-window Peck view (see :ui/peck-mode? in

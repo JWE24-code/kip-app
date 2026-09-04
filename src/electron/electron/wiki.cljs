@@ -470,16 +470,19 @@
   anything. With `trace?` the run also streams every LLM + skill call, full
   I/O included, to <coop>/.roost/peck-trace.jsonl. `arena-compare-to` (a
   prior answer's callId) makes this a regenerate free-rider on the managed
-  backend — the answer runs as arena candidate B (kip-app#73)."
-  ([vault-root question] (peck! vault-root question false nil nil))
-  ([vault-root question trace?] (peck! vault-root question trace? nil nil))
-  ([vault-root question trace? arena-compare-to] (peck! vault-root question trace? arena-compare-to nil))
-  ([vault-root question trace? arena-compare-to history]
+  backend — the answer runs as arena candidate B (kip-app#73). `depth` (\"quick\")
+  runs nest-only — no skills tool loop, no web fallback (epic #38 track #36)."
+  ([vault-root question] (peck! vault-root question false nil nil nil))
+  ([vault-root question trace?] (peck! vault-root question trace? nil nil nil))
+  ([vault-root question trace? arena-compare-to] (peck! vault-root question trace? arena-compare-to nil nil))
+  ([vault-root question trace? arena-compare-to history] (peck! vault-root question trace? arena-compare-to history nil))
+  ([vault-root question trace? arena-compare-to history depth]
    (run-node-script! (script "chat.js") vault-root
                      (cond-> [question]
                        trace? (conj "--trace")
                        (not (string/blank? arena-compare-to)) (conj "--arena-compare-to" arena-compare-to)
-                       (seq history) (conj "--history" (js/JSON.stringify (clj->js history)))))))
+                       (seq history) (conj "--history" (js/JSON.stringify (clj->js history)))
+                       (= "quick" depth) (conj "--depth" "quick")))))
 
 (defn peck-file!
   "Files a settled Peck answer back into the nest (kip-app#112) — the post-hoc

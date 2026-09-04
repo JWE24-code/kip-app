@@ -612,8 +612,8 @@
 (defmethod handle :kipFeedback [_ [_ vault-root signal]]
   (preference-signals/post-feedback! vault-root signal))
 
-(defmethod handle :wikiChat [_ [_ vault-root question trace? arena-compare-to history]]
-  (wiki/peck! vault-root question (boolean trace?) arena-compare-to history))
+(defmethod handle :wikiChat [_ [_ vault-root question trace? arena-compare-to history depth]]
+  (wiki/peck! vault-root question (boolean trace?) arena-compare-to history depth))
 
 ;; File a settled answer back into the nest (kip-app#112) — the renderer's
 ;; "file into the nest" control on a Peck answer. Thin pass; the audit row
