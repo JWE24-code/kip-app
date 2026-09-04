@@ -7,7 +7,11 @@ version 3. Kip is not affiliated with, sponsored by, or endorsed by Logseq.
 It is distributed under the same license (see LICENSE.md).
 
 The Kip retrieval layer (the bundled scripts/, developed independently) is
-maintained at https://github.com/JWE24-code/kip and is also AGPL-3.0.
+maintained at https://github.com/JWE24-code/kip and is licensed under the
+Apache License 2.0 — a copy is bundled with this app at
+LICENSE-APACHE-2.0.txt (or https://www.apache.org/licenses/LICENSE-2.0).
+Bundling it into this AGPL-3.0 app is unchanged by its permissive license;
+this program as a whole remains AGPL-3.0.
 
 Bundled third-party code:
 
