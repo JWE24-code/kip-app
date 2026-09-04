@@ -3,6 +3,14 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [0.4.12] — 2026-09-04
+
+- **Split Roost logo on the home screen** — the ASCII egg in the Peck empty
+  state and welcome card is replaced with the cobalt tile + white egg mark,
+  matching the website and the PWA.
+- **New app icons** — the Windows and Linux app/installer icons are now the
+  cobalt egg mark (regenerated from `resources/icons/gen-kip-icons.mjs`).
+
 ## [0.4.11] — 2026-09-04
 
 - **Peck answer-depth toggle** — a Quick/Full control in the Peck panel.
