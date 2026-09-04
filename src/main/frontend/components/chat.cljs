@@ -65,7 +65,7 @@
    :pages pages})
 
 (defn- turn->message [result]
-  (let [{:keys [intent answer learned note pages steps callId arenaId webSource citedSlugs candidateSlugs lintWarnings sources]} result]
+  (let [{:keys [intent answer learned note pages steps callId arenaId webSource citedSlugs candidateSlugs deadCitations lintWarnings sources]} result]
     (cond
       (= intent "statement")
       (if learned
@@ -77,8 +77,10 @@
        :web-source webSource :answer? true
        ;; kept on the message so "file into the nest" has its inputs
        ;; (kip-app#112) — cited vs candidate is also the retrieval-breadth
-       ;; signal the evidence view (#117) will want.
+       ;; signal the evidence view (#117) renders.
        :cited-slugs citedSlugs :candidate-slugs candidateSlugs
+       ;; [[links]] in the answer that resolve to no nest page (kip-app#117)
+       :dead-citations deadCitations
        ;; groom's findings for the pages this answer cited (kip-app#116)
        :lint-warnings lintWarnings
        ;; the pages the answer leaned on, listed under it (kip#49)
@@ -330,8 +332,33 @@
      [:div {:key slug :style {:margin "2px 0"}}
       (block/inline-text citation-config :markdown (str "[[" slug "]]"))])])
 
+(rum/defc evidence-cp
+  "Cited vs retrieved + the dead-citation flag (kip-app#117). Under a nest
+  answer, surface (a) retrieved pages the answer did not cite inline, and (b)
+  any [[link]] that resolves to no nest page at all — a citation the model
+  made up. Complements sources-cp, which lists the pages it did cite."
+  [candidate-slugs cited-slugs dead-citations]
+  (let [cited (set cited-slugs)
+        uncited (remove #(contains? cited %) (or candidate-slugs []))]
+    (when (or (seq uncited) (seq dead-citations))
+      [:div {:style {:font-size "11px" :opacity 0.75 :margin-top "6px"
+                     :border-left "2px solid var(--ls-border-color, #e5e7eb)" :padding-left "8px"}}
+       [:div {:style {:font-weight 500 :margin-bottom "2px"}} "Evidence"]
+       (when (seq uncited)
+         [:div {:style {:margin "2px 0"}}
+          [:span {:style {:opacity 0.55}} "retrieved, not cited: "]
+          (for [slug uncited]
+            ^{:key slug} [:span {:style {:margin-right "6px"}}
+                          (block/inline-text citation-config :markdown (str "[[" slug "]]"))])])
+       (when (seq dead-citations)
+         [:div {:style {:margin "2px 0" :color "var(--ls-warning-color, #d97706)"}}
+          [:span {:style {:opacity 0.55}} "unresolved: "]
+          (for [slug dead-citations]
+            ^{:key slug} [:span {:style {:margin-right "6px"}}
+                          (block/inline-text citation-config :markdown (str "[[" slug "]]"))])])])))
+
 (rum/defc message-cp
-  [{:keys [role text pages steps call-id arena-id web-source answer? regen? candidate-slugs lint-warnings sources] :as msg}
+  [{:keys [role text pages steps call-id arena-id web-source answer? regen? candidate-slugs cited-slugs dead-citations lint-warnings sources] :as msg}
    {:keys [on-regenerate busy?]}]
   [:div.py-2
    (case role
@@ -365,6 +392,7 @@
       [:div.prose.prose-sm.max-w-none (block/inline-text citation-config :markdown text)]
       (when (seq sources) (sources-cp sources))
       (when (seq lint-warnings) (lint-warnings-cp lint-warnings))
+      (evidence-cp candidate-slugs cited-slugs dead-citations)
       (when (and (:filename web-source) (:content web-source))
         (web-source-widget web-source))
       (when (and arena-id (pref-signals/enabled?))
