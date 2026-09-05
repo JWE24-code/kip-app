@@ -1059,7 +1059,7 @@
   [text & {:keys []
            :as   opts}]
   (if (map? text)
-    (button-inner nil text)
+    (button-inner opts text)
     (button-inner text opts)))
 
 (rum/defc point
