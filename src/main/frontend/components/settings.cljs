@@ -576,7 +576,14 @@
         [on? set-on?] (rum/use-state value)
         on-toggle #(let [v (not on?)]
                      (set-on? v)
-                     (storage/set ::storage-spec/http-server-enabled v))]
+                     (storage/set ::storage-spec/http-server-enabled v)
+                     ;; enabling extensions also autostarts the local API server
+                     ;; so the browser helpers can connect without another step
+                     (if v
+                       (do (ipc/ipc :server/set-config {:autostart true})
+                           (ipc/ipc :server/do :start))
+                       (do (ipc/ipc :server/set-config {:autostart false})
+                           (ipc/ipc :server/do :stop))))]
     [:div.flex.items-center.gap-2
      (ui/toggle on? on-toggle true)
      (when (not= (boolean value) on?)
@@ -613,7 +620,8 @@
 
 (defn http-server-switcher-row []
   (row-with-button-action
-   {:left-label "HTTP APIs server"
+   {:left-label "Enable extensions"
+    :description "Lets browser extensions — the Gmail helper, webclipper — talk to your coop over a local server on this machine."
     :action (http-server-enabled-switcher t)}))
 
 (defn flashcards-switcher-row [enable-flashcards?]
@@ -734,6 +742,7 @@
     [:div.panel-wrap.is-advanced
      (when (util/electron?) (https-user-agent-row https-agent-opts))
      (clear-cache-row t)
+     (when (util/electron?) (http-server-switcher-row))
 
      (journal-row enable-journals?)
      (when (not enable-journals?)
