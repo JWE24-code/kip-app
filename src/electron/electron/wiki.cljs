@@ -530,7 +530,7 @@
                   (->> (fs/readdirSync dir)
                        (filter md-file?)
                        (map (fn [f]
-                              (let [slug (.name node-path f)
+                              (let [slug (.basename node-path f ".md")
                                     raw (fs/readFileSync (.join node-path dir f) "utf8")
                                     fm (parse-frontmatter raw)]
                                 {:slug slug
