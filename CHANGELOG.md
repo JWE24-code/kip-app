@@ -3,6 +3,26 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [0.6.0] — 2026-09-05
+
+- **Manual re-hatch** — the Hatch modal gains a "Re-hatch already-hatched
+  sources" toggle that threads `--force` through, so you can deliberately
+  re-hatch a source whose trace hub already exists in the nest (kip-app#124).
+- **Interaction capture** — a local `POST /interactions` endpoint logs an
+  interaction (email/call/meeting) onto a person's page, resolving the person
+  by canonical email and appending to its `## Interactions` section
+  (kip-app#127).
+- **Gmail helper extension** — a Chrome extension (separate repo
+  `kip-gmail-extension`) logs the sender of an open thread to their person page.
+  A new `/pair` endpoint gives it a one-click connection: Kip mints a token
+  after you approve the request (kip-app#133).
+- **"Enable extensions" setting** — Settings → Advanced now exposes a friendly
+  toggle that starts (and autostarts) the local API server, replacing the old
+  hidden "HTTP APIs server" switch.
+- **Fix: welcome card before a graph** — the first-run welcome card no longer
+  appears on the demo/nil graph, so "Get started" can't point at a graph that
+  doesn't exist yet.
+
 ## [0.5.2] — 2026-09-04
 
 - **"New person" in the People panel** — add a person directly (name, email,
