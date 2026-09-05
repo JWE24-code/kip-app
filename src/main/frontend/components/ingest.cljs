@@ -33,15 +33,15 @@
 
 (defn- vault-root [] (config/get-repo-dir (state/get-current-repo)))
 
-(defn- load-preview! [*preview *error *busy?]
+(defn- load-preview! [*preview *error *busy? *force?]
   (reset! *busy? true)
   (reset! *error nil)
-  (-> (ipc/ipc "wikiIngestPreview" (vault-root))
+  (-> (ipc/ipc "wikiIngestPreview" (vault-root) (boolean @*force?))
       (p/then (fn [r] (reset! *preview (bean/->clj r))))
       (p/catch (fn [e] (reset! *error (str e))))
       (p/finally (fn [] (reset! *busy? false)))))
 
-(defn- pick-sources! [*preview *error *busy?]
+(defn- pick-sources! [*preview *error *busy? *force?]
   (-> (ipc/ipc "wikiPickSources" (vault-root))
       (p/then (fn [r]
                 (let [{:keys [canceled added duplicates rejected]} (bean/->clj r)]
@@ -58,7 +58,7 @@
                        :warning true))
                     (when (or (seq added) (seq duplicates))
                       (coop/refresh-counts!)
-                      (load-preview! *preview *error *busy?))))))
+                      (load-preview! *preview *error *busy? *force?))))))
       (p/catch (fn [e] (notification/show! (str "Couldn't add sources: " e) :error true)))))
 
 (defn- start-poll! [*progress *poll-id]
@@ -92,7 +92,7 @@
 (def ^:private no-graph-msg
   "Open a folder first (File → Open a folder) — Kip hatches the sources inside a graph's folder.")
 
-(defn- run-batch! [{:keys [*preview *done *remaining *error *busy? *progress *poll-id *metrics *trace? *classic? *recovery]}]
+(defn- run-batch! [{:keys [*preview *done *remaining *error *busy? *progress *poll-id *metrics *trace? *classic? *force? *recovery]}]
   (if (config/demo-graph?)
     (reset! *error no-graph-msg)
     (do
@@ -101,7 +101,7 @@
       (reset! *recovery nil)
       (reset! *progress nil)
       (start-poll! *progress *poll-id)
-      (-> (ipc/ipc "wikiIngestBatch" (vault-root) batch-size (boolean @*trace?) (boolean @*classic?))
+      (-> (ipc/ipc "wikiIngestBatch" (vault-root) batch-size (boolean @*trace?) (boolean @*classic?) (boolean @*force?))
           (p/then (fn [r]
                     (let [{:keys [hatched failed remaining metrics]} (bean/->clj r)]
                       (swap! *done (fn [d] {:hatched (into (:hatched d) hatched)
@@ -112,7 +112,7 @@
           (p/catch (fn [e]
                      (reset! *error (str e))
                      (check-recovery! *recovery *error (str e))
-                     (load-preview! *preview *error *busy?)))
+                     (load-preview! *preview *error *busy? *force?)))
           (p/finally (fn []
                        (stop-poll! *progress *poll-id)
                        (reset! *busy? false)))))))
@@ -149,14 +149,14 @@
                    (swap! *done update :failed conj {:source (:source proposal) :error (str e)})))
         (p/finally (fn [] (review-next! ctx))))))
 
-(defn- review-next! [{:keys [*rp *classic? *preview *error *busy?] :as ctx}]
+(defn- review-next! [{:keys [*rp *classic? *force? *preview *error *busy?] :as ctx}]
   (swap! *rp assoc :phase :proposing :proposal nil :error nil)
-  (-> (ipc/ipc "wikiIngestProposeNext" (vault-root) batch-size (get @*rp :skip 0) (boolean @*classic?))
+  (-> (ipc/ipc "wikiIngestProposeNext" (vault-root) batch-size (get @*rp :skip 0) (boolean @*classic?) (boolean @*force?))
       (p/then (fn [r]
                 (let [{:keys [done whiteboard plan] :as res} (bean/->clj r)]
                   (cond
                     done       (do (swap! *rp assoc :phase :done)
-                                   (load-preview! *preview *error *busy?))
+                                   (load-preview! *preview *error *busy? *force?))
                     whiteboard (do (swap! *rp assoc :proposal res) (review-commit! ctx true))
                     :else      (swap! *rp assoc
                                       :phase :reviewing
@@ -261,13 +261,14 @@
   (rum/local nil ::metrics)
   (rum/local false ::trace?)
   (rum/local false ::classic?)
+  (rum/local false ::force?)
   (rum/local false ::paste?)
   (rum/local nil ::recovery)
   (rum/local false ::review?)
   (rum/local nil ::rp)
   {:will-mount   (fn [state]
                    (when-not (config/demo-graph?)
-                     (load-preview! (get state ::preview) (get state ::error) (get state ::busy?))
+                     (load-preview! (get state ::preview) (get state ::error) (get state ::busy?) (get state ::force?))
                      (check-recovery! (get state ::recovery) (get state ::error) nil))
                    (llm-handler/refresh!)
                    state)
@@ -284,13 +285,14 @@
         *metrics   (get state ::metrics)
         *trace?    (get state ::trace?)
         *classic?  (get state ::classic?)
+        *force?    (get state ::force?)
         *paste?    (get state ::paste?)
         *recovery  (get state ::recovery)
         *review?   (get state ::review?)
         *rp        (get state ::rp)
         ctx        {:*preview *preview :*done *done :*remaining *remaining :*error *error :*busy? *busy?
                     :*progress *progress :*poll-id (get state ::poll-id)
-                    :*metrics *metrics :*trace? *trace? :*classic? *classic?
+                    :*metrics *metrics :*trace? *trace? :*classic? *classic? :*force? *force?
                     :*recovery *recovery :*rp *rp}
         preview    @*preview
         recovery   @*recovery
@@ -302,7 +304,7 @@
         started?   (or (seq (:hatched done)) (seq (:failed done)) (some? remaining))
         pending-n  (if started? (or remaining 0) (count (:pending preview)))]
     (drop-source/drop-zone
-     {:on-added (fn [_] (when-not demo? (load-preview! *preview *error *busy?)))}
+     {:on-added (fn [_] (when-not demo? (load-preview! *preview *error *busy? *force?)))}
      [:div.w-full.mx-auto {:class "md:max-w-[600px]"}
       [:h2#modal-headline.text-xl.mb-3 "Hatch sources"]
       [:p.text-sm.opacity-70.mb-3
@@ -318,9 +320,9 @@
 
      (when-not @*busy?
        [:div.mb-3
-        (ui/button {:variant :outline :size :sm
-                    :on-click #(pick-sources! *preview *error *busy?)}
-                   "Add source…")
+         (ui/button {:variant :outline :size :sm
+                     :on-click #(pick-sources! *preview *error *busy? *force?)}
+                    "Add source…")
         (ui/button {:variant :outline :size :sm :class "ml-2"
                     :on-click #(swap! *paste? not)}
                    "Paste text…")
@@ -329,9 +331,9 @@
      (when (and @*paste? (not @*busy?))
        (paste-source/paste-panel
         {:on-cancel #(reset! *paste? false)
-         :on-saved  (fn [_name]
-                      (reset! *paste? false)
-                      (load-preview! *preview *error *busy?))}))
+          :on-saved  (fn [_name]
+                       (reset! *paste? false)
+                       (load-preview! *preview *error *busy? *force?))}))
 
      (llm-banner/provider-banner)
 
@@ -364,9 +366,9 @@
             (telemetry/activity-feed (reverse (:activity prog))))]
          [:div.text-sm.opacity-60.my-2 "Starting…"])
 
-       (nil? preview)
-       (when @*error
-         (ui/button {:on-click #(load-preview! *preview *error *busy?)} "Retry"))
+        (nil? preview)
+        (when @*error
+          (ui/button {:on-click #(load-preview! *preview *error *busy? *force?)} "Retry"))
 
        :else
        [:div
@@ -415,7 +417,10 @@
                (for [[i {:keys [source kind kb status]}] (map-indexed vector (:pending preview))]
                  [:li.text-xs.opacity-70 {:key i}
                   (str "[" kind (when (= status "changed") " · edited since hatch") "] " source " (" kb " KB)")])]])
-           (checkbox-row "Review each source's pages before writing" @*review? #(swap! *review? not))
+            (checkbox-row "Re-hatch already-hatched sources" @*force?
+                          #(do (swap! *force? not)
+                               (load-preview! *preview *error *busy? *force?)))
+            (checkbox-row "Review each source's pages before writing" @*review? #(swap! *review? not))
            (checkbox-row "Record LLM activity (thinking + timings)" @*trace? #(swap! *trace? not))
            (checkbox-row "Classic mode — one LLM call per page (slower; for comparison)" @*classic? #(swap! *classic? not))
            (ui/button

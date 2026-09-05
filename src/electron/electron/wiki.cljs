@@ -163,9 +163,12 @@
   journals/, pages/, plus the oversized and empty ones it skips. No LLM
   calls. Resolves to {:pending [{:source :kind :kb :status}] :oversized [...]
   :empty [...] :changedCount n :totalKb n} — status distinguishes a brand-new
-  source from one edited since its last hatch (kip-app#113)."
-  [vault-root]
-  (run-node-script! (script "hatch-all.js") vault-root ["--preview"]))
+  source from one edited since its last hatch (kip-app#113). With `force?` the
+  preview also counts already-hatched sources (trace hub present) — what a
+  manual re-hatch would touch."
+  [vault-root force?]
+  (run-node-script! (script "hatch-all.js") vault-root
+                    (cond-> ["--preview"] force? (conj "--force"))))
 
 (defn hatch-batch!
   "Hatches up to `limit` pending source files — no per-file review. Resolves
@@ -174,12 +177,14 @@
   to <coop>/.roost/hatch-trace.jsonl and attaches short text previews to the
   activity feed in hatch-progress.json. When `classic?`, uses the old
   one-propose-plus-one-generate-call-per-page path instead of the default
-  single combined call per file."
-  [vault-root limit trace? classic?]
+  single combined call per file. When `force?`, also re-hatches sources that
+  already have a trace hub in the nest (kip-app#124)."
+  [vault-root limit trace? classic? force?]
   (run-node-script! (script "hatch-all.js") vault-root
                     (cond-> ["--limit" (str limit)]
                       trace? (conj "--trace")
-                      classic? (conj "--classic"))))
+                      classic? (conj "--classic")
+                      force? (conj "--force"))))
 
 (defn hatch-propose-next!
   "\"Review before writing\": propose pages for the next pending source (past
@@ -187,11 +192,13 @@
   to {:done true} when there's nothing left, otherwise {:source :relPath :kind
   :remaining :plan [{:slug :title :type :action :summary}]} (or {:whiteboard
   true} for a board — no plan to pick from). The full plan is stashed at
-  <coop>/.roost/hatch-plan.json for hatch-commit-next!."
-  [vault-root limit skip classic?]
+  <coop>/.roost/hatch-plan.json for hatch-commit-next!. `force?` includes
+  already-hatched sources in the pending scan (kip-app#124)."
+  [vault-root limit skip classic? force?]
   (run-node-script! (script "hatch-all.js") vault-root
                     (cond-> ["--propose-next" "--limit" (str limit) "--skip" (str skip)]
-                      classic? (conj "--classic"))))
+                      classic? (conj "--classic")
+                      force? (conj "--force"))))
 
 (defn hatch-commit-next!
   "Commit the plan stashed by hatch-propose-next!, keeping only the pages whose

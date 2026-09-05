@@ -561,14 +561,14 @@
 (defmethod handle :wikiGroomMetrics [_ [_ vault-root]]
   (wiki/groom-metrics! vault-root))
 
-(defmethod handle :wikiIngestPreview [_ [_ vault-root]]
-  (wiki/hatch-preview! vault-root))
+(defmethod handle :wikiIngestPreview [_ [_ vault-root force?]]
+  (wiki/hatch-preview! vault-root (boolean force?)))
 
-(defmethod handle :wikiIngestBatch [_ [_ vault-root limit trace? classic?]]
-  (wiki/hatch-batch! vault-root limit trace? classic?))
+(defmethod handle :wikiIngestBatch [_ [_ vault-root limit trace? classic? force?]]
+  (wiki/hatch-batch! vault-root limit trace? classic? (boolean force?)))
 
-(defmethod handle :wikiIngestProposeNext [_ [_ vault-root limit skip classic?]]
-  (wiki/hatch-propose-next! vault-root limit skip classic?))
+(defmethod handle :wikiIngestProposeNext [_ [_ vault-root limit skip classic? force?]]
+  (wiki/hatch-propose-next! vault-root limit skip classic? (boolean force?)))
 
 (defmethod handle :wikiIngestCommitNext [_ [_ vault-root keep-slugs]]
   (wiki/hatch-commit-next! vault-root keep-slugs))
