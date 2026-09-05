@@ -489,27 +489,27 @@
   (let [lines (string/split-lines (or raw ""))]
     (if (not= "---" (first lines))
       {}
-      (loop [rest (rest lines) acc {} list-key nil]
-        (if-let [line (first rest)]
+      (loop [remaining (rest lines) acc {} list-key nil]
+        (if-let [line (first remaining)]
           (cond
             (= "---" line)
             acc
 
             (re-find #"^\s*-\s+" line)
             (let [item (unquote-yaml (string/replace line #"^\s*-\s+" ""))]
-              (recur (rest rest)
+              (recur (rest remaining)
                      (if list-key (update acc list-key (fnil conj []) item) acc)
                      list-key))
 
             (re-find #"^\w[\w-]*:\s*$" line)
-            (recur (rest rest) acc (keyword (string/replace line #":\s*$" "")))
+            (recur (rest remaining) acc (keyword (string/replace line #":\s*$" "")))
 
             (re-find #"^([\w-]+):\s*(.*)$" line)
             (let [[_ k v] (re-matches #"^([\w-]+):\s*(.*)$" line)]
-              (recur (rest rest) (assoc acc (keyword k) (unquote-yaml v)) nil))
+              (recur (rest remaining) (assoc acc (keyword k) (unquote-yaml v)) nil))
 
             :else
-            (recur (rest rest) acc list-key))
+            (recur (rest remaining) acc list-key))
           acc)))))
 
 (defn people-list!
