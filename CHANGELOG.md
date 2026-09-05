@@ -3,7 +3,7 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
-## [0.6.0] — 2026-09-05
+## [0.5.3] — 2026-09-05
 
 - **Manual re-hatch** — the Hatch modal gains a "Re-hatch already-hatched
   sources" toggle that threads `--force` through, so you can deliberately
