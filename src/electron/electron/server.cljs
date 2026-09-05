@@ -1,7 +1,8 @@
 (ns electron.server
   (:require ["fastify" :as Fastify]
             ["@fastify/cors" :as FastifyCORS]
-            ["electron" :refer [ipcMain]]
+            ["crypto" :as crypto]
+            ["electron" :refer [ipcMain dialog]]
             ["fs-extra" :as fs-extra]
             ["path" :as node-path]
             [clojure.string :as string]
@@ -84,7 +85,7 @@
 
 (defn- api-pre-handler!
   [^js req ^js rep callback]
-  (if (= "/" (.-url req))
+  (if (contains? #{"/" "/pair"} (.-url req))
     (callback)
     (try
       (let [^js headers (.-headers req)]
@@ -136,6 +137,37 @@
         (p/catch (fn [e] (-> rep (.code 400) (.send (js/Error. (str e)))))))
     (-> rep (.code 400) (.send (js/Error. "No graph open — open a folder first.")))))
 
+(defn- new-token []
+  (.toString (.randomBytes crypto 24) "hex"))
+
+(defn- pair-handler!
+  "POST /pair { name } — unauthenticated one-click connection for a local client
+  (the Gmail extension, the webclipper, …). Kip shows a native confirm dialog;
+  on Allow it mints a token, appends it to :server/tokens, and returns
+  { token host port }. Loopback-only, and the user must approve in Kip, so a
+  random local process can't grab a token silently (kip-app#133)."
+  [^js req ^js rep]
+  (let [body (bean/->clj (.-body req))
+        name (or (not-empty (:name body)) "an app")]
+    (-> (.showMessageBox dialog
+                         (bean/->js {:type "question"
+                                     :buttons #js ["Allow" "Deny"]
+                                     :defaultId 0
+                                     :cancelId 1
+                                     :title "Kip API server"
+                                     :message (str "Allow \"" name "\" to connect to Kip's API server?")
+                                     :detail "It will be able to call Kip's local HTTP API — including logging interactions to your coop."}))
+        (p/then (fn [^js res]
+                  (if (zero? (.-response res))
+                    (let [token (new-token)
+                          tokens (conj (vec (or (cfgs/get-item :server/tokens) []))
+                                       {:value token :name name})]
+                      (cfgs/set-item! :server/tokens tokens)
+                      (swap! *state assoc :tokens tokens)
+                      (.send rep (bean/->js {:token token :host (get-host) :port (get-port)})))
+                    (-> rep (.code 403) (.send (js/Error. "Denied."))))))
+        (p/catch (fn [e] (-> rep (.code 500) (.send (js/Error. (str e)))))))))
+
 (defn close!
   []
   (when (and @*server (contains? #{:running :error} (:status @*state)))
@@ -162,6 +194,7 @@
                        (.addHook "preHandler" api-pre-handler!)
                        (.post "/api" api-handler!)
                        (.post "/interactions" interactions-handler!)
+                       (.post "/pair" pair-handler!)
                        (.get "/" (fn [_ ^js rep]
                                   (let [html (fs-extra/readFileSync (.join node-path js/__dirname "./docs/api_server.html"))
                                         HOST (get-host)
