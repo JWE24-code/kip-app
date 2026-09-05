@@ -66,3 +66,6 @@ deps/shui/shui-graph/logseq/bak
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Local agent instructions — never commit
+AGENTS.md
