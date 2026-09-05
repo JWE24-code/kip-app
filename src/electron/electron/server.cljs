@@ -11,6 +11,8 @@
             [camel-snake-kebab.core :as csk]
             [electron.logger :as logger]
             [electron.configs :as cfgs]
+            [electron.state :as e-state]
+            [electron.wiki :as wiki]
             [electron.window :as window]))
 
 (defonce ^:private *win (atom nil))
@@ -115,6 +117,25 @@
           (.send (js/Error. ":method of body is missing!"))))
     (throw (js/Error. "Body{:method :args} is required!"))))
 
+(defn- interaction-vault-root
+  "The coop an incoming interaction belongs to: the focused window's graph, or
+  the single open graph. nil when there's nothing sensible to write into."
+  []
+  (or (e-state/get-active-window-graph-path)
+      (let [graphs (e-state/get-all-graph-paths)]
+        (when (= 1 (count graphs)) (first graphs)))))
+
+(defn- interactions-handler!
+  "POST /interactions { email, name, subject, direction, date } → resolve/ create
+  the person page and append the interaction (kip-app#127). Auth is the server's
+  normal token preHandler; the write is delegated to scripts/log-interaction.js."
+  [^js req ^js rep]
+  (if-let [vault-root (interaction-vault-root)]
+    (-> (wiki/log-interaction! vault-root (bean/->clj (.-body req)))
+        (p/then (fn [r] (.send rep (bean/->js r))))
+        (p/catch (fn [e] (-> rep (.code 400) (.send (js/Error. (str e)))))))
+    (-> rep (.code 400) (.send (js/Error. "No graph open — open a folder first.")))))
+
 (defn close!
   []
   (when (and @*server (contains? #{:running :error} (:status @*state)))
@@ -137,10 +158,11 @@
               ;; middlewares
               _     (.register s FastifyCORS #js {:origin "*"})
               ;; hooks & routes
-              _     (doto s
-                      (.addHook "preHandler" api-pre-handler!)
-                      (.post "/api" api-handler!)
-                      (.get "/" (fn [_ ^js rep]
+               _     (doto s
+                       (.addHook "preHandler" api-pre-handler!)
+                       (.post "/api" api-handler!)
+                       (.post "/interactions" interactions-handler!)
+                       (.get "/" (fn [_ ^js rep]
                                   (let [html (fs-extra/readFileSync (.join node-path js/__dirname "./docs/api_server.html"))
                                         HOST (get-host)
                                         PORT (get-port)

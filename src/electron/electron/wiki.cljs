@@ -627,6 +627,21 @@
                       (seq aliases) (conj "--aliases" (string/join "," aliases))
                       (seq note)    (conj "--note" note))))
 
+(defn log-interaction!
+  "Log an interaction (email/call/meeting) against a person page (kip-app#127).
+  Shells out to scripts/log-interaction.js, which resolves the person by email
+  (creating a person page when unknown) and appends a line to its
+  \"## Interactions\" section, then re-indexes. `fields` is
+  {:email :name :subject :direction :date}. Resolves to
+  {:action :slug :path :type :interaction {:date :direction :subject}}."
+  [vault-root {:keys [email name subject direction date]}]
+  (run-node-script! (script "log-interaction.js") vault-root
+                    (cond-> ["--subject" (str (or subject ""))]
+                      (seq email)     (conj "--email" email)
+                      (seq name)      (conj "--name" name)
+                      (seq direction) (conj "--direction" direction)
+                      (seq date)      (conj "--date" date))))
+
 (defn peck!
   "Runs the Peck workflow for `question` without filing the answer back.
   Resolves to {:answer :citedSlugs :candidateSlugs :steps :callId :arenaId}.

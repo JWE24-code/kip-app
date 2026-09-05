@@ -1112,6 +1112,33 @@ body .markdown-body
 
     </li>
   </ul>
+  <h3 id="post-interactions">[POST] <code>/interactions</code><a class="headerlink" href="#post-interactions" title="Permanent link"></a></h3>
+  <p>Log an interaction (email / call / meeting) against a person page in the open graph. Resolves the person by email — creating a <code>person</code> page when unknown — and appends a line to its <code>## Interactions</code> section.</p>
+  <ul>
+    <li>
+      <h4 id="interactions-body">Request Body (<code>Content-Type: application/json</code>)<a class="headerlink" href="#interactions-body" title="Permanent link"></a></h4>
+      <ul>
+        <li><code>email</code> {string} [required] the person's email — the canonical identity</li>
+        <li><code>subject</code> {string} [required] what the interaction was about</li>
+        <li><code>direction</code> {string} [optional] <code>in</code> | <code>out</code> (default <code>out</code>)</li>
+        <li><code>name</code> {string} [optional] used only when creating a new person page</li>
+        <li><code>date</code> {string} [optional] <code>YYYY-MM-DD</code> (default today)</li>
+      </ul>
+    </li>
+    <li>
+      <h4 id="interactions-example">Example<a class="headerlink" href="#interactions-example" title="Permanent link"></a></h4>
+      <div class="highlight"><pre><span class="l l-Scalar l-Scalar-Plain">POST http://127.0.0.1:12315/interactions</span>
+<span class="l l-Scalar l-Scalar-Plain">Content-Type</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">application/json</span>
+<span class="l l-Scalar l-Scalar-Plain">Authorization</span><span class="p p-Indicator">:</span> <span class="l l-Scalar l-Scalar-Plain">Bearer your-valid-token-xxx</span>
+
+<span class="p p-Indicator">{</span>
+  <span class="s">&quot;email&quot;</span><span class="p p-Indicator">:</span> <span class="s">&quot;jane@example.com&quot;</span><span class="p p-Indicator">,</span>
+  <span class="s">&quot;subject&quot;</span><span class="p p-Indicator">:</span> <span class="s">&quot;Re: the timeline&quot;</span><span class="p p-Indicator">,</span>
+  <span class="s">&quot;direction&quot;</span><span class="p p-Indicator">:</span> <span class="s">&quot;out&quot;</span>
+<span class="p p-Indicator">}</span>
+</pre></div>
+    </li>
+  </ul>
   <h2 id="helps">Helps<a class="headerlink" href="#helps" title="Permanent link"></a></h2>
   <ul>
     <li>Discord community <a href="https://discord.com/invite/KpN4eHY">https://discord.com/invite/KpN4eHY</a></li>
