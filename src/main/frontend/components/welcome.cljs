@@ -5,6 +5,7 @@
   interrupts twice."
   (:require [frontend.components.coop-glossary :as glossary]
             [frontend.components.kip-brand :as brand]
+            [frontend.config :as config]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
@@ -45,8 +46,13 @@
 
 (defn maybe-show!
   "Show the welcome card once per coop. Marks it seen as soon as it opens so a
-  reload mid-read doesn't bring it back."
+  reload mid-read doesn't bring it back. Skipped on the demo/nil graph — the
+  user has to pick a real coop first, or the 'set up an LLM' button points at
+  a graph dir that doesn't exist yet."
   []
-  (when (and (util/electron?) (state/get-current-repo) (not (seen?)))
+  (when (and (util/electron?)
+             (state/get-current-repo)
+             (not (config/demo-graph?))
+             (not (seen?)))
     (mark-seen!)
     (state/set-modal! welcome-card {:center? true})))
