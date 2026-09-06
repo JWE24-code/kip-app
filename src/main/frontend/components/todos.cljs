@@ -125,6 +125,36 @@
             text
             candidates)))
 
+;; --- follow-up name autocomplete ------------------------------------------
+;; In follow-up mode the input is a person's name. As it is typed, suggest the
+;; people already in the coop (name + aliases) whose name contains the last
+;; word typed — prefix hits first. Picking one just fills that word in; the
+;; [[slug]] wrapping still happens in add! via link-person.
+
+(defn- last-word [s]
+  (or (re-find #"\S*$" (or s "")) ""))
+
+(defn- followup-suggestions [people input]
+  (let [term (string/lower-case (last-word input))]
+    (when (>= (count term) 2)
+      (->> people
+           (keep (fn [p]
+                   (let [names (->> (cons (:name p) (:aliases p))
+                                    (remove string/blank?)
+                                    (map string/lower-case))]
+                     (when (some #(string/includes? % term) names)
+                       (assoc p ::starts? (boolean (some #(string/starts-with? % term) names)))))))
+           (sort-by (juxt (complement ::starts?)
+                          #(string/lower-case (or (:name %) ""))))
+           (take 8)
+           vec))))
+
+(defn- fill-suggestion
+  "Replace the last word of `input` with the chosen person's name."
+  [input {:keys [name]}]
+  (let [s (or input "")]
+    (str (subs s 0 (- (count s) (count (last-word s)))) name)))
+
 ;; --- dates ------------------------------------------------------------------
 ;; due dates are stored as `due:: YYYY-MM-DD` block properties and compared as
 ;; yyyyMMdd integers against the journal-day of the todo's page.
@@ -313,6 +343,8 @@
   (rum/local false ::followup)
   (rum/local nil ::flash)
   (rum/local nil ::people)
+  (rum/local -1 ::sugg-idx)
+  (rum/local false ::show-sugg?)
   {:will-mount (fn [state]
                  (fetch-people! (::people state))
                  state)}
@@ -322,6 +354,8 @@
         *followup (::followup state)
         *flash (::flash state)
         *people (::people state)
+        *sugg-idx (::sugg-idx state)
+        *show-sugg? (::show-sugg? state)
         repo (state/sub :git/current-repo)
         today-int (db-util/date->int (js/Date.))
         todos (when repo
@@ -352,14 +386,64 @@
         groups (group-by #(bucket today-int %) todos)]
     [:div.flex.flex-col {:style {:height "100%"}}
      [:div.flex.gap-2.px-1.pb-2
-      [:input.form-input.is-small.flex-1.text-sm
-       {:type "text"
-        :placeholder (if @*followup
-                       "Follow up with … (page or person)"
-                       "Add a todo — mention a page to link it")
-        :value @*input
-        :on-change #(reset! *input (.. % -target -value))
-        :on-key-down (fn [e] (when (= "Enter" (.-key e)) (add! *input *due *followup *people)))}]
+      (let [suggestions (when @*followup (followup-suggestions (or @*people []) @*input))
+            sugg-open? (boolean (and @*show-sugg? (seq suggestions)))
+            pick! (fn [p]
+                    (reset! *input (fill-suggestion @*input p))
+                    (reset! *sugg-idx -1)
+                    (reset! *show-sugg? false))]
+        [:div.relative.flex-1
+         [:input.form-input.is-small.w-full.text-sm
+          {:type "text"
+           :placeholder (if @*followup
+                          "Follow up with … (page or person)"
+                          "Add a todo — mention a page to link it")
+           :value @*input
+           :auto-complete "off"
+           :on-change (fn [e]
+                        (reset! *input (.. e -target -value))
+                        (reset! *sugg-idx -1)
+                        (when @*followup (reset! *show-sugg? true)))
+           :on-focus #(when @*followup (reset! *show-sugg? true))
+           :on-blur #(js/setTimeout (fn [] (reset! *show-sugg? false)) 120)
+           :on-key-down
+           (fn [e]
+             (let [k (.-key e)
+                   n (count suggestions)]
+               (cond
+                 (and sugg-open? (= k "ArrowDown"))
+                 (do (.preventDefault e) (swap! *sugg-idx #(mod (inc %) n)))
+
+                 (and sugg-open? (= k "ArrowUp"))
+                 (do (.preventDefault e)
+                     (swap! *sugg-idx #(mod (dec (if (neg? %) 0 %)) n)))
+
+                 (and sugg-open? (= k "Enter") (<= 0 @*sugg-idx) (< @*sugg-idx n))
+                 (do (.preventDefault e) (pick! (nth suggestions @*sugg-idx)))
+
+                 (= k "Escape")
+                 (reset! *show-sugg? false)
+
+                 (= k "Enter")
+                 (add! *input *due *followup *people))))}]
+         (when sugg-open?
+           [:ul.absolute.left-0.right-0.mt-1.rounded.border.border-gray-05.shadow-lg.overflow-y-auto
+            {:style {:z-index 10 :max-height "14rem"
+                     :background "var(--ls-primary-background-color)"}}
+            (map-indexed
+             (fn [i p]
+               [:li {:key (:slug p)
+                     :class (str "px-2 py-1 cursor-pointer leading-tight "
+                                 (when (= i @*sugg-idx) "bg-gray-03"))
+                     :on-mouse-enter #(reset! *sugg-idx i)
+                     :on-mouse-down (fn [e] (.preventDefault e) (pick! p))}
+                [:div.text-sm.font-medium (:name p)]
+                (let [sub (->> [(:org p) (:role p)]
+                               (remove string/blank?)
+                               (string/join " · "))]
+                  (when-not (string/blank? sub)
+                    [:div.text-xs.opacity-50 sub]))])
+             suggestions)])])
       [:input.form-input.is-small.text-sm
        {:type "date"
         :style {:max-width "9em"}
@@ -367,7 +451,8 @@
         :on-change #(reset! *due (.. % -target -value))}]
       (ui/button "Follow-up" {:size :xs :variant (if @*followup :default :ghost)
                               :title "Toggle follow-up — check back with someone on a date"
-                              :on-click #(swap! *followup not)})
+                              :on-click #(do (swap! *followup not)
+                                             (reset! *show-sugg? false))})
       (ui/button "Add" {:size :xs :on-click #(add! *input *due *followup *people)})]
      [:div.flex-1.overflow-y-auto {:class "overflow-x-hidden"}
       (if (empty? todos)
