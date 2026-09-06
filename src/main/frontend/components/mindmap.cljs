@@ -118,6 +118,7 @@
                 (vswap! positions assoc id
                         {:x x :y cy :w w
                          :content (display-content content)
+                         :raw (str content)
                          :collapsed? (boolean (util/collapsed? node))
                          :has-children? (boolean (or (seq (block-children node))
                                                      (util/collapsed? node)))})
@@ -150,32 +151,235 @@
         mx (+ px (/ (- cx px) 2))]
     (str "M " px " " py " H " mx " V " cy " H " cx)))
 
-;; --- components -------------------------------------------------------------
+;; --- navigation over the visible tree --------------------------------------
 
-(rum/defc mindmap-node
-  [id {:keys [x y w content collapsed? has-children?]} root?]
-  (let [cx (+ x (/ w 2))
-        toggle? (and has-children? (not root?))
-        on-click (fn [e]
-                   (util/stop e)
-                   (when toggle?
-                     (if collapsed?
-                       (editor-handler/expand-block! id)
-                       (editor-handler/collapse-block! id))))]
-    [:g.mindmap-node
-     {:on-click on-click
-      :style {:cursor (when toggle? "pointer")}}
-     [:rect {:x x :y (- y (/ node-height 2)) :width w :height node-height :rx 9
-             :class (if root? "mindmap-root-rect" "mindmap-node-rect")}]
-     [:text {:x cx :y y :dy "0.35em" :text-anchor "middle"
-             :class (if root? "mindmap-root-text" "mindmap-node-text")}
-      content]
-     (when toggle?
-       (let [bx (+ x w) by y]
-         [:<>
-          [:circle {:cx bx :cy by :r 10 :class "mindmap-collapse-badge"}]
-          [:text {:x bx :y by :dy "0.35em" :text-anchor "middle" :class "mindmap-collapse-badge-text"}
-           (if collapsed? "+" "−")]]))]))
+(defn- node-id [node]
+  (or (:block/uuid node) ::root))
+
+(defn- build-nav
+  "Flattens the visible tree into the structures the keyboard/toolbar edits need:
+     :order    ids in top-to-bottom visual order
+     :idx      id -> position in :order
+     :parent   id -> parent id
+     :children id -> vector of visible child ids
+     :nodes    id -> node (for collapsed?/expand checks)"
+  [root]
+  (let [order    (volatile! (transient []))
+        parent   (volatile! (transient {}))
+        children (volatile! (transient {}))
+        nodes    (volatile! (transient {}))]
+    (letfn [(walk [node pid]
+              (let [id (node-id node)
+                    ch (visible-children node)]
+                (vswap! order conj! id)
+                (vswap! nodes assoc! id node)
+                (when pid (vswap! parent assoc! id pid))
+                (vswap! children assoc! id (mapv node-id ch))
+                (doseq [c ch] (walk c id))))]
+      (walk root nil))
+    (let [order (persistent! @order)]
+      {:order order
+       :idx (zipmap order (range))
+       :parent (persistent! @parent)
+       :children (persistent! @children)
+       :nodes (persistent! @nodes)})))
+
+;; --- components -----------------------------------------------------------
+
+(defn- node-box-style [{:keys [x y w]}]
+  {:left (str x "px")
+   :top (str y "px")
+   :width (str w "px")
+   :height (str node-height "px")})
+
+(rum/defc mindmap-canvas
+  "Interactive mindmap surface. Holds the transient view state (selection, the
+   node being text-edited, the current drag target); every actual mutation goes
+   through `frontend.handler.mindmap` so it lands on the outline blocks and is
+   undoable."
+  [{:keys [page-name page-uuid positions edges nav width height empty?]}]
+  (let [{:keys [order idx parent children nodes]} nav
+        [selected set-selected!] (rum/use-state ::root)
+        [editing set-editing!]   (rum/use-state nil)
+        [draft set-draft!]       (rum/use-state "")
+        [drop-target set-drop-target!] (rum/use-state nil)
+        *canvas   (rum/use-ref nil)
+        *textarea (rum/use-ref nil)
+        *drag-id  (rum/use-ref nil)
+        *cancel   (rum/use-ref nil)
+        valid?    (set order)
+        selected  (if (valid? selected) selected ::root)
+        focus-canvas! (fn [] (some-> (rum/deref *canvas) (.focus)))
+        select!   (fn [id] (set-selected! id) (focus-canvas!))
+        start-edit! (fn [id]
+                      (when (and id (not= id ::root))
+                        (set-draft! (str (:raw (get positions id))))
+                        (rum/set-ref! *cancel nil)
+                        (set-editing! id)))
+        stop-edit! (fn [] (set-editing! nil) (focus-canvas!))
+        add-sibling! (fn [id]
+                       (when (not= id ::root)
+                         (when-let [nid (mindmap-handler/add-topic! id {:sibling? true})]
+                           (set-selected! nid)
+                           (start-edit! nid))))
+        add-child! (fn [id]
+                     (when-let [nid (if (= id ::root)
+                                      (mindmap-handler/add-root-topic! page-name)
+                                      (mindmap-handler/add-topic! id {:sibling? false}))]
+                       (set-selected! nid)
+                       (start-edit! nid)))
+        delete! (fn [id]
+                  (when (and (not= id ::root) (valid? id))
+                    (mindmap-handler/delete-topic! id)
+                    (select! (get parent id ::root))))
+        outdent! (fn [id]
+                   (when (and (not= id ::root) (get parent id))
+                     (mindmap-handler/outdent-topic! id)))
+        toggle-collapse! (fn [id]
+                           (let [node (get nodes id)]
+                             (if (util/collapsed? node)
+                               (editor-handler/expand-block! id)
+                               (editor-handler/collapse-block! id))))
+        canvas-key-down
+        (fn [e]
+          (when-not editing
+            (let [k (.-key e) shift? (.-shiftKey e)
+                  mod? (or (.-metaKey e) (.-ctrlKey e) (.-altKey e))
+                  id selected
+                  i (get idx id 0)]
+              (case k
+                "ArrowUp"    (do (.preventDefault e) (when (pos? i) (select! (get order (dec i)))))
+                "ArrowDown"  (do (.preventDefault e) (when (< i (dec (count order))) (select! (get order (inc i)))))
+                "ArrowLeft"  (do (.preventDefault e) (when-let [p (get parent id)] (select! p)))
+                "ArrowRight" (do (.preventDefault e)
+                                 (if (util/collapsed? (get nodes id))
+                                   (editor-handler/expand-block! id)
+                                   (when-let [c (first (get children id))] (select! c))))
+                "Enter"      (do (.preventDefault e) (if (= id ::root) (add-child! id) (add-sibling! id)))
+                "Tab"        (do (.preventDefault e) (if shift? (outdent! id) (add-child! id)))
+                ("Delete" "Backspace") (do (.preventDefault e) (delete! id))
+                "F2"         (do (.preventDefault e) (start-edit! id))
+                " "          (when (and (not mod?) (not= id ::root)
+                                        (get-in positions [id :has-children?]))
+                               (.preventDefault e) (toggle-collapse! id))
+                nil))))
+        edit-key-down
+        (fn [e]
+          (let [k (.-key e) shift? (.-shiftKey e)
+                id editing v (.. e -target -value)]
+            (case k
+              "Escape" (do (.preventDefault e) (.stopPropagation e)
+                           (rum/set-ref! *cancel id) (stop-edit!))
+              "Enter"  (when-not shift?
+                         (.preventDefault e) (.stopPropagation e)
+                         (mindmap-handler/set-topic-content! id v)
+                         (set-editing! nil)
+                         (add-sibling! id))
+              "Tab"    (do (.preventDefault e) (.stopPropagation e)
+                           (mindmap-handler/set-topic-content! id v)
+                           (set-editing! nil)
+                           (if shift?
+                             (do (outdent! id) (select! id))
+                             (add-child! id)))
+              (.stopPropagation e))))
+        edit-blur
+        (fn [e]
+          (let [id editing v (.. e -target -value)]
+            (when-not (= (rum/deref *cancel) id)
+              (mindmap-handler/set-topic-content! id v))
+            (rum/set-ref! *cancel nil)
+            (set-editing! (fn [cur] (if (= cur id) nil cur)))))]
+
+    (rum/use-effect!
+     (fn []
+       (when editing
+         (when-let [ta (rum/deref *textarea)]
+           (.focus ta)
+           (.select ta)))
+       js/undefined)
+     [editing])
+
+    [:div.mindmap-container
+     [:div.mindmap-toolbar
+      [:button.mindmap-toolbar-btn
+       {:title (t :mindmap/add-sibling) :disabled (= selected ::root)
+        :on-click (fn [e] (util/stop e) (add-sibling! selected))}
+       (ui/icon "plus")]
+      [:button.mindmap-toolbar-btn
+       {:title (t :mindmap/add-child)
+        :on-click (fn [e] (util/stop e) (add-child! selected))}
+       (ui/icon "subtask")]
+      [:button.mindmap-toolbar-btn
+       {:title (t :mindmap/outdent) :disabled (or (= selected ::root) (nil? (get parent selected)))
+        :on-click (fn [e] (util/stop e) (outdent! selected))}
+       (ui/icon "indent-decrease")]
+      [:button.mindmap-toolbar-btn.mindmap-toolbar-btn--danger
+       {:title (t :mindmap/delete) :disabled (= selected ::root)
+        :on-click (fn [e] (util/stop e) (delete! selected))}
+       (ui/icon "trash")]]
+     [:div.mindmap-scroll
+      {:ref *canvas :tab-index 0 :on-key-down canvas-key-down
+       :on-click (fn [_e] (set-selected! ::root))}
+      [:div.mindmap-canvas {:style {:width (str width "px") :height (str height "px")}}
+       [:svg.mindmap-edges-svg {:width width :height height}
+        (for [[pid cid] edges
+              :let [p (get positions pid) c (get positions cid)]
+              :when (and p c)]
+          [:path {:key (str pid "-" cid) :class "mindmap-edge" :d (edge-path p c)}])]
+       (when empty?
+         [:div.mindmap-empty-hint
+          {:style {:left (str (+ (get-in positions [::root :x])
+                                 (get-in positions [::root :w]) 40) "px")
+                   :top (str (get-in positions [::root :y]) "px")}}
+          (t :mindmap/empty-hint)])
+       (for [[id {:keys [content collapsed? has-children?] :as pos}] positions
+             :let [root? (= id ::root)
+                   editing? (= editing id)]]
+         [:div {:key (str id)
+                :class (str "mindmap-node"
+                            (when root? " mindmap-node--root")
+                            (when (= selected id) " mindmap-node--selected")
+                            (when (= drop-target id) " mindmap-node--drop"))
+                :style (node-box-style pos)
+                :draggable (and (not root?) (not editing?))
+                :on-click (fn [e] (util/stop e) (select! id))
+                :on-double-click (fn [e] (util/stop e) (start-edit! id))
+                :on-drag-start (fn [e]
+                                 (rum/set-ref! *drag-id id)
+                                 (set! (.. e -dataTransfer -effectAllowed) "move")
+                                 (.setData (.-dataTransfer e) "text/plain" (str id)))
+                :on-drag-end (fn [_e] (rum/set-ref! *drag-id nil) (set-drop-target! nil))
+                :on-drag-over (fn [e]
+                                (when-let [src (rum/deref *drag-id)]
+                                  (when (not= src id)
+                                    (.preventDefault e)
+                                    (set-drop-target! id))))
+                :on-drag-leave (fn [_e] (set-drop-target! (fn [cur] (if (= cur id) nil cur))))
+                :on-drop (fn [e]
+                           (.preventDefault e)
+                           (let [src (rum/deref *drag-id)]
+                             (when (and src (not= src id))
+                               (mindmap-handler/reparent-topic!
+                                src (if root? page-uuid id) page-uuid)
+                               (set-selected! src)))
+                           (set-drop-target! nil)
+                           (rum/set-ref! *drag-id nil))}
+          (if editing?
+            [:textarea.mindmap-node-input
+             {:ref *textarea
+              :value draft
+              :rows 1
+              :on-change (fn [e] (set-draft! (.. e -target -value)))
+              :on-key-down edit-key-down
+              :on-blur edit-blur
+              :on-click util/stop-propagation
+              :on-double-click util/stop-propagation}]
+            [:span.mindmap-node-label content])
+          (when (and has-children? (not root?) (not editing?))
+            [:button.mindmap-node-badge
+             {:title (if collapsed? "Expand" "Collapse")
+              :on-click (fn [e] (util/stop e) (toggle-collapse! id))}
+             (if collapsed? "+" "−")])])]]]))
 
 (rum/defc mindmap-page < rum/reactive db-mixins/query
   [page-name]
@@ -187,18 +391,16 @@
             branches (build-branches page (or blocks []))
             root {:content (central-topic-title page) :block/children branches}
             {:keys [positions width height]} (layout-tree root)
-            edges (layout-edges root)]
-        [:div.absolute.w-full.h-full.mindmap-scroll
-         [:svg.mindmap {:width width :height height}
-          [:g.mindmap-edges
-           (for [[pid cid] edges
-                 :let [p (get positions pid)
-                       c (get positions cid)]
-                 :when (and p c)]
-             [:path {:key (str pid "-" cid) :class "mindmap-edge" :d (edge-path p c)}])]
-          [:g.mindmap-nodes
-           (for [[id n] positions]
-             (mindmap-node id n (= id ::root)))]]]))))
+            edges (layout-edges root)
+            nav (build-nav root)]
+        (mindmap-canvas {:page-name page-name
+                         :page-uuid (:block/uuid page)
+                         :positions positions
+                         :edges edges
+                         :nav nav
+                         :width width
+                         :height height
+                         :empty? (empty? branches)})))))
 
 (rum/defc mindmap-route
   [route-match]

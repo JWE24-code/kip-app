@@ -1,17 +1,149 @@
+.mindmap-container {
+  position: absolute;
+  inset: 0;
+}
+
 .mindmap-scroll {
+  position: absolute;
+  inset: 0;
   overflow: auto;
   padding: 1rem;
+  outline: none;
 }
 
-.mindmap {
-  display: block;
+.mindmap-canvas {
+  position: relative;
 }
 
-/* style.css sets a global `svg { pointer-events: none }` (so icon SVGs inside
-   buttons don't eat clicks); re-enable it on the interactive nodes so the
-   collapse/expand badges and node clicks work. */
+.mindmap-edges-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+/* --- interactive HTML node layer ---------------------------------------- */
+
 .mindmap-node {
-  pointer-events: auto;
+  position: absolute;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 0 var(--mindmap-node-pad, 12px);
+  border-radius: 9px;
+  border: 1px solid var(--ls-border-color);
+  background: var(--ls-secondary-background-color);
+  color: var(--ls-primary-text-color);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.mindmap-node--root {
+  background: var(--ls-primary-text-color);
+  color: var(--ls-primary-background-color);
+  font-weight: 600;
+  cursor: default;
+}
+
+.mindmap-node--selected {
+  border-color: var(--ls-active-primary-color, var(--ls-link-text-color));
+  box-shadow: 0 0 0 2px var(--ls-active-primary-color, var(--ls-link-text-color));
+}
+
+.mindmap-node--drop {
+  border-color: var(--ls-link-text-color);
+  box-shadow: 0 0 0 2px var(--ls-link-text-color);
+}
+
+.mindmap-node-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.mindmap-node-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+}
+
+.mindmap-node-badge {
+  position: absolute;
+  right: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--ls-border-color);
+  background: var(--ls-primary-background-color);
+  color: var(--ls-primary-text-color);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+}
+
+.mindmap-empty-hint {
+  position: absolute;
+  transform: translateY(-50%);
+  color: var(--ls-secondary-text-color);
+  font-size: 13px;
+  font-style: italic;
+  pointer-events: none;
+}
+
+/* --- toolbar ---------------------------------------------------------- */
+
+.mindmap-toolbar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--ls-border-color);
+  background: var(--ls-secondary-background-color);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+.mindmap-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--ls-primary-text-color);
+}
+
+.mindmap-toolbar-btn:hover:not(:disabled) {
+  background: var(--ls-tertiary-background-color);
+}
+
+.mindmap-toolbar-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.mindmap-toolbar-btn--danger:hover:not(:disabled) {
+  color: var(--ls-error-text-color, #e5484d);
 }
 
 .mindmap-edge {
@@ -43,18 +175,4 @@
   font-size: 14px;
   font-weight: 600;
   user-select: none;
-}
-
-.mindmap-collapse-badge {
-  fill: var(--ls-primary-background-color);
-  stroke: var(--ls-border-color);
-  stroke-width: 1px;
-}
-
-.mindmap-collapse-badge-text {
-  fill: var(--ls-primary-text-color);
-  font-size: 11px;
-  font-weight: 700;
-  user-select: none;
-  pointer-events: none;
 }
