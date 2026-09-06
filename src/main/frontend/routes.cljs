@@ -38,6 +38,10 @@
     {:name :mindmap
      :view mindmap/mindmap-route}]
 
+   ["/mindmaps"
+    {:name :mindmaps
+     :view mindmap/mindmap-dashboard}]
+
    ["/repo/add"
     {:name :repo-add
      :view setups/picker}]

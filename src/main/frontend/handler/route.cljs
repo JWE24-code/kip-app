@@ -103,6 +103,10 @@
    (redirect! {:to :mindmap
                :path-params {:name (str name)}})))
 
+(defn redirect-to-mindmap-dashboard!
+  []
+  (redirect! {:to :mindmaps}))
+
 (defn get-title
   [name path-params]
   (case name
@@ -110,6 +114,8 @@
     "Kip"
     :whiteboards
     (t :whiteboards)
+    :mindmaps
+    (t :mindmaps)
     :repos
     "Repos"
     :repo-add

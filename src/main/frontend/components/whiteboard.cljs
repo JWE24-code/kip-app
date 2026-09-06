@@ -10,7 +10,6 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
-            [frontend.handler.mindmap :as mindmap-handler]
             [frontend.rum :refer [use-bounding-client-rect use-breakpoint
                                   use-click-outside]]
             [frontend.state :as state]
@@ -244,9 +243,6 @@
           (when-not config/publishing? (dashboard-create-card "tl-create-whiteboard"
                                                               (t :whiteboard/dashboard-card-new-whiteboard)
                                                               whiteboard-handler/create-new-whiteboard-and-redirect!))
-          (when-not config/publishing? (dashboard-create-card "tl-create-mindmap"
-                                                              (t :mindmap/dashboard-card-new-mindmap)
-                                                              mindmap-handler/create-new-mindmap-and-redirect!))
           (for [whiteboard-name whiteboard-names]
            [:<> {:key whiteboard-name}
             (dashboard-preview-card whiteboard-name
