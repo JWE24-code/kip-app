@@ -1,0 +1,60 @@
+.mindmap-scroll {
+  overflow: auto;
+  padding: 1rem;
+}
+
+.mindmap {
+  display: block;
+}
+
+/* style.css sets a global `svg { pointer-events: none }` (so icon SVGs inside
+   buttons don't eat clicks); re-enable it on the interactive nodes so the
+   collapse/expand badges and node clicks work. */
+.mindmap-node {
+  pointer-events: auto;
+}
+
+.mindmap-edge {
+  fill: none;
+  stroke: var(--ls-border-color);
+  stroke-width: 1.5px;
+}
+
+.mindmap-node-rect {
+  fill: var(--ls-secondary-background-color);
+  stroke: var(--ls-border-color);
+  stroke-width: 1px;
+}
+
+.mindmap-node-text {
+  fill: var(--ls-primary-text-color);
+  font-size: 13px;
+  user-select: none;
+}
+
+.mindmap-root-rect {
+  fill: var(--ls-primary-text-color);
+  stroke: var(--ls-border-color);
+  stroke-width: 1px;
+}
+
+.mindmap-root-text {
+  fill: var(--ls-primary-background-color);
+  font-size: 14px;
+  font-weight: 600;
+  user-select: none;
+}
+
+.mindmap-collapse-badge {
+  fill: var(--ls-primary-background-color);
+  stroke: var(--ls-border-color);
+  stroke-width: 1px;
+}
+
+.mindmap-collapse-badge-text {
+  fill: var(--ls-primary-text-color);
+  font-size: 11px;
+  font-weight: 700;
+  user-select: none;
+  pointer-events: none;
+}
