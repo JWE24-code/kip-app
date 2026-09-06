@@ -3,6 +3,21 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [0.5.5] — 2026-09-06
+
+- **People panel now lists your people** — `people-list!` called a Node
+  `path.name` that doesn't exist, so the read threw and the panel showed
+  "No people yet" no matter how many person pages were in the nest. (The
+  0.5.4 frontmatter-parser fix was necessary but not sufficient.)
+- **Delete a person from the People panel** — each row gets a delete action
+  behind a confirm; it removes the `nest/people/<slug>.md` page and its
+  index entry, and regenerates the nest catalog. `[[links]]` to the person
+  elsewhere are left in place.
+- **Follow-up name autocomplete** — toggle "Follow-up" in the Tasks panel and
+  start typing a name: a dropdown suggests people already in your coop
+  (matched on name + aliases, prefix hits first), with arrow-key / click
+  selection.
+
 ## [0.5.4] — 2026-09-05
 
 - **Fix: blank buttons in the Reminders / LLM / Skills panels** — the shared
