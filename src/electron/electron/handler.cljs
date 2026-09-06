@@ -603,6 +603,9 @@
 (defmethod handle :wikiPersonAdd [_ [_ vault-root fields]]
   (wiki/person-add! vault-root fields))
 
+(defmethod handle :wikiPersonDelete [_ [_ vault-root slug]]
+  (wiki/person-delete! vault-root slug))
+
 (defmethod handle :checkForAppUpdate [_ [_ force?]]
   (update/check! {:force? (boolean force?)}))
 

@@ -627,6 +627,15 @@
                       (seq aliases) (conj "--aliases" (string/join "," aliases))
                       (seq note)    (conj "--note" note))))
 
+(defn person-delete!
+  "Delete a person page (nest/people/<slug>.md) and its meta.db rows — the
+  People panel's row \"Delete\" action. Shells out to scripts/delete-person.js,
+  which removes the file, de-indexes it (pages + pages_fts + sections) and
+  regenerates nest/index.md. [[slug]] mentions elsewhere are left in place.
+  Resolves to {:deleted true :slug :path :deindexed}."
+  [vault-root slug]
+  (run-node-script! (script "delete-person.js") vault-root ["--slug" (str slug)]))
+
 (defn log-interaction!
   "Log an interaction (email/call/meeting) against a person page (kip-app#127).
   Shells out to scripts/log-interaction.js, which resolves the person by email

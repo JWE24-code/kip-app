@@ -2,11 +2,12 @@
   "The Addressbook panel (right-sidebar entry, see :addressbook in
    frontend.components.right-sidebar). A view over the coop's person pages
    (nest/people/*.md) with a filter, sortable columns, click-through to the
-   person page, a \"New person\" form, and a dedupe/merge affordance for persons
-   sharing an email (kip-app#126).
+   person page, a \"New person\" form, a per-row delete, and a dedupe/merge
+   affordance for persons sharing an email (kip-app#126).
 
-   Backed by the :wikiPeopleList / :wikiPeopleMerge / :wikiPersonAdd IPC
-   channels (electron.wiki, fs reads/writes of the frontmatter hatch writes)."
+   Backed by the :wikiPeopleList / :wikiPeopleMerge / :wikiPersonAdd /
+   :wikiPersonDelete IPC channels (electron.wiki, fs reads/writes of the
+   frontmatter hatch writes)."
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.ipc :as ipc]
@@ -46,6 +47,17 @@
   (-> (ipc/ipc "wikiPeopleMerge" (vault-root) keep-slug drop-slug)
       (p/finally refresh)))
 
+(defn- delete-person! [slug name refresh]
+  (state/set-modal!
+   (ui/make-confirm-modal
+    {:title (str "Delete " (if (string/blank? name) slug name) "?")
+     :sub-title (str "Removes the person page (nest/people/" slug ".md) and its "
+                     "index entry. Links to them elsewhere stay put. Kip can't undo this.")
+     :on-confirm (fn [_e {:keys [close-fn]}]
+                   (close-fn)
+                   (-> (ipc/ipc "wikiPersonDelete" (vault-root) slug)
+                       (p/finally refresh)))})))
+
 (defn- add-person! [*name *email *org *role *phone *aliases *adding refresh]
   (let [name (string/trim @*name)]
     (when-not (string/blank? name)
@@ -81,7 +93,7 @@
    label (when (= @*sort k) " ▾")])
 
 (rum/defc person-row < rum/static
-  [{:keys [slug name email org role phone aliases]}]
+  [{:keys [slug name email org role phone aliases]} on-delete]
   [:tr.group.cursor-pointer {:on-click #(route/redirect-to-page! slug)}
    [:td.py-1.5.pr-2.align-top
     [:div.text-sm.font-medium.leading-tight name]
@@ -90,8 +102,13 @@
     [:div (or org "") (when role (str " · " role))]]
    [:td.py-1.5.pr-2.align-top.text-xs
     [:div (or email "") (when phone (str " · " phone))]]
-   [:td.py-1.5.align-top.text-xs.opacity-50
-    (string/join ", " aliases)]])
+   [:td.py-1.5.pr-2.align-top.text-xs.opacity-50
+    (string/join ", " aliases)]
+   [:td.py-1.5.align-top.text-right
+    (ui/button {:icon "trash" :icon-props {:size 14} :variant :ghost :size :xs
+                :title (str "Delete " (if (string/blank? name) slug name))
+                :class "opacity-0 group-hover:opacity-50 hover:opacity-100"
+                :on-click (fn [e] (.stopPropagation e) (on-delete))})]])
 
 (rum/defcs addressbook-panel
   < rum/reactive
@@ -204,7 +221,10 @@
             [:th.pb-1.pr-2 (col-header "Name" *sort :name)]
             [:th.pb-1.pr-2 (col-header "Org / Role" *sort :org)]
             [:th.pb-1.pr-2 (col-header "Contact" *sort :role)]
-            [:th.pb-1 (col-header "Aliases" *sort :name)]]]
+            [:th.pb-1.pr-2 (col-header "Aliases" *sort :name)]
+            [:th.pb-1]]]
           [:tbody
            (for [p people]
-             (rum/with-key (person-row p) (:slug p)))]]])]]))
+             (rum/with-key
+               (person-row p #(delete-person! (:slug p) (:name p) refresh))
+               (:slug p)))]]])]]))
