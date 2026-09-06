@@ -10,6 +10,7 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.handler.mindmap :as mindmap-handler]
             [frontend.rum :refer [use-bounding-client-rect use-breakpoint
                                   use-click-outside]]
             [frontend.state :as state]
@@ -189,15 +190,16 @@
             (whiteboard-preview page-name)]))])
 
 (rum/defc dashboard-create-card
-  []
-  [:div.dashboard-card.dashboard-create-card.cursor-pointer#tl-create-whiteboard
-   {:on-click
+  [id label on-click]
+  [:div.dashboard-card.dashboard-create-card.cursor-pointer
+   {:id id
+    :on-click
     (fn [e]
       (util/stop e)
-      (whiteboard-handler/create-new-whiteboard-and-redirect!))}
+      (on-click))}
    (ui/icon "plus" {:size 32})
    [:span.dashboard-create-card-caption.select-none
-    (t :whiteboard/dashboard-card-new-whiteboard)]])
+    label]])
 
 (rum/defc whiteboard-dashboard
   []
@@ -213,8 +215,8 @@
                      (< container-width 1200) 3
                      :else 4)
           total-whiteboards (count whiteboards)
-          empty-cards (- (max (* (math/ceil (/ (inc total-whiteboards) cols)) cols) (* 2 cols))
-                         (inc total-whiteboards))
+          empty-cards (- (max (* (math/ceil (/ (+ 2 total-whiteboards) cols)) cols) (* 2 cols))
+                         (+ 2 total-whiteboards))
           [checked-page-names set-checked-page-names] (rum/use-state #{})
           has-checked? (not-empty checked-page-names)]
       [:<>
@@ -239,8 +241,13 @@
         [:div.gap-8.grid.grid-rows-auto
          {:style {:visibility (when (nil? container-width) "hidden")
                   :grid-template-columns (str "repeat(" cols ", minmax(0, 1fr))")}}
-         (when-not config/publishing? (dashboard-create-card))
-         (for [whiteboard-name whiteboard-names]
+          (when-not config/publishing? (dashboard-create-card "tl-create-whiteboard"
+                                                              (t :whiteboard/dashboard-card-new-whiteboard)
+                                                              whiteboard-handler/create-new-whiteboard-and-redirect!))
+          (when-not config/publishing? (dashboard-create-card "tl-create-mindmap"
+                                                              (t :mindmap/dashboard-card-new-mindmap)
+                                                              mindmap-handler/create-new-mindmap-and-redirect!))
+          (for [whiteboard-name whiteboard-names]
            [:<> {:key whiteboard-name}
             (dashboard-preview-card whiteboard-name
                                     {:show-checked? has-checked?

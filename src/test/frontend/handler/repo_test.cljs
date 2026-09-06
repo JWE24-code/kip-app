@@ -38,6 +38,16 @@
              (set (map :block/original-name whiteboards)))
           "both .excalidraw files produced a whiteboard page, with file-stem casing"))))
 
+(deftest parse-files-indexes-mindmap-pages
+  (testing "pages with type:: mindmap become :block/type \"mindmap\" pages"
+    (load-test-files [{:file/path "pages/my map.md"
+                       :file/content "type:: mindmap\n- branch one\n  - child\n- branch two"}
+                      {:file/path "pages/regular.md"
+                       :file/content "- just a note"}])
+    (let [mindmaps (model/get-all-mindmaps test-helper/test-db)]
+      (is (= #{"my map"} (set (map :block/original-name mindmaps)))
+          "only the mindmap page is indexed as :block/type \"mindmap\""))))
+
 (deftest parse-files-and-load-to-db-with-block-refs-on-reload
   (testing "Refs to blocks on a page are retained if that page is reloaded"
     (let [test-uuid "16c90195-6a03-4b3f-839d-095a496d9acd"

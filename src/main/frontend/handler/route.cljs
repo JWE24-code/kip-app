@@ -95,6 +95,14 @@
                :path-params {:name (str name)}
                :query-params (merge {:block-id block-id})})))
 
+(defn redirect-to-mindmap!
+  ([name]
+   (redirect-to-mindmap! name nil))
+  ([name {:keys [click-from-recent?]}]
+   (recent-handler/add-page-to-recent! (state/get-current-repo) name click-from-recent?)
+   (redirect! {:to :mindmap
+               :path-params {:name (str name)}})))
+
 (defn get-title
   [name path-params]
   (case name
@@ -141,6 +149,15 @@
          (let [page (db/pull [:block/name (util/page-name-sanity-lc name)])]
            (or (util/get-page-original-name page)
                "Logseq"))) " - " (t :whiteboard)))
+    :mindmap
+    (let [name (:name path-params)
+          block? (util/uuid-string? name)]
+      (str
+       (if block?
+         (t :untitled)
+         (let [page (db/pull [:block/name (util/page-name-sanity-lc name)])]
+           (or (util/get-page-original-name page)
+               "Kip"))) " - " (t :mindmap)))
     :tag
     (str "#"  (:name path-params))
     :diff

@@ -123,6 +123,9 @@
       (assoc :block/properties valid-properties
              :block/properties-text-values (select-keys properties-text-values (keys valid-properties)))
 
+      (= "mindmap" (:type valid-properties))
+      (assoc :block/type "mindmap")
+
       (seq invalid-properties)
       (assoc :block/invalid-properties invalid-properties))))
 

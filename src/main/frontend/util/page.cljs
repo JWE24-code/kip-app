@@ -9,13 +9,14 @@
   []
   (or (state/get-current-page)
       (state/get-current-whiteboard)
+      (state/get-current-mindmap)
       (get-in (first (state/get-editor-args)) [:block :block/page :block/original-name])))
 
 (defn get-current-page-id
   "Fetches the current page id. Looks up page based on latest route and if
   nothing is found, gets page of last edited block"
   []
-  (let [page-name (some-> (or (state/get-current-page) (state/get-current-whiteboard))
+  (let [page-name (some-> (or (state/get-current-page) (state/get-current-whiteboard) (state/get-current-mindmap))
                           util/page-name-sanity-lc)]
     (or (and page-name (:db/id (db/entity [:block/name page-name])))
         (get-in (first (state/get-editor-args)) [:block :block/page :db/id]))))

@@ -98,14 +98,15 @@
        (= (state/get-filename-format) :legacy) ;; reduce title computation
        (fs-util/create-title-property? page-name)))
 
-(defn- build-page-tx [format properties page journal? whiteboard?]
+(defn- build-page-tx [format properties page journal? whiteboard? mindmap?]
   (when (:block/uuid page)
     (let [page-entity   [:block/uuid (:block/uuid page)]
           title         (util/get-page-original-name page)
           create-title? (create-title-property? journal? title)
           page          (merge page
                                (when (seq properties) {:block/properties properties})
-                               (when whiteboard? {:block/type "whiteboard"}))
+                               (when whiteboard? {:block/type "whiteboard"})
+                               (when mindmap? {:block/type "mindmap"}))
           page-empty?   (db/page-empty? (state/get-current-repo) (:block/name page))]
       (cond
         (not page-empty?)
@@ -130,7 +131,7 @@
    :uuid                - when set, use this uuid instead of generating a new one."
   ([title]
    (create! title {}))
-  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid whiteboard?]
+  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal? uuid whiteboard? mindmap?]
            :or   {redirect?           true
                   create-first-block? true
                   format              nil
@@ -156,13 +157,13 @@
                                  (assoc :block/format format)))
                            pages)
              txs      (->> pages
-                           ;; for namespace pages, only last page need properties
-                           drop-last
-                           (mapcat #(build-page-tx format nil % journal? whiteboard?))
-                           (remove nil?)
-                           (remove (fn [m]
-                                     (some? (db/entity [:block/name (:block/name m)])))))
-             last-txs (build-page-tx format properties (last pages) journal? whiteboard?)
+                            ;; for namespace pages, only last page need properties
+                            drop-last
+                            (mapcat #(build-page-tx format nil % journal? whiteboard? mindmap?))
+                            (remove nil?)
+                            (remove (fn [m]
+                                      (some? (db/entity [:block/name (:block/name m)])))))
+             last-txs (build-page-tx format properties (last pages) journal? whiteboard? mindmap?)
              txs      (concat txs last-txs)]
          (when (seq txs)
            (db/transact! repo txs {:outliner-op :create-page})))

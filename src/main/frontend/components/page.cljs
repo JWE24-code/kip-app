@@ -330,7 +330,8 @@
           repo (state/get-current-repo)
           hls-page? (pdf-utils/hls-file? title)
           whiteboard-page? (model/whiteboard-page? page-name)
-          untitled? (and whiteboard-page? (parse-uuid page-name)) ;; normal page cannot be untitled right?
+          mindmap-page? (model/mindmap-page? page-name)
+          untitled? (and (or whiteboard-page? mindmap-page?) (parse-uuid page-name)) ;; normal page cannot be untitled right?
           title (if hls-page?
                   [:a.asset-ref (pdf-utils/fix-local-asset-pagename title)]
                   (if fmt-journal?

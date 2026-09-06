@@ -392,6 +392,7 @@
  :whiteboard/dashboard-card-created "Created "
  :whiteboard/dashboard-card-edited "Edited "
  :whiteboard/reference-count (fn [refs-count] (if (= refs-count 1) "Reference" "References"))
+ :mindmap/dashboard-card-new-mindmap "New mindmap"
  :flashcards/modal-welcome-title "Time to create a card!"
  :flashcards/modal-welcome-desc-1 "You can add \"#card\" to any block to turn it into a card or trigger \"/cloze\" to add some clozes."
  :flashcards/modal-welcome-desc-2 "You can "
@@ -418,6 +419,8 @@
  :new-page "New page:"
  :whiteboard "Whiteboard"
  :whiteboards "Whiteboards"
+ :mindmap "Mindmap"
+ :mindmaps "Mindmaps"
  :new-graph "Add new graph"
  :graph "The Nest"
  :graph/persist "Kip is syncing internal status, please wait for several seconds."

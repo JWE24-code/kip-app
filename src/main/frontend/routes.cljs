@@ -9,6 +9,7 @@
             [frontend.components.repo :as repo]
             [frontend.components.settings :as settings]
             [frontend.components.whiteboard :as whiteboard]
+            [frontend.components.mindmap :as mindmap]
             [frontend.extensions.zotero :as zotero]
             [frontend.components.bug-report :as bug-report]
             [frontend.components.user.login :as login]
@@ -32,6 +33,10 @@
    ["/whiteboards"
     {:name :whiteboards
      :view whiteboard/whiteboard-dashboard}]
+
+   ["/mindmap/:name"
+    {:name :mindmap
+     :view mindmap/mindmap-route}]
 
    ["/repo/add"
     {:name :repo-add

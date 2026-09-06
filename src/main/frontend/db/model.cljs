@@ -1629,6 +1629,19 @@ independent of format as format specific heading characters are stripped"
 
     :else false))
 
+(defn mindmap-page?
+  "Given a page name or a page object, check if it is a mindmap page"
+  [page]
+  (cond
+    (string? page)
+    (let [page (db-utils/entity [:block/name (util/safe-page-name-sanity-lc page)])]
+      (= "mindmap" (:block/type page)))
+
+    (seq page)
+    (= "mindmap" (:block/type page))
+
+    :else false))
+
 (defn get-orphaned-pages
   [{:keys [repo pages empty-ref-f]
     :or {repo (state/get-current-repo)
@@ -1653,6 +1666,7 @@ independent of format as format specific heading characters are stripped"
                                     (contains? #{"" "-" "*"} (string/trim (:block/content first-child))))))
                                 (not (contains? built-in-pages name))
                                 (not (whiteboard-page? page))
+                                (not (mindmap-page? page))
                                 (not (:block/_namespace page))
                                  ;; a/b/c might be deleted but a/b/c/d still exists (for backward compatibility)
                                 (not (and (string/includes? name "/")
@@ -1700,4 +1714,16 @@ independent of format as format specific heading characters are stripped"
       :where
       [?page :block/name]
       [?page :block/type "whiteboard"]]
+    (conn/get-db repo)))
+
+(defn get-all-mindmaps
+  [repo]
+  (d/q
+    '[:find [(pull ?page [:block/name
+                          :block/original-name
+                          :block/created-at
+                          :block/updated-at]) ...]
+      :where
+      [?page :block/name]
+      [?page :block/type "mindmap"]]
     (conn/get-db repo)))

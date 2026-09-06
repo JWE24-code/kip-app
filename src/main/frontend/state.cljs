@@ -792,6 +792,16 @@ Similar to re-frame subscriptions"
     (get-in (get-route-match)
             [:path-params :name])))
 
+(defn mindmap-route?
+  []
+  (= :mindmap (get-current-route)))
+
+(defn get-current-mindmap
+  []
+  (when (mindmap-route?)
+    (get-in (get-route-match)
+            [:path-params :name])))
+
 (defn route-has-p?
   []
   (get-in (get-route-match) [:query-params :p]))
