@@ -3,6 +3,7 @@
    auto-laid-out, right-growing tree over the page's outline. The page title is
    the central topic, top-level blocks are branches, indentation is depth."
   (:require [cljs.math :as math]
+            [clojure.string :as string]
             [frontend.components.page :as page]
             [frontend.components.whiteboard :as whiteboard]
             [frontend.config :as config]
@@ -17,6 +18,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.marker :as marker]
             [rum.core :as rum]))
 
 ;; Layout constants (px)
@@ -82,6 +84,64 @@
       (model/untitled-page? (:block/name page)) (t :untitled)
       :else (:block/original-name page))))
 
+;; --- styling vocabulary ---------------------------------------------------
+
+(def ^:private palette
+  "Per-topic colours a user can pick. Stored by name as a `mindmap-color::`
+   block property; rendered via `[data-mm-color]` in the stylesheet."
+  ["red" "orange" "yellow" "green" "blue" "purple" "gray"])
+
+(def ^:private shapes
+  "Node outline shapes, cycled with the toolbar; stored as `mindmap-shape::`."
+  ["rounded" "rectangle" "pill"])
+
+(def ^:private themes
+  "Map-wide presets, stored as a `mindmap-theme::` page property."
+  ["default" "blueprint" "forest" "sunset" "mono"])
+
+(defn- next-shape [shape]
+  (let [i (or (->> shapes (keep-indexed (fn [i s] (when (= s shape) i))) first) 0)]
+    (nth shapes (mod (inc i) (count shapes)))))
+
+(defn- node-url [s]
+  (some-> (re-find #"https?://[^\s<>()\[\]]+" (str s))
+          (string/replace #"[.,;:!?]+$" "")))
+
+(defn- clean-title
+  "Strips the task marker, priority cookie and Markdown link syntax off the
+   first line so a node shows just its text; markers/links get their own chips."
+  [edit-text]
+  (let [s (-> (str (or edit-text ""))
+              string/split-lines first str
+              (string/replace marker/bare-marker-pattern "")
+              (string/replace #"^\s*\[#[A-Za-z]\]\s*" "")
+              (string/replace #"\[([^\]]+)\]\((?:[^)]+)\)" "$1")
+              string/trim)]
+    (if (string/blank? s) (string/trim (str (or edit-text ""))) s)))
+
+(defn- topic-data
+  "View-model for one node, derived from its block."
+  [node]
+  (if (:content node)
+    {:title (:content node) :edit-text (:content node)}
+    (let [props (:block/properties node)
+          edit-text (mindmap-handler/editable-text node)
+          marker' (:block/marker node)]
+      {:edit-text edit-text
+       :title (clean-title edit-text)
+       :marker marker'
+       :priority (:block/priority node)
+       :done? (= "DONE" marker')
+       :scheduled? (boolean (or (:block/scheduled node)
+                                (:block/deadline node)
+                                (:reminder props)))
+       :color (some-> (:mindmap-color props) str string/lower-case not-empty)
+       :shape (some-> (:mindmap-shape props) str string/lower-case not-empty)
+       :note (some-> (or (get (:block/properties-text-values node) :mindmap-note)
+                         (:mindmap-note props))
+                     str not-empty)
+       :url (node-url edit-text)})))
+
 ;; --- layout -----------------------------------------------------------------
 
 (defn- display-content [content]
@@ -110,18 +170,21 @@
             (place [node depth top id]
               (let [ch (visible-children node)
                     h (subtree-height node)
-                    content (or (:content node) (:block/content node) "")
-                    w (node-width content)
+                    {:keys [title] :as data} (topic-data node)
+                    ;; leave room for a marker / link / note chip
+                    extra (+ (if (:marker data) 34 0)
+                             (if (or (:url data) (:note data) (:scheduled? data)) 20 0))
+                    w (min max-node-width (+ (node-width title) extra))
                     cy (+ top (/ h 2))
                     x (+ margin (* depth level-x))]
                 (vswap! max-depth max depth)
                 (vswap! positions assoc id
-                        {:x x :y cy :w w
-                         :content (display-content content)
-                         :raw (str content)
-                         :collapsed? (boolean (util/collapsed? node))
-                         :has-children? (boolean (or (seq (block-children node))
-                                                     (util/collapsed? node)))})
+                        (merge data
+                               {:x x :y cy :w w
+                                :content (display-content title)
+                                :collapsed? (boolean (util/collapsed? node))
+                                :has-children? (boolean (or (seq (block-children node))
+                                                            (util/collapsed? node)))}))
                 (loop [t top
                        cs (seq ch)]
                   (when cs
@@ -192,31 +255,80 @@
    :width (str w "px")
    :height (str node-height "px")})
 
+(defn- theme-name [theme]
+  (let [t' (some-> theme str string/lower-case)]
+    (if (contains? (set themes) t') t' "default")))
+
+(rum/defcs mindmap-notes-panel <
+  (rum/local nil ::text)
+  {:will-mount (fn [state]
+                 (reset! (::text state) (:initial (last (:rum/args state))))
+                 state)}
+  "Side panel holding a long per-topic description, persisted as the
+   `mindmap-note::` block property. Wrapped with `rum/with-key` on the topic id
+   so it re-initialises when the selection changes."
+  [state {:keys [title initial on-save on-close]}]
+  (let [*text (::text state)
+        value (or @*text initial "")
+        commit! (fn [] (when (not= (str value) (str initial)) (on-save value)))]
+    [:div.mindmap-notes-panel
+     [:div.mindmap-notes-head
+      [:span.mindmap-notes-title title]
+      [:button.mindmap-toolbar-btn
+       {:title (t :cancel) :on-click (fn [e] (util/stop e) (on-close))}
+       (ui/icon "x")]]
+     [:textarea.mindmap-notes-text
+      {:value value
+       :placeholder (t :mindmap/note-placeholder)
+       :auto-focus true
+       :on-change (fn [e] (reset! *text (.. e -target -value)))
+       :on-blur (fn [_e] (commit!))}]]))
+
 (rum/defc mindmap-canvas
   "Interactive mindmap surface. Holds the transient view state (selection, the
    node being text-edited, the current drag target); every actual mutation goes
    through `frontend.handler.mindmap` so it lands on the outline blocks and is
    undoable."
-  [{:keys [page-name page-uuid positions edges nav width height empty?]}]
+  [{:keys [page-name page-uuid positions edges nav width height empty? theme]}]
   (let [{:keys [order idx parent children nodes]} nav
         [selected set-selected!] (rum/use-state ::root)
         [editing set-editing!]   (rum/use-state nil)
         [draft set-draft!]       (rum/use-state "")
         [drop-target set-drop-target!] (rum/use-state nil)
+        [notes-open? set-notes-open!] (rum/use-state false)
         *canvas   (rum/use-ref nil)
         *textarea (rum/use-ref nil)
         *drag-id  (rum/use-ref nil)
         *cancel   (rum/use-ref nil)
+        theme     (theme-name theme)
         valid?    (set order)
         selected  (if (valid? selected) selected ::root)
+        sel-pos   (get positions selected)
+        real-sel? (and (not= selected ::root) sel-pos)
         focus-canvas! (fn [] (some-> (rum/deref *canvas) (.focus)))
         select!   (fn [id] (set-selected! id) (focus-canvas!))
         start-edit! (fn [id]
                       (when (and id (not= id ::root))
-                        (set-draft! (str (:raw (get positions id))))
+                        (set-draft! (str (:edit-text (get positions id))))
                         (rum/set-ref! *cancel nil)
                         (set-editing! id)))
         stop-edit! (fn [] (set-editing! nil) (focus-canvas!))
+        set-color!   (fn [id c] (when (not= id ::root)
+                                  (mindmap-handler/set-topic-property! id :mindmap-color c)
+                                  (focus-canvas!)))
+        cycle-shape! (fn [id] (when (not= id ::root)
+                                (mindmap-handler/set-topic-property!
+                                 id :mindmap-shape (next-shape (:shape (get positions id))))
+                                (focus-canvas!)))
+        toggle-marker! (fn [id] (when (not= id ::root)
+                                  (mindmap-handler/cycle-topic-marker! id)
+                                  (focus-canvas!)))
+        set-note!    (fn [id note]
+                       ;; block properties are single-line — fold hard breaks to spaces
+                       (when (not= id ::root)
+                         (mindmap-handler/set-topic-property!
+                          id :mindmap-note (some-> note not-empty (string/replace #"\s*\n\s*" " ")))))
+        open-url!    (fn [url] (when url (util/open-url url)))
         add-sibling! (fn [id]
                        (when (not= id ::root)
                          (when-let [nid (mindmap-handler/add-topic! id {:sibling? true})]
@@ -299,24 +411,64 @@
        js/undefined)
      [editing])
 
-    [:div.mindmap-container
+    [:div.mindmap-container {:data-mm-theme theme}
      [:div.mindmap-toolbar
-      [:button.mindmap-toolbar-btn
-       {:title (t :mindmap/add-sibling) :disabled (= selected ::root)
-        :on-click (fn [e] (util/stop e) (add-sibling! selected))}
-       (ui/icon "plus")]
-      [:button.mindmap-toolbar-btn
-       {:title (t :mindmap/add-child)
-        :on-click (fn [e] (util/stop e) (add-child! selected))}
-       (ui/icon "subtask")]
-      [:button.mindmap-toolbar-btn
-       {:title (t :mindmap/outdent) :disabled (or (= selected ::root) (nil? (get parent selected)))
-        :on-click (fn [e] (util/stop e) (outdent! selected))}
-       (ui/icon "indent-decrease")]
-      [:button.mindmap-toolbar-btn.mindmap-toolbar-btn--danger
-       {:title (t :mindmap/delete) :disabled (= selected ::root)
-        :on-click (fn [e] (util/stop e) (delete! selected))}
-       (ui/icon "trash")]]
+      [:div.mindmap-toolbar-group
+       [:button.mindmap-toolbar-btn
+        {:title (t :mindmap/add-sibling) :disabled (= selected ::root)
+         :on-click (fn [e] (util/stop e) (add-sibling! selected))}
+        (ui/icon "plus")]
+       [:button.mindmap-toolbar-btn
+        {:title (t :mindmap/add-child)
+         :on-click (fn [e] (util/stop e) (add-child! selected))}
+        (ui/icon "subtask")]
+       [:button.mindmap-toolbar-btn
+        {:title (t :mindmap/outdent) :disabled (or (= selected ::root) (nil? (get parent selected)))
+         :on-click (fn [e] (util/stop e) (outdent! selected))}
+        (ui/icon "indent-decrease")]
+       [:button.mindmap-toolbar-btn.mindmap-toolbar-btn--danger
+        {:title (t :mindmap/delete) :disabled (= selected ::root)
+         :on-click (fn [e] (util/stop e) (delete! selected))}
+        (ui/icon "trash")]]
+      [:div.mindmap-toolbar-group
+       [:button.mindmap-toolbar-btn
+        {:title (t :mindmap/task) :disabled (not real-sel?)
+         :class (when (:marker sel-pos) "is-active")
+         :on-click (fn [e] (util/stop e) (toggle-marker! selected))}
+        (ui/icon "checkbox")]
+       [:button.mindmap-toolbar-btn
+        {:title (t :mindmap/shape) :disabled (not real-sel?)
+         :on-click (fn [e] (util/stop e) (cycle-shape! selected))}
+        (ui/icon "shape")]
+       (for [c palette]
+         [:button.mindmap-swatch
+          {:key c :title c :data-mm-color c :disabled (not real-sel?)
+           :class (when (= c (:color sel-pos)) "is-active")
+           :on-click (fn [e] (util/stop e)
+                       (set-color! selected (when (not= c (:color sel-pos)) c)))}])
+       [:button.mindmap-toolbar-btn
+        {:title (t :mindmap/note) :disabled (not real-sel?)
+         :class (when notes-open? "is-active")
+         :on-click (fn [e] (util/stop e) (set-notes-open! not))}
+        (ui/icon "notes")]]
+      [:div.mindmap-toolbar-group
+       [:select.mindmap-theme-select
+        {:value theme :title (t :mindmap/theme)
+         :on-click util/stop-propagation
+         :on-change (fn [e]
+                      (mindmap-handler/set-map-theme! page-name (.. e -target -value))
+                      (focus-canvas!))}
+        (for [th themes]
+          [:option {:key th :value th} (string/capitalize th)])]]]
+
+     (when (and notes-open? real-sel?)
+       (rum/with-key
+         (mindmap-notes-panel {:title (:title sel-pos)
+                               :initial (str (or (:note sel-pos) ""))
+                               :on-save (fn [v] (set-note! selected v))
+                               :on-close (fn [] (set-notes-open! false) (focus-canvas!))})
+         (str selected)))
+
      [:div.mindmap-scroll
       {:ref *canvas :tab-index 0 :on-key-down canvas-key-down
        :on-click (fn [_e] (set-selected! ::root))}
@@ -332,14 +484,18 @@
                                  (get-in positions [::root :w]) 40) "px")
                    :top (str (get-in positions [::root :y]) "px")}}
           (t :mindmap/empty-hint)])
-       (for [[id {:keys [content collapsed? has-children?] :as pos}] positions
+       (for [[id {:keys [content collapsed? has-children? marker priority done?
+                         scheduled? url note color shape] :as pos}] positions
              :let [root? (= id ::root)
                    editing? (= editing id)]]
          [:div {:key (str id)
                 :class (str "mindmap-node"
                             (when root? " mindmap-node--root")
+                            (when done? " mindmap-node--done")
                             (when (= selected id) " mindmap-node--selected")
                             (when (= drop-target id) " mindmap-node--drop"))
+                :data-mm-color (when (and color (not root?)) color)
+                :data-mm-shape (when (and shape (not root?)) shape)
                 :style (node-box-style pos)
                 :draggable (and (not root?) (not editing?))
                 :on-click (fn [e] (util/stop e) (select! id))
@@ -374,7 +530,24 @@
               :on-blur edit-blur
               :on-click util/stop-propagation
               :on-double-click util/stop-propagation}]
-            [:span.mindmap-node-label content])
+            [:<>
+             (when (and marker (not root?))
+               [:span.mindmap-node-marker
+                {:data-marker marker
+                 :on-click (fn [e] (util/stop e) (toggle-marker! id))}
+                marker])
+             (when (and priority (not root?))
+               [:span.mindmap-node-priority (str "[#" priority "]")])
+             [:span.mindmap-node-label content]
+             (when (and scheduled? (not root?)) [:span.mindmap-node-icon (ui/icon "clock")])
+             (when (and note (not root?))
+               [:span.mindmap-node-icon.mindmap-node-icon--note
+                {:on-click (fn [e] (util/stop e) (select! id) (set-notes-open! true))}
+                (ui/icon "notes")])
+             (when (and url (not root?))
+               [:span.mindmap-node-icon.mindmap-node-icon--link
+                {:on-click (fn [e] (util/stop e) (open-url! url))}
+                (ui/icon "external-link")])])
           (when (and has-children? (not root?) (not editing?))
             [:button.mindmap-node-badge
              {:title (if collapsed? "Expand" "Collapse")
@@ -400,6 +573,7 @@
                          :nav nav
                          :width width
                          :height height
+                         :theme (get-in page [:block/properties :mindmap-theme])
                          :empty? (empty? branches)})))))
 
 (rum/defc mindmap-route

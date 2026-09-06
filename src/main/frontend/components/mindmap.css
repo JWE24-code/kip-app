@@ -1,6 +1,50 @@
 .mindmap-container {
   position: absolute;
   inset: 0;
+
+  /* theme tokens — overridden per [data-mm-theme] below */
+  --mm-edge: var(--ls-border-color);
+  --mm-node-bg: var(--ls-secondary-background-color);
+  --mm-node-border: var(--ls-border-color);
+  --mm-node-text: var(--ls-primary-text-color);
+  --mm-root-bg: var(--ls-primary-text-color);
+  --mm-root-text: var(--ls-primary-background-color);
+  --mm-accent: var(--ls-active-primary-color, var(--ls-link-text-color));
+}
+
+.mindmap-container[data-mm-theme="blueprint"] {
+  --mm-edge: #5b8def;
+  --mm-node-bg: rgba(91, 141, 239, 0.12);
+  --mm-node-border: #5b8def;
+  --mm-root-bg: #1f3a8a;
+  --mm-root-text: #fff;
+  --mm-accent: #1f3a8a;
+}
+
+.mindmap-container[data-mm-theme="forest"] {
+  --mm-edge: #3f9d6b;
+  --mm-node-bg: rgba(63, 157, 107, 0.12);
+  --mm-node-border: #3f9d6b;
+  --mm-root-bg: #1e5b3c;
+  --mm-root-text: #fff;
+  --mm-accent: #1e5b3c;
+}
+
+.mindmap-container[data-mm-theme="sunset"] {
+  --mm-edge: #e08a3c;
+  --mm-node-bg: rgba(224, 138, 60, 0.12);
+  --mm-node-border: #e08a3c;
+  --mm-root-bg: #b5462b;
+  --mm-root-text: #fff;
+  --mm-accent: #b5462b;
+}
+
+.mindmap-container[data-mm-theme="mono"] {
+  --mm-edge: var(--ls-primary-text-color);
+  --mm-node-bg: var(--ls-primary-background-color);
+  --mm-node-border: var(--ls-primary-text-color);
+  --mm-root-bg: var(--ls-primary-text-color);
+  --mm-root-text: var(--ls-primary-background-color);
 }
 
 .mindmap-scroll {
@@ -29,27 +73,29 @@
   transform: translateY(-50%);
   display: flex;
   align-items: center;
+  gap: 4px;
   box-sizing: border-box;
-  padding: 0 var(--mindmap-node-pad, 12px);
+  padding: 0 12px;
   border-radius: 9px;
-  border: 1px solid var(--ls-border-color);
-  background: var(--ls-secondary-background-color);
-  color: var(--ls-primary-text-color);
+  border: 1px solid var(--mm-node-border);
+  background: var(--mm-node-bg);
+  color: var(--mm-node-text);
   font-size: 13px;
   cursor: pointer;
   user-select: none;
 }
 
 .mindmap-node--root {
-  background: var(--ls-primary-text-color);
-  color: var(--ls-primary-background-color);
+  background: var(--mm-root-bg);
+  color: var(--mm-root-text);
+  border-color: var(--mm-root-bg);
   font-weight: 600;
   cursor: default;
 }
 
 .mindmap-node--selected {
-  border-color: var(--ls-active-primary-color, var(--ls-link-text-color));
-  box-shadow: 0 0 0 2px var(--ls-active-primary-color, var(--ls-link-text-color));
+  border-color: var(--mm-accent);
+  box-shadow: 0 0 0 2px var(--mm-accent);
 }
 
 .mindmap-node--drop {
@@ -57,11 +103,76 @@
   box-shadow: 0 0 0 2px var(--ls-link-text-color);
 }
 
+.mindmap-node--done .mindmap-node-label {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+/* per-topic colours */
+.mindmap-node[data-mm-color="red"]    { --mm-node-border: #e5484d; --mm-node-bg: rgba(229, 72, 77, 0.12); }
+.mindmap-node[data-mm-color="orange"] { --mm-node-border: #e08a3c; --mm-node-bg: rgba(224, 138, 60, 0.14); }
+.mindmap-node[data-mm-color="yellow"] { --mm-node-border: #d4a72c; --mm-node-bg: rgba(212, 167, 44, 0.16); }
+.mindmap-node[data-mm-color="green"]  { --mm-node-border: #3f9d6b; --mm-node-bg: rgba(63, 157, 107, 0.14); }
+.mindmap-node[data-mm-color="blue"]   { --mm-node-border: #5b8def; --mm-node-bg: rgba(91, 141, 239, 0.14); }
+.mindmap-node[data-mm-color="purple"] { --mm-node-border: #8e5bef; --mm-node-bg: rgba(142, 91, 239, 0.14); }
+.mindmap-node[data-mm-color="gray"]   { --mm-node-border: var(--ls-border-color); --mm-node-bg: var(--ls-tertiary-background-color); }
+
+/* per-topic shapes */
+.mindmap-node[data-mm-shape="rectangle"] { border-radius: 3px; }
+.mindmap-node[data-mm-shape="pill"]      { border-radius: 999px; padding: 0 16px; }
+
 .mindmap-node-label {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
+}
+
+.mindmap-node-marker {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--ls-secondary-background-color);
+  color: var(--ls-secondary-text-color);
+  cursor: pointer;
+}
+
+.mindmap-node-marker[data-marker="DONE"]  { background: #3f9d6b; color: #fff; }
+.mindmap-node-marker[data-marker="TODO"]  { background: #e5484d; color: #fff; }
+.mindmap-node-marker[data-marker="DOING"],
+.mindmap-node-marker[data-marker="NOW"]   { background: #5b8def; color: #fff; }
+.mindmap-node-marker[data-marker="LATER"],
+.mindmap-node-marker[data-marker="WAIT"],
+.mindmap-node-marker[data-marker="WAITING"] { background: #d4a72c; color: #fff; }
+
+.mindmap-node-priority {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ls-secondary-text-color);
+}
+
+.mindmap-node-icon {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  opacity: 0.65;
+}
+
+.mindmap-node-icon .ti {
+  font-size: 13px;
+}
+
+.mindmap-node-icon--link,
+.mindmap-node-icon--note {
+  cursor: pointer;
+}
+
+.mindmap-node-icon--link:hover,
+.mindmap-node-icon--note:hover {
+  opacity: 1;
 }
 
 .mindmap-node-input {
@@ -115,12 +226,25 @@
   left: 12px;
   z-index: 10;
   display: flex;
-  gap: 4px;
-  padding: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
   border-radius: 8px;
   border: 1px solid var(--ls-border-color);
   background: var(--ls-secondary-background-color);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+.mindmap-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mindmap-toolbar-group + .mindmap-toolbar-group {
+  padding-left: 8px;
+  border-left: 1px solid var(--ls-border-color);
 }
 
 .mindmap-toolbar-btn {
@@ -137,6 +261,11 @@
   background: var(--ls-tertiary-background-color);
 }
 
+.mindmap-toolbar-btn.is-active {
+  background: var(--ls-selection-background-color, var(--ls-tertiary-background-color));
+  color: var(--ls-active-primary-color, var(--ls-link-text-color));
+}
+
 .mindmap-toolbar-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
@@ -146,9 +275,94 @@
   color: var(--ls-error-text-color, #e5484d);
 }
 
+.mindmap-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--ls-border-color);
+}
+
+.mindmap-swatch:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.mindmap-swatch.is-active {
+  outline: 2px solid var(--ls-active-primary-color, var(--ls-link-text-color));
+  outline-offset: 1px;
+}
+
+.mindmap-swatch[data-mm-color="red"]    { background: #e5484d; }
+.mindmap-swatch[data-mm-color="orange"] { background: #e08a3c; }
+.mindmap-swatch[data-mm-color="yellow"] { background: #d4a72c; }
+.mindmap-swatch[data-mm-color="green"]  { background: #3f9d6b; }
+.mindmap-swatch[data-mm-color="blue"]   { background: #5b8def; }
+.mindmap-swatch[data-mm-color="purple"] { background: #8e5bef; }
+.mindmap-swatch[data-mm-color="gray"]   { background: var(--ls-tertiary-background-color); }
+
+.mindmap-theme-select {
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--ls-border-color);
+  background: var(--ls-primary-background-color);
+  color: var(--ls-primary-text-color);
+  font-size: 12px;
+  padding: 0 6px;
+}
+
+/* --- notes panel ---------------------------------------------------------- */
+
+.mindmap-notes-panel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 10;
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  border: 1px solid var(--ls-border-color);
+  background: var(--ls-secondary-background-color);
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.12);
+}
+
+.mindmap-notes-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 12px;
+  border-bottom: 1px solid var(--ls-border-color);
+}
+
+.mindmap-notes-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  font-size: 13px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.mindmap-notes-text {
+  flex: 1;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--ls-primary-text-color);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 10px 12px;
+}
+
+/* --- SVG bits (main-view edges + dashboard preview) ---------------------- */
+
 .mindmap-edge {
   fill: none;
-  stroke: var(--ls-border-color);
+  stroke: var(--mm-edge, var(--ls-border-color));
   stroke-width: 1.5px;
 }
 

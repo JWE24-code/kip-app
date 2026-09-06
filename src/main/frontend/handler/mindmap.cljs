@@ -4,16 +4,20 @@
    Structure edits mutate the underlying outline blocks (the single source of
    truth) through the same outliner operations the outline editor uses, so every
    change round-trips through the page's Markdown and is covered by undo/redo."
-  (:require [datascript.core :as d]
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
             [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.db.model :as model]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.property :as editor-property]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.transaction :as outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.property :as property-util]
             [promesa.core :as p]))
 
 (defn create-new-mindmap-page!
@@ -77,12 +81,67 @@
   (when-let [block (db/pull [:block/uuid block-uuid])]
     (editor-handler/delete-block-aux! block true)))
 
+(defn editable-text
+  "The node text a user edits on the map: the block content with its property
+   drawer stripped off (so editing the title never clobbers `key:: value`
+   lines), everything else — marker, priority — kept."
+  [block]
+  (-> (str (:block/content block ""))
+      (property-util/remove-properties (:block/format block))
+      string/trim))
+
 (defn set-topic-content!
-  "Saves edited node text back to the block. Undoable, and a no-op when the text
-   is unchanged."
+  "Saves edited node text back to the block, re-attaching the block's existing
+   properties so per-topic styling / notes survive a text edit. Undoable, and a
+   no-op when nothing changed."
   [block-uuid content]
+  (when-let [block (entity block-uuid)]
+    (let [format (:block/format block)
+          props (:block/properties block)
+          order (or (seq (:block/properties-order block)) (keys props))
+          text-values (:block/properties-text-values block)
+          title (string/trim (str (or content "")))
+          new-content (if (seq props)
+                        (property-util/insert-properties
+                         format title
+                         (for [k order]
+                           [k (or (get text-values k) (get props k))]))
+                        title)]
+      (editor-handler/save-block! (state/get-current-repo) block-uuid new-content))))
+
+;; --- styling, markers, notes ---------------------------------------------
+
+(defn set-topic-property!
+  "Sets (or, with a blank/nil value, clears) a block property on a topic. Round-
+   trips to Markdown as a `key:: value` line; undoable."
+  [block-uuid key value]
   (when (entity block-uuid)
-    (editor-handler/save-block! (state/get-current-repo) block-uuid (or content ""))))
+    (if (or (nil? value) (and (string? value) (string/blank? value)))
+      (editor-property/remove-block-property! block-uuid key)
+      (editor-property/set-block-property! block-uuid key value))))
+
+(defn cycle-topic-marker!
+  "Cycles the topic's task marker TODO -> DOING -> DONE -> (none). Undoable."
+  [block-uuid]
+  (when-let [block (db/pull [:block/uuid block-uuid])]
+    (when (seq (editable-text block))
+      (editor-handler/set-marker block))))
+
+(defn set-topic-marker!
+  "Forces a specific task marker on the topic (\"TODO\", \"DONE\", ...)."
+  [block-uuid marker]
+  (when-let [block (db/pull [:block/uuid block-uuid])]
+    (when (seq (editable-text block))
+      (editor-handler/set-marker block marker))))
+
+(defn set-map-theme!
+  "Stores the map-wide theme as a `mindmap-theme::` page property on the
+   mindmap page's properties block."
+  [page-name theme]
+  (when-let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
+    (when-let [pre-block (model/get-pre-block (state/get-current-repo) (:db/id page))]
+      (set-topic-property! (:block/uuid pre-block) :mindmap-theme
+                           (when (and theme (not= theme "default")) theme)))))
 
 (defn outdent-topic!
   "Moves `block-uuid` up one level (after its current parent). No-op when the
