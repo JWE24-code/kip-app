@@ -84,6 +84,17 @@
       (model/untitled-page? (:block/name page)) (t :untitled)
       :else (:block/original-name page))))
 
+(defn- central-topic-name
+  "The central topic's editable text: the mindmap page's real name, or nil while
+   it is still untitled (so editing the central node starts from an empty field
+   rather than the placeholder “Untitled”)."
+  [page]
+  (let [title-prop (get-in page [:block/properties :title])]
+    (cond
+      (and (string? title-prop) (seq title-prop)) title-prop
+      (model/untitled-page? (:block/name page)) nil
+      :else (:block/original-name page))))
+
 ;; --- styling vocabulary ---------------------------------------------------
 
 (def ^:private palette
@@ -289,7 +300,7 @@
    node being text-edited, the current drag target); every actual mutation goes
    through `frontend.handler.mindmap` so it lands on the outline blocks and is
    undoable."
-  [{:keys [page-name page-uuid positions edges nav width height empty? theme]}]
+  [{:keys [page-name page-uuid central-name positions edges nav width height empty? theme]}]
   (let [{:keys [order idx parent children nodes]} nav
         [selected set-selected!] (rum/use-state ::root)
         [editing set-editing!]   (rum/use-state nil)
@@ -308,11 +319,17 @@
         focus-canvas! (fn [] (some-> (rum/deref *canvas) (.focus)))
         select!   (fn [id] (set-selected! id) (focus-canvas!))
         start-edit! (fn [id]
-                      (when (and id (not= id ::root))
-                        (set-draft! (str (:edit-text (get positions id))))
+                      (when id
+                        (set-draft! (if (= id ::root)
+                                      (str (or central-name ""))
+                                      (str (:edit-text (get positions id)))))
                         (rum/set-ref! *cancel nil)
                         (set-editing! id)))
         stop-edit! (fn [] (set-editing! nil) (focus-canvas!))
+        commit-content! (fn [id v]
+                          (if (= id ::root)
+                            (mindmap-handler/rename-central-topic! page-name v)
+                            (mindmap-handler/set-topic-content! id v)))
         set-color!   (fn [id c] (when (not= id ::root)
                                   (mindmap-handler/set-topic-property! id :mindmap-color c)
                                   (focus-canvas!)))
@@ -384,11 +401,11 @@
                            (rum/set-ref! *cancel id) (stop-edit!))
               "Enter"  (when-not shift?
                          (.preventDefault e) (.stopPropagation e)
-                         (mindmap-handler/set-topic-content! id v)
+                         (commit-content! id v)
                          (set-editing! nil)
                          (add-sibling! id))
               "Tab"    (do (.preventDefault e) (.stopPropagation e)
-                           (mindmap-handler/set-topic-content! id v)
+                           (commit-content! id v)
                            (set-editing! nil)
                            (if shift?
                              (do (outdent! id) (select! id))
@@ -398,7 +415,7 @@
         (fn [e]
           (let [id editing v (.. e -target -value)]
             (when-not (= (rum/deref *cancel) id)
-              (mindmap-handler/set-topic-content! id v))
+              (commit-content! id v))
             (rum/set-ref! *cancel nil)
             (set-editing! (fn [cur] (if (= cur id) nil cur)))))]
 
@@ -530,6 +547,7 @@
              {:ref *textarea
               :value draft
               :rows 1
+              :placeholder (when root? (t :untitled))
               :on-change (fn [e] (set-draft! (.. e -target -value)))
               :on-key-down edit-key-down
               :on-blur edit-blur
@@ -577,6 +595,7 @@
             nav (build-nav root)]
         (mindmap-canvas {:page-name page-name
                          :page-uuid (:block/uuid page)
+                         :central-name (central-topic-name page)
                          :positions positions
                          :edges edges
                          :nav nav

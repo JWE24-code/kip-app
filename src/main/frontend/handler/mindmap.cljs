@@ -111,6 +111,19 @@
                         title)]
       (editor-handler/save-block! (state/get-current-repo) block-uuid new-content))))
 
+(defn rename-central-topic!
+  "Renames the mindmap page from its central topic, then stays on the map view.
+   Blank input is ignored (a mindmap always keeps its current name); a no-op
+   when the name is unchanged."
+  [page-name new-name]
+  (let [new-name (string/trim (str (or new-name "")))
+        page (db/entity [:block/name (util/page-name-sanity-lc page-name)])
+        cur (or (get-in page [:block/properties :title])
+                (:block/original-name page))]
+    (when (and (seq new-name) (not= new-name cur))
+      (page-handler/rename! (or (:block/original-name page) page-name) new-name)
+      (route-handler/redirect-to-mindmap! (util/page-name-sanity-lc new-name)))))
+
 ;; --- styling, markers, notes ---------------------------------------------
 
 (defn set-topic-property!
