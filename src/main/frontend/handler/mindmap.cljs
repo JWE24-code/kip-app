@@ -86,8 +86,9 @@
    drawer stripped off (so editing the title never clobbers `key:: value`
    lines), everything else — marker, priority — kept."
   [block]
-  (-> (str (:block/content block ""))
-      (property-util/remove-properties (:block/format block))
+  ;; `remove-properties` is [format content]
+  (-> (property-util/remove-properties (:block/format block)
+                                       (str (:block/content block "")))
       string/trim))
 
 (defn set-topic-content!
