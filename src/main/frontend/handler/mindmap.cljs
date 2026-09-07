@@ -50,6 +50,12 @@
 (defn- entity [block-uuid]
   (when block-uuid (db/entity [:block/uuid block-uuid])))
 
+(defn- block-map
+  "A plain block map for the outliner ops — `move-blocks!` / `indent-outdent-blocks!`
+   `assoc` onto their inputs, which a datascript entity does not support."
+  [block-uuid]
+  (when block-uuid (db/pull [:block/uuid block-uuid])))
+
 (defn add-topic!
   "Inserts a new empty topic relative to `block-uuid`. With `:sibling? true` it
    is added right after `block-uuid`; otherwise it is appended as the last child
@@ -170,7 +176,7 @@
   "Moves `block-uuid` up one level (after its current parent). No-op when the
    topic is already a top-level branch. Undoable."
   [block-uuid]
-  (when-let [block (entity block-uuid)]
+  (when-let [block (block-map block-uuid)]
     (outliner-tx/transact!
      {:outliner-op :move-blocks :real-outliner-op :indent-outdent}
      (outliner-core/indent-outdent-blocks! [block] false))))
@@ -179,7 +185,7 @@
   "Moves `block-uuid` down one level (under its previous sibling). No-op when the
    topic has no previous sibling. Undoable."
   [block-uuid]
-  (when-let [block (entity block-uuid)]
+  (when-let [block (block-map block-uuid)]
     (outliner-tx/transact!
      {:outliner-op :move-blocks :real-outliner-op :indent-outdent}
      (outliner-core/indent-outdent-blocks! [block] true))))
@@ -190,9 +196,9 @@
    itself refuses to move a node into its own subtree, so this is a no-op when
    the target is the node or one of its descendants. Undoable."
   [block-uuid target-uuid page-uuid]
-  (when-let [block (entity block-uuid)]
+  (when-let [block (block-map block-uuid)]
     (let [top-level? (or (nil? target-uuid) (= target-uuid page-uuid))
-          target (entity (if top-level? page-uuid target-uuid))]
+          target (block-map (if top-level? page-uuid target-uuid))]
       (when (and target (not= (:db/id target) (:db/id block)))
         (outliner-tx/transact!
          {:outliner-op :move-blocks}
