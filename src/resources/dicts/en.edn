@@ -398,6 +398,8 @@
  :mindmap/dashboard-card-edited "Edited "
  :mindmap/add-sibling "Add topic (Enter)"
  :mindmap/add-child "Add subtopic (Tab)"
+ :mindmap/new-tree "New tree (unconnected topic)"
+ :mindmap/detach "Detach into its own tree"
  :mindmap/outdent "Outdent (Shift+Tab)"
  :mindmap/delete "Delete topic and subtopics (Del)"
  :mindmap/empty-hint "Press Tab to add the first topic"

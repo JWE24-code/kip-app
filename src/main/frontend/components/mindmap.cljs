@@ -80,6 +80,13 @@
                     (children-of pid)))]
       (build (:db/id page)))))
 
+(defn- detached-branch?
+  "True when a top-level topic is tagged `mindmap-detached::` — it renders as its
+   own tree, unconnected to the central topic."
+  [block]
+  (let [v (get-in block [:block/properties :mindmap-detached])]
+    (or (true? v) (= "true" (some-> v str string/lower-case string/trim)))))
+
 (defn- central-topic-title [page]
   (let [title-prop (get-in page [:block/properties :title])]
     (cond
@@ -175,7 +182,9 @@
         (max min-node-width)
         (min max-node-width))))
 
-(defn- layout-tree [root]
+(defn- layout-tree
+  ([root] (layout-tree root ::root))
+  ([root root-id]
   (let [positions (volatile! {})
         max-depth (volatile! 0)]
     (letfn [(subtree-height [node]
@@ -207,20 +216,43 @@
                     (let [c (first cs)]
                       (place c (inc depth) t (:block/uuid c)))
                     (recur (+ t (subtree-height (first cs))) (next cs))))))]
-      (place root 0 margin ::root)
+      (place root 0 margin root-id)
       {:positions @positions
        :width (+ (* 2 margin) (* (inc @max-depth) level-x))
-       :height (+ (* 2 margin) (subtree-height root))})))
+       :height (+ (* 2 margin) (subtree-height root))}))))
 
-(defn- layout-edges [root]
-  (let [edges (volatile! (transient []))]
-    (letfn [(walk [node pid]
-              (doseq [c (visible-children node)]
-                (let [cid (:block/uuid c)]
-                  (vswap! edges conj! [pid cid])
-                  (walk c cid))))]
-      (walk root ::root))
-    (persistent! @edges)))
+(defn- layout-edges
+  ([root] (layout-edges root ::root))
+  ([root root-id]
+   (let [edges (volatile! (transient []))]
+     (letfn [(walk [node pid]
+               (doseq [c (visible-children node)]
+                 (let [cid (:block/uuid c)]
+                   (vswap! edges conj! [pid cid])
+                   (walk c cid))))]
+       (walk root root-id))
+     (persistent! @edges))))
+
+(defn- layout-forest
+  "Lays out the central topic's tree and each detached tree (a top-level topic
+   tagged `mindmap-detached::`), stacked vertically into one coordinate space.
+   Returns merged `:positions`, `:edges`, and the overall `:width` / `:height`."
+  [central detached]
+  (let [trees (cons [::root central]
+                    (map (fn [b] [(:block/uuid b) b]) detached))
+        acc (reduce
+             (fn [acc [rid rnode]]
+               (let [{:keys [positions width height]} (layout-tree rnode rid)
+                     y-off (:height acc)
+                     shifted (update-vals positions #(update % :y + y-off))]
+                 {:positions (merge (:positions acc) shifted)
+                  :edges (into (:edges acc) (layout-edges rnode rid))
+                  :width (max (:width acc) width)
+                  ;; `- margin` folds the two trees' facing margins into one gap
+                  :height (+ y-off (- height margin))}))
+             {:positions {} :edges [] :width 0 :height 0}
+             trees)]
+    (update acc :height + margin)))
 
 (defn- edge-path [parent child]
   (let [px (+ (:x parent) (:w parent))
@@ -236,13 +268,14 @@
   (or (:block/uuid node) ::root))
 
 (defn- build-nav
-  "Flattens the visible tree into the structures the keyboard/toolbar edits need:
+  "Flattens the visible forest (the central tree first, then each detached tree)
+   into the structures the keyboard/toolbar edits need:
      :order    ids in top-to-bottom visual order
      :idx      id -> position in :order
-     :parent   id -> parent id
+     :parent   id -> parent id (absent for a tree root)
      :children id -> vector of visible child ids
      :nodes    id -> node (for collapsed?/expand checks)"
-  [root]
+  [roots]
   (let [order    (volatile! (transient []))
         parent   (volatile! (transient {}))
         children (volatile! (transient {}))
@@ -255,7 +288,7 @@
                 (when pid (vswap! parent assoc! id pid))
                 (vswap! children assoc! id (mapv node-id ch))
                 (doseq [c ch] (walk c id))))]
-      (walk root nil))
+      (doseq [root roots] (walk root nil)))
     (let [order (persistent! @order)]
       {:order order
        :idx (zipmap order (range))
@@ -351,17 +384,29 @@
                          (mindmap-handler/set-topic-property!
                           id :mindmap-note (some-> note not-empty (string/replace #"\s*\n\s*" " ")))))
         open-url!    (fn [url] (when url (util/open-url url)))
-        add-sibling! (fn [id]
-                       (when (not= id ::root)
-                         (when-let [nid (mindmap-handler/add-topic! id {:sibling? true})]
-                           (set-selected! nid)
-                           (start-edit! nid))))
+        tree-root? (fn [id] (not (contains? parent id))) ; ::root or a detached root
         add-child! (fn [id]
                      (when-let [nid (if (= id ::root)
                                       (mindmap-handler/add-root-topic! page-name)
                                       (mindmap-handler/add-topic! id {:sibling? false}))]
                        (set-selected! nid)
                        (start-edit! nid)))
+        add-sibling! (fn [id]
+                       (cond
+                         (= id ::root) nil
+                         ;; a detached root has no siblings — grow it downward instead
+                         (tree-root? id) (add-child! id)
+                         :else (when-let [nid (mindmap-handler/add-topic! id {:sibling? true})]
+                                 (set-selected! nid)
+                                 (start-edit! nid))))
+        new-tree! (fn []
+                    (when-let [nid (mindmap-handler/add-detached-topic! page-name)]
+                      (set-selected! nid)
+                      (start-edit! nid)))
+        detach! (fn [id]
+                  (when (and id (not= id ::root))
+                    (mindmap-handler/detach-topic! id page-uuid)
+                    (select! id)))
         delete! (fn [id]
                   (when (and (not= id ::root) (valid? id))
                     (mindmap-handler/delete-topic! id)
@@ -452,6 +497,14 @@
          :on-click (fn [e] (util/stop e) (add-child! selected))}
         (ui/icon "subtask")]
        [:button.mindmap-toolbar-btn
+        {:title (t :mindmap/new-tree)
+         :on-click (fn [e] (util/stop e) (new-tree!))}
+        (ui/icon "binary-tree")]
+       [:button.mindmap-toolbar-btn
+        {:title (t :mindmap/detach) :disabled (or (not real-sel?) (tree-root? selected))
+         :on-click (fn [e] (util/stop e) (detach! selected))}
+        (ui/icon "unlink")]
+       [:button.mindmap-toolbar-btn
         {:title (t :mindmap/outdent) :disabled (or (= selected ::root) (nil? (get parent selected)))
          :on-click (fn [e] (util/stop e) (outdent! selected))}
         (ui/icon "indent-decrease")]
@@ -500,7 +553,17 @@
 
      [:div.mindmap-scroll
       {:ref *canvas :tab-index 0 :on-key-down canvas-key-down
-       :on-click (fn [_e] (set-selected! ::root))}
+       :on-click (fn [_e] (set-selected! ::root))
+       ;; a node dropped on bare canvas (a drop onto another node stops
+       ;; propagation) becomes a new detached tree
+       :on-drag-over (fn [e] (when (rum/deref *drag-id) (.preventDefault e)))
+       :on-drop (fn [e]
+                  (.preventDefault e)
+                  (when-let [src (rum/deref *drag-id)]
+                    (mindmap-handler/detach-topic! src page-uuid)
+                    (set-selected! src))
+                  (set-drop-target! nil)
+                  (rum/set-ref! *drag-id nil))}
       [:div.mindmap-canvas {:style {:width (str width "px") :height (str height "px")}}
        [:svg.mindmap-edges-svg {:width width :height height}
         (for [[pid cid] edges
@@ -542,10 +605,13 @@
                 :on-drag-leave (fn [_e] (set-drop-target! (fn [cur] (if (= cur id) nil cur))))
                 :on-drop (fn [e]
                            (.preventDefault e)
+                           (.stopPropagation e)
                            (let [src (rum/deref *drag-id)]
                              (when (and src (not= src id))
+                               ;; dropping onto a node always reconnects it
                                (mindmap-handler/reparent-topic!
                                 src (if root? page-uuid id) page-uuid)
+                               (mindmap-handler/set-topic-property! src :mindmap-detached nil)
                                (set-selected! src)))
                            (set-drop-target! nil)
                            (rum/set-ref! *drag-id nil))}
@@ -554,6 +620,9 @@
              {:ref *textarea
               :value draft
               :rows 1
+              ;; autofocus covers the case where a just-added node's textarea
+              ;; only mounts on a later render, after the focus effect has run
+              :auto-focus true
               :placeholder (when root? (t :untitled))
               :on-change (fn [e] (set-draft! (.. e -target -value)))
               :on-key-down edit-key-down
@@ -596,10 +665,11 @@
             ;; from the same `blocks` collection that drives this reactivity
             pre-block (some #(when (pre-block? %) %) blocks)
             branches (build-branches page (or blocks []))
-            root {:content (central-topic-title page) :block/children branches}
-            {:keys [positions width height]} (layout-tree root)
-            edges (layout-edges root)
-            nav (build-nav root)]
+            detached (filterv detached-branch? branches)
+            connected (filterv (complement detached-branch?) branches)
+            central {:content (central-topic-title page) :block/children connected}
+            {:keys [positions edges width height]} (layout-forest central detached)
+            nav (build-nav (cons central detached))]
         (mindmap-canvas {:page-name page-name
                          :page-uuid (:block/uuid page)
                          :central-name (central-topic-name page)
@@ -639,9 +709,10 @@
     (when page
       (let [blocks (db/get-paginated-blocks repo (:db/id page))
             branches (build-branches page (or blocks []))
-            root {:content (central-topic-title page) :block/children branches}
-            {:keys [positions width height]} (layout-tree root)
-            edges (layout-edges root)]
+            detached (filterv detached-branch? branches)
+            connected (filterv (complement detached-branch?) branches)
+            central {:content (central-topic-title page) :block/children connected}
+            {:keys [positions edges width height]} (layout-forest central detached)]
         [:svg.mindmap-preview-svg {:viewBox (str "0 0 " width " " height)
                                    :width "100%" :height "100%"
                                    :preserveAspectRatio "xMidYMid meet"}

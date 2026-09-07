@@ -197,3 +197,24 @@
         (outliner-tx/transact!
          {:outliner-op :move-blocks}
          (outliner-core/move-blocks! [block] target false))))))
+
+;; --- detached trees -----------------------------------------------------------
+
+(defn add-detached-topic!
+  "Adds a new top-level topic that renders as its own tree, unconnected to the
+   central topic. The `mindmap-detached::` property is baked into the block's
+   content on creation (one transaction) so the inline editor keeps focus."
+  [page-name]
+  (some-> (editor-handler/api-insert-new-block!
+           (property-util/insert-properties :markdown "" [[:mindmap-detached "true"]])
+           {:page page-name
+            :edit-block? false})
+          :block/uuid))
+
+(defn detach-topic!
+  "Promotes `block-uuid` (with its subtree) to a top-level block and tags it
+   `mindmap-detached:: true` so it renders as its own tree. Undoable."
+  [block-uuid page-uuid]
+  (when (entity block-uuid)
+    (reparent-topic! block-uuid page-uuid page-uuid)
+    (set-topic-property! block-uuid :mindmap-detached true)))
