@@ -3,6 +3,27 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [0.6.0] — 2026-09-07
+
+- **Mindmaps** — a new kind of page where the map *is* the outline. Make one
+  from the Mindmaps entry in the sidebar (or the whiteboards dashboard). The
+  page H1 is the central topic and bullets are branches; it stays plain
+  Markdown, so it syncs, greps, hatches and exports like any other page.
+  - Clean auto-laid-out tree renderer with collapse/expand — not a whiteboard.
+  - Edit structure on the map: Enter / Tab / Shift+Tab, a toolbar for add /
+    delete / indent, and drag a topic to re-parent it (cycle-safe).
+  - Click the central topic to name the map.
+  - Map-wide themes, per-topic colour and shape, TODO / DOING / DONE markers,
+    a notes side panel, and clickable pasted links — all stored as Markdown
+    block properties, so they round-trip through the file.
+  - **New tree** — a topic that starts its own tree, unconnected to the
+    centre. Drag a topic onto empty canvas to detach it, onto another node to
+    reconnect it.
+  - Flip between the map and the plain outline editor with a header button or
+    Ctrl/Cmd+Shift+M.
+- **Whiteboards are now off by default.** Existing whiteboards are untouched;
+  turn them back on — and toggle Mindmaps — under Settings → Advanced.
+
 ## [0.5.5] — 2026-09-06
 
 - **People panel now lists your people** — `people-list!` called a Node
