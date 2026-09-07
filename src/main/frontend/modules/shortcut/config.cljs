@@ -397,6 +397,9 @@
    :go/whiteboards                          {:binding "g w"
                                              :fn      route-handler/redirect-to-whiteboard-dashboard!}
 
+   :mindmap/toggle-view                     {:binding "mod+shift+m"
+                                             :fn      route-handler/toggle-mindmap-view!}
+
    :go/keyboard-shortcuts                   {:binding "g s"
                                              :fn      #(state/pub-event! [:modal/keymap])}
 
@@ -651,6 +654,7 @@
             :go/graph-view
             :go/all-graphs
             :go/whiteboards
+            :mindmap/toggle-view
             :go/keyboard-shortcuts
             :go/tomorrow
             :go/next-journal
@@ -734,6 +738,7 @@
       :go/graph-view
       :go/all-graphs
       :go/whiteboards
+      :mindmap/toggle-view
       :go/flashcards
       :go/tomorrow
       :go/next-journal

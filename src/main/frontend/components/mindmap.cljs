@@ -415,6 +415,11 @@
      [:div.mindmap-toolbar
       [:div.mindmap-toolbar-group
        [:button.mindmap-toolbar-btn
+        {:title (t :mindmap/edit-outline)
+         :on-click (fn [e] (util/stop e) (route-handler/redirect-to-page! page-name))}
+        (ui/icon "list")]]
+      [:div.mindmap-toolbar-group
+       [:button.mindmap-toolbar-btn
         {:title (t :mindmap/add-sibling) :disabled (= selected ::root)
          :on-click (fn [e] (util/stop e) (add-sibling! selected))}
         (ui/icon "plus")]

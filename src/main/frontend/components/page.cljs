@@ -432,6 +432,7 @@
           sidebar? (:sidebar? option)
           whiteboard? (:whiteboard? option) ;; in a whiteboard portal shape?
           whiteboard-page? (model/whiteboard-page? page-name) ;; is this page a whiteboard?
+          mindmap-page? (model/mindmap-page? page-name) ;; is this page a mindmap?
           route-page-name path-page-name
           page (if block?
                  (->> (:db/id (:block/page (db/entity repo [:block/uuid block-id])))
@@ -478,6 +479,13 @@
              (when-not whiteboard?
                [:div.ls-page-title.flex-1.flex-row.w-full
                 (page-title page-name icon title format fmt-journal?)])
+             (when (and mindmap-page? (not whiteboard?))
+               [:div.flex.flex-row.items-center
+                (ui/button (t :mindmap/view-map)
+                           :icon "network"
+                           :intent "link"
+                           :small? true
+                           :on-click #(route-handler/redirect-to-mindmap! page-name))])
              (when (not config/publishing?)
                (when config/lsp-enabled?
                  [:div.flex.flex-row
