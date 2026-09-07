@@ -107,6 +107,20 @@
   []
   (redirect! {:to :mindmaps}))
 
+(defn toggle-mindmap-view!
+  "On a mindmap page, flip between the map view and the outline editor for the
+   same page (both edit the same blocks). No-op anywhere else."
+  []
+  (cond
+    (state/mindmap-route?)
+    (when-let [name (state/get-current-mindmap)]
+      (redirect-to-page! name))
+
+    (= :page (state/get-current-route))
+    (when-let [name (state/get-current-page)]
+      (when (model/mindmap-page? name)
+        (redirect-to-mindmap! name)))))
+
 (defn get-title
   [name path-params]
   (case name

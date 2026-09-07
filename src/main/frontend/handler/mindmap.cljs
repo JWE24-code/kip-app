@@ -111,6 +111,19 @@
                         title)]
       (editor-handler/save-block! (state/get-current-repo) block-uuid new-content))))
 
+(defn rename-central-topic!
+  "Renames the mindmap page from its central topic, then stays on the map view.
+   Blank input is ignored (a mindmap always keeps its current name); a no-op
+   when the name is unchanged."
+  [page-name new-name]
+  (let [new-name (string/trim (str (or new-name "")))
+        page (db/entity [:block/name (util/page-name-sanity-lc page-name)])
+        cur (or (get-in page [:block/properties :title])
+                (:block/original-name page))]
+    (when (and (seq new-name) (not= new-name cur))
+      (page-handler/rename! (or (:block/original-name page) page-name) new-name)
+      (route-handler/redirect-to-mindmap! (util/page-name-sanity-lc new-name)))))
+
 ;; --- styling, markers, notes ---------------------------------------------
 
 (defn set-topic-property!
@@ -184,3 +197,24 @@
         (outliner-tx/transact!
          {:outliner-op :move-blocks}
          (outliner-core/move-blocks! [block] target false))))))
+
+;; --- detached trees -----------------------------------------------------------
+
+(defn add-detached-topic!
+  "Adds a new top-level topic that renders as its own tree, unconnected to the
+   central topic. The `mindmap-detached::` property is baked into the block's
+   content on creation (one transaction) so the inline editor keeps focus."
+  [page-name]
+  (some-> (editor-handler/api-insert-new-block!
+           (property-util/insert-properties :markdown "" [[:mindmap-detached "true"]])
+           {:page page-name
+            :edit-block? false})
+          :block/uuid))
+
+(defn detach-topic!
+  "Promotes `block-uuid` (with its subtree) to a top-level block and tags it
+   `mindmap-detached:: true` so it renders as its own tree. Undoable."
+  [block-uuid page-uuid]
+  (when (entity block-uuid)
+    (reparent-topic! block-uuid page-uuid page-uuid)
+    (set-topic-property! block-uuid :mindmap-detached true)))

@@ -70,8 +70,12 @@
  ;; :feature/enable-flashcards? true
 
  ;; Enable whiteboards.
- ;; Default value: true
+ ;; Default value: false
  ;; :feature/enable-whiteboards? true
+
+ ;; Enable mindmaps.
+ ;; Default value: true
+ ;; :feature/enable-mindmaps? true
 
  ;; Disable the journal's built-in 'Scheduled tasks and deadlines' query.
  ;; Default value: false

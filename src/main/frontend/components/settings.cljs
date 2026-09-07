@@ -732,13 +732,27 @@
    {:left-label (t :settings-page/enable-whiteboards)
      :action (whiteboards-enabled-switcher enabled?)}))
 
+(rum/defc mindmaps-enabled-switcher
+  [enabled?]
+  (ui/toggle enabled?
+             (fn []
+               (let [value (not enabled?)]
+                 (config-handler/set-config! :feature/enable-mindmaps? value)))
+             true))
+
+(defn mindmaps-switcher-row [enabled?]
+  (row-with-button-action
+   {:left-label (t :settings-page/enable-mindmaps)
+    :action (mindmaps-enabled-switcher enabled?)}))
+
 (rum/defc settings-advanced < rum/reactive
   []
   (let [https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])
         repo (state/get-current-repo)
         enable-journals? (state/enable-journals? repo)
         enable-flashcards? (state/enable-flashcards? repo)
-        enable-whiteboards? (state/enable-whiteboards? repo)]
+        enable-whiteboards? (state/enable-whiteboards? repo)
+        enable-mindmaps? (state/enable-mindmaps? repo)]
     [:div.panel-wrap.is-advanced
      (when (util/electron?) (https-user-agent-row https-agent-opts))
      (clear-cache-row t)
@@ -759,6 +773,7 @@
                              (when (= "Enter" (util/ekey e))
                                (update-home-page e)))}]]]])
      (whiteboards-switcher-row enable-whiteboards?)
+     (mindmaps-switcher-row enable-mindmaps?)
      (flashcards-switcher-row enable-flashcards?)]))
 
 (def DEFAULT-ACTIVE-TAB-STATE [:general :general])
