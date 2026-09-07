@@ -27,6 +27,9 @@
 (def ^:private h-gap 56)
 (def ^:private v-gap 14)
 (def ^:private max-node-width 204)
+(def ^:private min-node-width 44)
+;; a blank / just-added topic gets a roomy box so it's easy to see and type into
+(def ^:private empty-node-width 120)
 (def ^:private font-size 13)
 (def ^:private margin 60)
 (def ^:private level-x (+ max-node-width h-gap))
@@ -166,9 +169,11 @@
           (recur (subs s 0 (dec (count s)))))))))
 
 (defn- node-width [content]
-  (-> (+ (measure-width (display-content content)) (* 2 node-pad-x))
-      (max 32)
-      (min max-node-width)))
+  (if (string/blank? content)
+    empty-node-width
+    (-> (+ (measure-width (display-content content)) (* 2 node-pad-x))
+        (max min-node-width)
+        (min max-node-width))))
 
 (defn- layout-tree [root]
   (let [positions (volatile! {})
@@ -419,6 +424,8 @@
             (rum/set-ref! *cancel nil)
             (set-editing! (fn [cur] (if (= cur id) nil cur)))))]
 
+    ;; focus the editor when one opens — also once the just-added node lands in
+    ;; `positions` on the next render (its textarea doesn't exist until then)
     (rum/use-effect!
      (fn []
        (when editing
@@ -426,7 +433,7 @@
            (.focus ta)
            (.select ta)))
        js/undefined)
-     [editing])
+     [editing (some? (get positions editing))])
 
     [:div.mindmap-container {:data-mm-theme theme}
      [:div.mindmap-toolbar
