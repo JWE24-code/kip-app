@@ -561,6 +561,10 @@
     (if-not page
       [:div.mindmap-scroll]
       (let [blocks (db/get-paginated-blocks repo (:db/id page))
+            ;; the theme lives on the page's properties block; a property set on
+            ;; a pre-block doesn't propagate to the page entity, so read it back
+            ;; from the same `blocks` collection that drives this reactivity
+            pre-block (some #(when (pre-block? %) %) blocks)
             branches (build-branches page (or blocks []))
             root {:content (central-topic-title page) :block/children branches}
             {:keys [positions width height]} (layout-tree root)
@@ -573,7 +577,7 @@
                          :nav nav
                          :width width
                          :height height
-                         :theme (get-in page [:block/properties :mindmap-theme])
+                         :theme (get-in pre-block [:block/properties :mindmap-theme])
                          :empty? (empty? branches)})))))
 
 (rum/defc mindmap-route

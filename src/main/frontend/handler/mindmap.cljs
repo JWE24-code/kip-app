@@ -17,6 +17,7 @@
             [frontend.modules.outliner.transaction :as outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.page-property :as page-property]
             [frontend.util.property :as property-util]
             [promesa.core :as p]))
 
@@ -136,13 +137,21 @@
       (editor-handler/set-marker block marker))))
 
 (defn set-map-theme!
-  "Stores the map-wide theme as a `mindmap-theme::` page property on the
-   mindmap page's properties block."
+  "Stores the map-wide theme as a `mindmap-theme::` property on the mindmap
+   page's properties block (so it round-trips through the file). `\"default\"`
+   clears the property. Undoable."
   [page-name theme]
-  (when-let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
-    (when-let [pre-block (model/get-pre-block (state/get-current-repo) (:db/id page))]
-      (set-topic-property! (:block/uuid pre-block) :mindmap-theme
-                           (when (and theme (not= theme "default")) theme)))))
+  (let [pn (util/page-name-sanity-lc page-name)
+        repo (state/get-current-repo)]
+    (when-let [page (db/entity [:block/name pn])]
+      ;; a few older mindmaps carry `:block/type` but no properties block —
+      ;; materialise one (re-stating `type::`, which is already there, so no
+      ;; data is lost) before we can hang a property off it
+      (when-not (model/get-pre-block repo (:db/id page))
+        (page-property/add-property! pn :type "mindmap"))
+      (when-let [pre (model/get-pre-block repo (:db/id page))]
+        (set-topic-property! (:block/uuid pre) :mindmap-theme
+                             (when (not= theme "default") theme))))))
 
 (defn outdent-topic!
   "Moves `block-uuid` up one level (after its current parent). No-op when the
