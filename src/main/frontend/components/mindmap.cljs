@@ -688,7 +688,7 @@
    [:div.p-4.h-64.flex.justify-center
     (mindmap-preview page-name)]])
 
-(rum/defc mindmap-dashboard
+(rum/defc mindmap-dashboard-inner
   []
   (let [mindmaps (->> (model/get-all-mindmaps (state/get-current-repo))
                       (sort-by :block/updated-at)
@@ -741,3 +741,9 @@
                                                                                   (disj checked-page-names mindmap-name))))})])
        (for [n (range empty-cards)]
          [:div.dashboard-card.dashboard-bg-card {:key n}])]]]))
+
+(rum/defc mindmap-dashboard
+  []
+  (if (state/enable-mindmaps? (state/get-current-repo))
+    (mindmap-dashboard-inner)
+    [:div.p-4.opacity-60 (t :mindmap/disabled-hint)]))

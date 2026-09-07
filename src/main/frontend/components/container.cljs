@@ -467,12 +467,13 @@
                :icon-extension? true
                :shortcut :go/whiteboards}))
 
-           (sidebar-item
-            {:class "mindmap"
-             :title (t :mindmaps)
-             :href (rfe/href :mindmaps)
-             :active (and (not srs-open?) (#{:mindmap :mindmaps} route-name))
-             :icon "network"})
+           (when (state/enable-mindmaps? (state/get-current-repo))
+             (sidebar-item
+              {:class "mindmap"
+               :title (t :mindmaps)
+               :href (rfe/href :mindmaps)
+               :active (and (not srs-open?) (#{:mindmap :mindmaps} route-name))
+               :icon "network"}))
 
            (when (state/enable-flashcards? (state/get-current-repo))
              [:div.flashcards-nav

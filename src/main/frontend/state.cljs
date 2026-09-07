@@ -644,7 +644,13 @@ Similar to re-frame subscriptions"
   ([]
    (enable-whiteboards? (get-current-repo)))
   ([repo]
-   (not (false? (:feature/enable-whiteboards? (sub-config repo))))))
+   (true? (:feature/enable-whiteboards? (sub-config repo)))))
+
+(defn enable-mindmaps?
+  ([]
+   (enable-mindmaps? (get-current-repo)))
+  ([repo]
+   (not (false? (:feature/enable-mindmaps? (sub-config repo))))))
 
 (defn enable-git-auto-push?
   [repo]
