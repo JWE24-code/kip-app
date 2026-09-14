@@ -100,6 +100,17 @@ for m in better-sqlite3 bindings file-uri-to-path; do
   cp -a "$APP_DIR/static/node_modules/$m" "$APP_DIR/static/scripts/node_modules/$m"
 done
 
+# Same for the sidecar's own require('better-sqlite3') (roost/schema.ts): it
+# runs under ELECTRON_RUN_AS_NODE, so it too needs the Electron-ABI build
+# locally rather than walking up into the packed asar. gulp leaves it out of
+# sidecar/package.json (NATIVE_SIDECAR_DEPS) for exactly this reason.
+step "vendor better-sqlite3 into sidecar/node_modules"
+mkdir -p "$APP_DIR/static/sidecar/node_modules"
+for m in better-sqlite3 bindings file-uri-to-path; do
+  rm -rf "$APP_DIR/static/sidecar/node_modules/$m"
+  cp -a "$APP_DIR/static/node_modules/$m" "$APP_DIR/static/sidecar/node_modules/$m"
+done
+
 # --- 6. package --------------------------------------------------------------
 # KIP_TARGET=installer  -> electron-builder: AppImage (self-updating) + tar.gz
 #                          + latest-linux.yml  (#38, feeds electron-updater)

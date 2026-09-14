@@ -109,6 +109,9 @@ jobs:
         run: |
           mv _kip/scripts ./scripts
           mv _kip/sidecar ./sidecar
+          # gulp's syncSidecar sources its dependency versions from the kip
+          # repo's package.json (next to app/, so ../package.json); keep it.
+          mv _kip/package.json ./package.json
           rm -rf _kip
 
       - name: Free disk space (linux)

@@ -661,9 +661,6 @@
 (defmethod handle :kipArena [_ [_ vault-root arena-id winner]]
   (preference-signals/post-arena-verdict! vault-root arena-id winner))
 
-(defmethod handle :wikiChatProgress [_ [_ vault-root]]
-  (wiki/peck-progress! vault-root))
-
 (defmethod handle :wikiSkills [_ [_ vault-root]]
   (wiki/skills-list! vault-root))
 

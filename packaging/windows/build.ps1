@@ -104,6 +104,18 @@ foreach ($m in 'better-sqlite3','bindings','file-uri-to-path') {
   RC "$APP_DIR\static\node_modules\$m" $mDst @('/E')
 }
 
+# The sidecar's roost/schema.ts also require()s better-sqlite3 and runs under
+# ELECTRON_RUN_AS_NODE, so it needs the same Electron-ABI build locally rather
+# than walking up into the packed asar. gulp leaves it out of the sidecar's
+# package.json (NATIVE_SIDECAR_DEPS) for exactly this reason.
+Step 'vendor better-sqlite3 into sidecar\node_modules'
+New-Item -ItemType Directory -Force -Path "$APP_DIR\static\sidecar\node_modules" | Out-Null
+foreach ($m in 'better-sqlite3','bindings','file-uri-to-path') {
+  $mDst = "$APP_DIR\static\sidecar\node_modules\$m"
+  if (Test-Path $mDst) { Remove-Item $mDst -Recurse -Force }
+  RC "$APP_DIR\static\node_modules\$m" $mDst @('/E')
+}
+
 # --- 6. package -------------------------------------------------------------
 # KIP_TARGET=installer -> electron-builder: NSIS Kip-Setup-<version>.exe
 #                         + latest.yml  (#38, feeds electron-updater)

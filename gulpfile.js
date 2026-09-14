@@ -41,14 +41,66 @@ const sidecarGlob = [
   '!' + path.join(sidecarSrcPath, 'test', '**', '*')
 ]
 
-// The sidecar's runtime deps. kip's sidecar/package.json is only
-// {"type":"module"} today, so syncSidecar writes this package.json itself —
-// keep it in sync with kip's package.json when the sidecar gains a dep.
-const SIDECAR_DEPS = {
-  '@anthropic-ai/sdk': '^0.70.0',
-  'isomorphic-git': '^1.42.2',
-  'ws': '^8.21.3',
-  'zod': '^4.6.5'
+// The sidecar's runtime deps are derived from the sidecar's own source (the
+// bare imports in its *.ts/*.cjs), with versions read from the kip repo's
+// package.json — so a new import can't ship without its dependency, and a
+// version bump in the kip repo flows through without editing this file.
+// better-sqlite3 is native and deliberately excluded: under Electron it must be
+// the Electron-ABI build, which packaging/*/build vendors next to the app (same
+// as scripts/), never a fresh Node-ABI install in sidecar/node_modules.
+const KIP_ROOT_PKG = path.join(__dirname, '..', 'package.json')
+const NATIVE_SIDECAR_DEPS = new Set(['better-sqlite3'])
+const SIDECAR_DEPS_FALLBACK = ['@anthropic-ai/sdk', 'gray-matter', 'isomorphic-git', 'ws', 'zod']
+
+function readKipDependencyVersions () {
+  try {
+    return JSON.parse(fs.readFileSync(KIP_ROOT_PKG, 'utf8')).dependencies || {}
+  } catch {
+    return {}
+  }
+}
+
+function walkSidecarFiles (dir) {
+  const out = []
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules' || entry.name === 'test') continue
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory()) out.push(...walkSidecarFiles(full))
+    else if (/\.(ts|cjs|mjs)$/.test(entry.name)) out.push(full)
+  }
+  return out
+}
+
+function sidecarDependencyNames () {
+  if (!fs.existsSync(sidecarSrcPath)) return []
+  let files
+  try {
+    files = walkSidecarFiles(sidecarSrcPath)
+  } catch {
+    return SIDECAR_DEPS_FALLBACK
+  }
+  const names = new Set()
+  const importRe = /(?:from\s+|require\(\s*)['"](@?[^'"./][^'"]*)['"]/g
+  for (const file of files) {
+    const src = fs.readFileSync(file, 'utf8')
+    let m
+    while ((m = importRe.exec(src)) !== null) {
+      const raw = m[1]
+      const name = raw.startsWith('@') ? raw.split('/').slice(0, 2).join('/') : raw.split('/')[0]
+      if (!name.startsWith('node:') && !NATIVE_SIDECAR_DEPS.has(name)) names.add(name)
+    }
+  }
+  const found = [...names].sort()
+  return found.length ? found : SIDECAR_DEPS_FALLBACK
+}
+
+function sidecarDeps () {
+  const versions = readKipDependencyVersions()
+  const deps = {}
+  for (const name of sidecarDependencyNames()) {
+    deps[name] = versions[name] || '*'
+  }
+  return deps
 }
 
 const css = {
@@ -159,11 +211,18 @@ const common = {
 
   syncSidecar (...params) {
     const dest = path.join(outputPath, 'sidecar')
+    const deps = sidecarDeps()
     return gulp.series(
       // nodir: the source tree is all files (no shipped subdirs to preserve
       // beyond the glob structure). test/ is excluded above.
       () => gulp.src(sidecarGlob, { base: sidecarSrcPath, nodir: true }).pipe(gulp.dest(dest)),
       (cb) => {
+        if (!Object.keys(deps).length) {
+          // No sidecar/ next to app/ (a plain dev tree): leave the app to fall
+          // back to :wikiChat rather than installing an unrelated dep set.
+          console.warn('[syncSidecar] no sidecar/ source found next to app/ — skipping dependency install')
+          return cb()
+        }
         // Rebuild the sidecar's package.json only when the dep set changes, so
         // the mtime-vs-lock staleness check below doesn't reinstall every run.
         const pkgPath = path.join(dest, 'package.json')
@@ -173,7 +232,7 @@ const common = {
           private: true,
           // The sidecar is ESM (.ts run through Node's type stripping).
           type: 'module',
-          dependencies: SIDECAR_DEPS
+          dependencies: deps
         }
         const next = JSON.stringify(pkg, null, 2) + '\n'
         const prev = fs.existsSync(pkgPath) ? fs.readFileSync(pkgPath, 'utf8') : ''

@@ -55,6 +55,7 @@
          :session-id nil
          :turn-id nil
          :ws nil
+         :capabilities #{}    ; advertised by the ready payload, when the sidecar sends any
          :ready-deferred nil}))
 
 (defonce ^:private *listeners (atom #{}))
@@ -92,7 +93,8 @@
           payload (:payload env)]
       (when (= type :ready)
         (swap! *conn assoc :status :connected
-               :session-id (:sessionId payload))
+               :session-id (:sessionId payload)
+               :capabilities (set (:capabilities payload)))
         (when-let [d (:ready-deferred @*conn)]
           (p/resolve! d @*conn)
           (swap! *conn assoc :ready-deferred nil)))
@@ -100,7 +102,12 @@
       (emit! (assoc env :type type :payload payload)))))
 
 (defn- handle-close! [repo]
-  (swap! *conn assoc :ws nil :status :closed :turn-id nil)
+  ;; A send-chat! that is still waiting on the hello/ready handshake must not
+  ;; hang: reject its deferred before tearing the connection state down.
+  (when-let [d (:ready-deferred @*conn)]
+    (p/reject! d (js/Error. "Lost the connection to Kip's sidecar.")))
+  (swap! *conn assoc :ws nil :status :closed :turn-id nil :ready-deferred nil
+         :capabilities #{})
   (emit! {:type :sidecar/closed})
   ;; Eagerly reconnect so a streamed turn resumes after a transient drop; the
   ;; sidecar's loopback socket is cheap and local.
@@ -113,7 +120,8 @@
   [repo info]
   (let [url (:url info)
         token (:token info)]
-    (swap! *conn assoc :status :connecting :repo repo :url url :session-id nil)
+    (swap! *conn assoc :status :connecting :repo repo :url url :session-id nil
+           :capabilities #{})
     (let [ws (js/WebSocket. url)]
       (swap! *conn assoc :ws ws)
       (set! (.-onopen ws) (fn [_] (send-frame! "hello" {:token token})))
@@ -153,7 +161,9 @@
   [target-repo]
   (let [{:keys [status repo] :as conn} @*conn]
     (cond
-      (not (util/electron?)) (p/rejected (js/Error. "The sidecar runs only in the desktop app."))
+      (not (util/electron?))
+      (do (swap! *conn assoc :status :unavailable)
+          (p/rejected (js/Error. "The sidecar runs only in the desktop app.")))
       (and (= status :connected) (= repo target-repo) (open? (:ws conn))) (p/resolved conn)
       (and (= status :connecting) (= repo target-repo) (:ready-deferred conn)) (:ready-deferred conn)
       :else (connect-repo! target-repo))))
@@ -165,16 +175,98 @@
 (defn status [] (:status @*conn))
 (defn current-turn-id [] (:turn-id @*conn))
 
+(defn unavailable?
+  "True when no sidecar is reachable for this build/coop — the only case where
+  the caller should fall back to the spawn-per-action :wikiChat path. A real
+  turn error (closed socket mid-turn, server error) is NOT unavailable."
+  []
+  (= :unavailable (:status @*conn)))
+
+(defn cancel-supported?
+  "True only when the connected sidecar advertised cancel support in its ready
+  payload. Kip's v1 ready frame carries no capabilities yet (chat.cancel is
+  kip#69), so this is false today and the UI hides Stop instead of offering a
+  control that silently does nothing."
+  []
+  (contains? (:capabilities @*conn) "cancel"))
+
+;; --- settled turns ----------------------------------------------------------
+;; The conversation atom is shared by every mounted chat panel (peck-main and
+;; the right-sidebar :chat pane can both be live). Each panel subscribes to the
+;; same socket events, so without a singleton the one turn.end would append two
+;; answers. This is that singleton: the first panel to settle a turn id wins;
+;; the others skip the shared append and only clear their own live state.
+
+(defonce ^:private *settled-turns (atom #{}))
+
+(defn settle-turn!
+  "Record that `turn-id`'s settlement has been folded into the shared
+  conversation. True for the first caller (append), false for any other panel
+  mounted at the same time (skip). A nil id can't be deduped, so it settles."
+  [turn-id]
+  (if (nil? turn-id)
+    true
+    (let [first? (not (contains? @*settled-turns turn-id))]
+      (swap! *settled-turns conj turn-id)
+      first?)))
+
+(defn turn->message
+  "Map a settled turn to a UI message. `payload` is the sidecar's turn.end
+  payload, `streamed` the text accumulated from turn.delta and `steps` the tool
+  steps the panel collected. The enrichment fields (citations, sources, lint
+  warnings, call/arena ids, intent) are read from the payload when the sidecar
+  sends them, so the settled-answer widgets stay wired without the old
+  spawn-per-action turn shape."
+  [payload streamed steps]
+  (let [{:keys [reason intent answer learned note pages callId arenaId webSource
+                citedSlugs candidateSlugs deadCitations lintWarnings sources]} payload
+        steps (vec (or (seq steps) (:steps payload) []))
+        final (or answer
+                  (when-not (string/blank? streamed) streamed)
+                  (:text payload))
+        enrichment {:steps steps :call-id callId :arena-id arenaId
+                    :web-source webSource :cited-slugs citedSlugs
+                    :candidate-slugs candidateSlugs :dead-citations deadCitations
+                    :lint-warnings lintWarnings :sources sources}]
+    (cond
+      (= reason "cancelled")
+      {:role :assistant :text "Cancelled." :empty? true}
+
+      (and (= intent "statement") (not learned))
+      {:role :assistant :text (if (string/blank? note) "Nothing new to add there." note)}
+
+      (= intent "statement")
+      {:role :learned :text (if (string/blank? note) "Recorded." note) :pages pages}
+
+      (not (string/blank? final))
+      (assoc enrichment :role :assistant :text final :answer? true)
+
+      (= intent "reminder")
+      {:role :assistant :text "Reminder noted — check the Reminders panel." :steps steps}
+
+      :else
+      {:role :assistant
+       :text "No matching pages found in the nest for this question."
+       :empty? true})))
+
 (defn send-chat!
-  "Start a turn for `text`; resolves true once the frame is on the wire. Turn
-  output arrives asynchronously via `add-listener!`."
-  [text]
-  (if (string/blank? text)
-    (p/rejected (js/Error. "empty turn"))
-    (-> (ensure-connected!)
-        (p/then (fn [_]
-                  (when-not (send-frame! "chat.send" {:text text})
-                    (throw (js/Error. "sidecar socket is not open"))))))))
+  "Start a turn for `text`; resolves nil once the frame is on the wire. Turn
+  output arrives asynchronously via `add-listener!`. Options (all optional, sent
+  for forward-compatibility with the server's richer chat.send): `:depth`
+  \"quick\"|\"full\", `:history` [{:role :text} …] and `:arena-compare-to` a
+  prior call id."
+  ([text] (send-chat! text {}))
+  ([text {:keys [depth history arena-compare-to]}]
+   (if (string/blank? text)
+     (p/rejected (js/Error. "empty turn"))
+     (-> (ensure-connected!)
+         (p/then (fn [_]
+                   (when-not (send-frame! "chat.send"
+                                          (cond-> {:text text}
+                                            (string? depth) (assoc :depth depth)
+                                            (seq history) (assoc :history (vec history))
+                                            (some? arena-compare-to) (assoc :arenaCompareTo arena-compare-to)))
+                     (throw (js/Error. "sidecar socket is not open")))))))))
 
 (defn cancel!
   "Ask the sidecar to abort the in-flight turn. `turn-id` is optional — the

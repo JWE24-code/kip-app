@@ -33,7 +33,10 @@ const TREES = [
       'index.ts',
       'server/ws.ts',
       'node_modules/ws/package.json',
-      'node_modules/zod/package.json'
+      'node_modules/zod/package.json',
+      'node_modules/gray-matter/package.json',
+      // vendored by packaging/*/build (Electron-ABI, not installed by gulp)
+      'node_modules/better-sqlite3/build/Release/better_sqlite3.node'
     ]
   }
 ]

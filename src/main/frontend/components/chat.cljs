@@ -59,19 +59,32 @@
 
 (defn- vault-root [] (config/get-repo-dir (state/get-current-repo)))
 
+(defn- event-key
+  "A stable key for one settleable event, so two mounted panels agree on
+  identity. Prefers the turn id, falling back to the error's request id then the
+  frame id."
+  [prefix {:keys [turnId id]} frame-id]
+  (str prefix (or turnId id frame-id)))
+
 (defn- handle-event!
   "Fold one sidecar event into the panel's locals. `state` is the chat-panel
-  state (locals ::loading? ::stream ::activity ::steps ::turn-id ::ask)."
-  [state {:keys [type payload]}]
-  (let [*loading? (get state ::loading?)
-        *stream   (get state ::stream)
-        *activity (get state ::activity)
-        *steps    (get state ::steps)
-        *turn-id  (get state ::turn-id)
-        *ask      (get state ::ask)]
+  state (locals ::loading? ::stream ::activity ::steps ::turn-id ::ask
+  ::tool-starts ::regen?). The shared conversation append is guarded by
+  sidecar/settle-turn! so two mounted panels never record one turn twice; only
+  the panel that actually ran the turn appends its streamed text."
+  [state {:keys [type payload id] :as _env}]
+  (let [*loading?    (get state ::loading?)
+        *stream      (get state ::stream)
+        *activity    (get state ::activity)
+        *steps       (get state ::steps)
+        *turn-id     (get state ::turn-id)
+        *ask         (get state ::ask)
+        *tool-starts (get state ::tool-starts)
+        *regen?      (get state ::regen?)
+        turn-id (:turnId payload)]
     (case type
       :turn.start
-      (reset! *turn-id (:turnId payload))
+      (reset! *turn-id turn-id)
 
       :turn.delta
       (swap! *stream str (:text payload))
@@ -85,13 +98,18 @@
               :preview (:message payload)})
 
       :agent.tool.start
-      (swap! *activity conj {:phase "tool" :label (:name payload)})
+      (do
+        (swap! *tool-starts assoc (:toolCallId payload) (js/Date.now))
+        (swap! *activity conj {:phase "tool" :label (:name payload)}))
 
       :agent.tool.end
-      (do
+      (let [started (get @*tool-starts (:toolCallId payload))
+            ms (when (number? started) (- (js/Date.now) started))]
+        (swap! *tool-starts dissoc (:toolCallId payload))
         (swap! *activity conj {:phase "tool" :label (:name payload)
                                :ok (:ok payload) :preview (:result payload)})
-        (swap! *steps conj {:skill (:name payload) :ok (:ok payload)}))
+        (swap! *steps conj (cond-> {:skill (:name payload) :ok (:ok payload)}
+                             ms (assoc :ms ms))))
 
       :ask_user
       (reset! *ask {:call-id (:toolCallId payload)
@@ -99,37 +117,42 @@
                     :options (:options payload)})
 
       :turn.end
-      (let [{:keys [reason text]} payload
+      (let [was-loading? @*loading?
             streamed @*stream
-            final (if (string/blank? streamed) text streamed)
-            q (some->> @*messages (filter #(= :user (:role %))) last :text)]
+            steps @*steps
+            q (some->> @*messages (filter #(= :user (:role %))) last :text)
+            msg (cond-> (assoc (sidecar/turn->message payload streamed steps) :q q)
+                  @*regen? (assoc :regen? true))]
         (reset! *turn-id nil)
         (reset! *stream "")
         (reset! *ask nil)
         (reset! *loading? false)
-        (swap! *messages conj
-               (if (= reason "cancelled")
-                 {:role :assistant :text "Cancelled." :empty? true}
-                 (cond-> {:role :assistant :text (or final "") :q q :answer? true
-                          :steps @*steps}
-                   (string/blank? final) (assoc :empty? true))))
-        (reset! *activity [])
-        (reset! *steps []))
-
-      :turn.error
-      (do
-        (reset! *turn-id nil)
-        (reset! *stream "")
-        (reset! *ask nil)
-        (reset! *loading? false)
+        (reset! *regen? false)
         (reset! *activity [])
         (reset! *steps [])
-        (swap! *messages conj {:role :error
-                               :text (str (or (:message payload) "The turn failed.")
-                                          (when-let [c (:code payload)] (str " (" c ")")))}))
+        (reset! *tool-starts {})
+        ;; Only the panel that ran the turn holds the streamed text; a
+        ;; co-mounted panel skips (and must not consume the settle key).
+        (when (and was-loading? (sidecar/settle-turn! (event-key "turn.end:" payload id)))
+          (swap! *messages conj msg)))
+
+      :turn.error
+      (let [settled? (sidecar/settle-turn! (event-key "turn.error:" payload id))]
+        (reset! *turn-id nil)
+        (reset! *stream "")
+        (reset! *ask nil)
+        (reset! *loading? false)
+        (reset! *regen? false)
+        (reset! *activity [])
+        (reset! *steps [])
+        (reset! *tool-starts {})
+        (when settled?
+          (swap! *messages conj {:role :error
+                                 :text (str (or (:message payload) "The turn failed.")
+                                            (when-let [c (:code payload)] (str " (" c ")")))})))
 
       :error
-      (do
+      (when (sidecar/settle-turn! (event-key "error:" payload id))
         (reset! *loading? false)
         (swap! *messages conj {:role :error
                                :text (str (or (:message payload) "Sidecar error")
@@ -178,50 +201,73 @@
                         :background "transparent"}}
        "Send"]]]))
 
+;; The last few turns, clipped, sent with the next question so a follow-up
+;; ("expand on that", "and their salary?") can resolve what it refers to
+;; (kip-app#82). Session-only — *messages resets when the conversation clears.
+(def ^:private history-turns 6)
+(def ^:private history-clip 700)
+
+(defn- recent-history [msgs]
+  (->> msgs
+       (filter #(and (#{:user :assistant} (:role %)) (not (string/blank? (:text %)))))
+       (take-last history-turns)
+       (mapv (fn [{:keys [role text]}]
+               {:role (name role)
+                :text (subs text 0 (min (count text) history-clip))}))))
+
 (defn- legacy-send!
   "Fallback for a build without the bundled sidecar: the old spawn-per-action
   :wikiChat path, rendered as a single (non-streaming) assistant turn. Keeps
-  Kip usable while the sidecar is only wired in dev."
-  [question *loading?]
-  (-> (ipc/ipc "wikiChat" (vault-root) question false nil nil @*depth)
+  Kip usable while the sidecar is only wired in dev. Uses the same turn->message
+  mapping as the sidecar path so the answer's widgets don't regress."
+  [question *loading? {:keys [history depth arena-compare-to]}]
+  (-> (ipc/ipc "wikiChat" (vault-root) question false arena-compare-to
+               (or history []) (or depth "full"))
       (p/then (fn [result]
-                (let [{:keys [intent answer learned note pages]} (bean/->clj result)]
-                  (swap! *messages conj
-                         (cond
-                           (= intent "statement")
-                           {:role :learned
-                            :text (if (string/blank? note) "Recorded." note)
-                            :pages pages}
-
-                           (or answer learned)
-                           {:role :assistant :text (or answer note "") :answer? true :q question}
-
-                           :else
-                           {:role :assistant
-                            :text "No matching pages found in the nest for this question."
-                            :empty? true})))))
+                (swap! *messages conj
+                       (assoc (sidecar/turn->message (bean/->clj result) nil nil)
+                              :q question
+                              :history (vec (or history []))))))
       (p/catch (fn [e]
                  (swap! *messages conj {:role :error :text (str e)})))
       (p/finally (fn [] (reset! *loading? false)))))
 
 (defn- send-message!
   [*loading?]
-  (let [input (string/trim @*input)]
+  (let [input (string/trim @*input)
+        history (recent-history @*messages)]
     (when (and (not (string/blank? input)) (not @*loading?))
       (reset! *input "")
       (reset! *loading? true)
-      (swap! *messages conj {:role :user :text input})
-      (-> (sidecar/send-chat! input)
-          (p/catch (fn [_] (legacy-send! input *loading?)))))))
+      (swap! *messages conj {:role :user :text input :history (vec history)})
+      (-> (sidecar/send-chat! input {:depth @*depth :history history})
+          (p/catch (fn [e]
+                     ;; Only a genuinely missing sidecar falls back to the old
+                     ;; path; a real turn failure must not run the turn twice.
+                     (if (sidecar/unavailable?)
+                       (legacy-send! input *loading? {:history history :depth @*depth})
+                       (do (reset! *loading? false)
+                           (swap! *messages conj {:role :error :text (str e)})))))))))
 
 (defn- regenerate!
-  "Re-run the question that produced `msg`, appending a fresh answer below it."
-  [{:keys [q]} *loading?]
+  "Re-run the question that produced `msg`, appending a fresh answer below it.
+  Fires the `regenerated` behaviour signal and, on the managed `kip` connector,
+  the arena compare (candidate B) — same as the pre-sidecar path. Replays the
+  conversation history the original turn used."
+  [{:keys [q call-id history]} *loading?]
   (when (and (not (string/blank? q)) (not @*loading?))
+    (when call-id (pref-signals/behavior! call-id "regenerated"))
     (reset! *loading? true)
-    (swap! *messages conj {:role :user :text q})
-    (-> (sidecar/send-chat! q)
-        (p/catch (fn [_] (legacy-send! q *loading?))))))
+    (let [arena-compare-to (when (and call-id (pref-signals/enabled?)) call-id)
+          opts {:arena-compare-to arena-compare-to
+                :history (vec (or history []))
+                :depth @*depth}]
+      (-> (sidecar/send-chat! q opts)
+          (p/catch (fn [e]
+                     (if (sidecar/unavailable?)
+                       (legacy-send! q *loading? opts)
+                       (do (reset! *loading? false)
+                           (swap! *messages conj {:role :error :text (str e)})))))))))
 
 (defn- steps-line
   "A ⚙ line per skill the tool loop ran, above the answer."
@@ -567,6 +613,8 @@
   (rum/local "" ::stream)
   (rum/local [] ::activity)
   (rum/local [] ::steps)
+  (rum/local {} ::tool-starts)
+  (rum/local false ::regen?)
   (rum/local nil ::turn-id)
   (rum/local nil ::ask)
   (rum/local nil ::scroll-el)
@@ -594,6 +642,7 @@
         *activity (get state ::activity)
         *ask (get state ::ask)
         *turn-id (get state ::turn-id)
+        *regen? (get state ::regen?)
         *scroll-el (get state ::scroll-el)
         *stick? (get state ::stick?)
         _ (state/sub :kip/llm)  ; so the 👍/👎 widget appears/hides live on a provider switch
@@ -604,10 +653,12 @@
         activity @*activity
         ask @*ask
         turn-id @*turn-id
-        reset-live! #(do (reset! *stream "") (reset! *activity []) (reset! *ask nil))
+        reset-live! #(do (reset! *stream "") (reset! *activity [])
+                         (reset! *ask nil) (reset! *regen? false))
         ;; a fresh send or a regenerate is the user acting — always ride it down
         submit! #(do (reset! *stick? true) (reset-live!) (send-message! *loading?))
-        regen! (fn [msg] (reset! *stick? true) (reset-live!) (regenerate! msg *loading?))
+        regen! (fn [msg] (reset! *stick? true) (reset-live!)
+                 (reset! *regen? true) (regenerate! msg *loading?))
         cancel! #(sidecar/cancel! turn-id)
         answer! (fn [answer]
                   (when-let [c (:call-id ask)]
@@ -634,14 +685,18 @@
            (telemetry/activity-feed (reverse activity)))
          (when ask
            (ask-widget ask answer!))
-         [:div.mt-2
-          [:button {:on-click cancel!
-                    :title "Stop this turn"
-                    :style {:font-size "9px" :letter-spacing "0.1em" :text-transform "uppercase"
-                            :font-family "ui-monospace, SFMono-Regular, Menlo, monospace"
-                            :opacity 0.5 :cursor "pointer" :background "transparent"
-                            :border "none" :padding "3px 0"}}
-           "■ Stop"]]])]
+         ;; Stop is only offered when the sidecar advertises cancel support.
+         ;; Kip's v1 protocol has no chat.cancel yet (kip#69), so showing it
+         ;; would be a control that silently does nothing.
+         (when (sidecar/cancel-supported?)
+           [:div.mt-2
+            [:button {:on-click cancel!
+                      :title "Stop this turn"
+                      :style {:font-size "9px" :letter-spacing "0.1em" :text-transform "uppercase"
+                              :font-family "ui-monospace, SFMono-Regular, Menlo, monospace"
+                              :opacity 0.5 :cursor "pointer" :background "transparent"
+                              :border "none" :padding "3px 0"}}
+             "■ Stop"]])])]
       [:div.flex.gap-2.p-2.border-t.border-gray-06
        [:input.form-input.flex-1.text-sm
         {:type "text"
