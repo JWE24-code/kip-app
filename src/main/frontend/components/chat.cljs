@@ -1,8 +1,9 @@
 (ns frontend.components.chat
-  "The Peck panel — Kip's pecking-first main channel. Backed by
-  scripts/lib/peck.js's peckTurn(), called via the :wikiChat IPC channel
-  (electron.wiki shells out to scripts/chat.js — same one-code-path approach as
-  the Coop status and Hatch panels).
+  "The Peck panel — Kip's pecking-first main channel. Backed by the persistent
+  Kip sidecar over its WebSocket (frontend.handler.sidecar): a turn streams as
+  `turn.delta` events, skills report live `skill.progress`, and the user can
+  cancel a turn or answer a mid-turn `ask_user` instead of waiting on one
+  blocking spawn-per-action round trip (kip-app#147).
 
   `peck-main` is the full-width centre-of-window view shown whenever
   :ui/peck-mode? is true (the default — see frontend.components.container);
@@ -10,11 +11,9 @@
   Both read one session atom (*peck-session), so the conversation survives a
   mod+shift+p toggle and is the same in either place.
 
-  Each turn is auto-classified: a question is answered with [[wikilink]]
-  citations; a statement is filed into the nest as a fact and the panel reports
-  what it learned. Skills (<graph>/.henhouse/skills/) may run mid-answer — each
-  shows as a ⚙ line above the answer, live from
-  <coop>/.roost/peck-progress.json while it runs."
+  A turn's live state — the streamed answer text, the tool/skill activity feed,
+  the active turn id and any pending ask_user — lives in chat-panel locals and
+  is folded in by handle-event! as sidecar events arrive."
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.ipc :as ipc]
@@ -27,15 +26,15 @@
             [frontend.config :as config]
             [frontend.handler.llm :as llm-handler]
             [frontend.handler.preference-signals :as pref-signals]
+            [frontend.handler.sidecar :as sidecar]
             [frontend.state :as state]
             [promesa.core :as p]
             [rum.core :as rum]
             [logseq.shui.ui :as ui]))
 
-;; Polled while a turn runs: the ⚙ activity feed and the streaming answer
-;; (`:partialAnswer` in peck-progress.json) both come from here. 200ms so the
-;; streamed text reads as live — it's a small local-file read over IPC.
-(def ^:private poll-ms 200)
+;; A turn's streamed text, tool/skill activity, active turn id and any pending
+;; ask_user all live in chat-panel locals and are driven by sidecar events
+;; (frontend.handler.sidecar) — no .roost/peck-progress.json polling.
 
 ;; Session-only conversation, lifted out of component-local state so a
 ;; mod+shift+p toggle (which unmounts peck-main) and the sidebar/main split
@@ -60,50 +59,147 @@
 
 (defn- vault-root [] (config/get-repo-dir (state/get-current-repo)))
 
-(defn- learned-message [{:keys [note pages]}]
-  {:role :learned
-   :text (if (string/blank? note) "Recorded." note)
-   :pages pages})
+(defn- event-key
+  "A stable key for one settleable event, so two mounted panels agree on
+  identity. Prefers the turn id, falling back to the error's request id then the
+  frame id."
+  [prefix {:keys [turnId id]} frame-id]
+  (str prefix (or turnId id frame-id)))
 
-(defn- turn->message [result]
-  (let [{:keys [intent answer learned note pages steps callId arenaId webSource citedSlugs candidateSlugs deadCitations lintWarnings sources]} result]
-    (cond
-      (= intent "statement")
-      (if learned
-        (learned-message {:note note :pages pages})
-        {:role :assistant :text (if (string/blank? note) "Nothing new to add there." note)})
+(defn- handle-event!
+  "Fold one sidecar event into the panel's locals. `state` is the chat-panel
+  state (locals ::loading? ::stream ::activity ::steps ::turn-id ::ask
+  ::tool-starts ::regen?). The shared conversation append is guarded by
+  sidecar/settle-turn! so two mounted panels never record one turn twice; only
+  the panel that actually ran the turn appends its streamed text."
+  [state {:keys [type payload id] :as _env}]
+  (let [*loading?    (get state ::loading?)
+        *stream      (get state ::stream)
+        *activity    (get state ::activity)
+        *steps       (get state ::steps)
+        *turn-id     (get state ::turn-id)
+        *ask         (get state ::ask)
+        *tool-starts (get state ::tool-starts)
+        *regen?      (get state ::regen?)
+        turn-id (:turnId payload)]
+    (case type
+      :turn.start
+      (reset! *turn-id turn-id)
 
-      answer
-      {:role :assistant :text answer :steps steps :call-id callId :arena-id arenaId
-       :web-source webSource :answer? true
-       ;; kept on the message so "file into the nest" has its inputs
-       ;; (kip-app#112) — cited vs candidate is also the retrieval-breadth
-       ;; signal the evidence view (#117) renders.
-       :cited-slugs citedSlugs :candidate-slugs candidateSlugs
-       ;; [[links]] in the answer that resolve to no nest page (kip-app#117)
-       :dead-citations deadCitations
-       ;; groom's findings for the pages this answer cited (kip-app#116)
-       :lint-warnings lintWarnings
-       ;; the pages the answer leaned on, listed under it (kip#49)
-       :sources sources}
+      :turn.delta
+      (swap! *stream str (:text payload))
 
-      (= intent "reminder")
-      {:role :assistant :text "Reminder noted — check the Reminders panel." :steps steps}
+      :skill.progress
+      (swap! *activity conj
+             {:phase   (or (:phase payload) "skill")
+              :label   (let [s (:skill payload)
+                             p (:pct payload)]
+                         (str s (when (number? p) (str " " (js/Math.round p) "%"))))
+              :preview (:message payload)})
 
-      :else
-      {:role :assistant :text "No matching pages found in the nest for this question." :empty? true})))
+      :agent.tool.start
+      (do
+        (swap! *tool-starts assoc (:toolCallId payload) (js/Date.now))
+        (swap! *activity conj {:phase "tool" :label (:name payload)}))
 
-(defn- start-poll! [*progress *poll-id]
-  (let [tick #(-> (ipc/ipc "wikiChatProgress" (vault-root))
-                  (p/then (fn [r] (reset! *progress (bean/->clj r))))
-                  (p/catch (fn [_] nil)))]
-    (tick)
-    (reset! *poll-id (js/setInterval tick poll-ms))))
+      :agent.tool.end
+      (let [started (get @*tool-starts (:toolCallId payload))
+            ms (when (number? started) (- (js/Date.now) started))]
+        (swap! *tool-starts dissoc (:toolCallId payload))
+        (swap! *activity conj {:phase "tool" :label (:name payload)
+                               :ok (:ok payload) :preview (:result payload)})
+        (swap! *steps conj (cond-> {:skill (:name payload) :ok (:ok payload)}
+                             ms (assoc :ms ms))))
 
-(defn- stop-poll! [*progress *poll-id]
-  (when-let [id @*poll-id] (js/clearInterval id))
-  (reset! *poll-id nil)
-  (reset! *progress nil))
+      :ask_user
+      (reset! *ask {:call-id (:toolCallId payload)
+                    :question (:question payload)
+                    :options (:options payload)})
+
+      :turn.end
+      (let [was-loading? @*loading?
+            streamed @*stream
+            steps @*steps
+            q (some->> @*messages (filter #(= :user (:role %))) last :text)
+            msg (cond-> (assoc (sidecar/turn->message payload streamed steps) :q q)
+                  @*regen? (assoc :regen? true))]
+        (reset! *turn-id nil)
+        (reset! *stream "")
+        (reset! *ask nil)
+        (reset! *loading? false)
+        (reset! *regen? false)
+        (reset! *activity [])
+        (reset! *steps [])
+        (reset! *tool-starts {})
+        ;; Only the panel that ran the turn holds the streamed text; a
+        ;; co-mounted panel skips (and must not consume the settle key).
+        (when (and was-loading? (sidecar/settle-turn! (event-key "turn.end:" payload id)))
+          (swap! *messages conj msg)))
+
+      :turn.error
+      (let [settled? (sidecar/settle-turn! (event-key "turn.error:" payload id))]
+        (reset! *turn-id nil)
+        (reset! *stream "")
+        (reset! *ask nil)
+        (reset! *loading? false)
+        (reset! *regen? false)
+        (reset! *activity [])
+        (reset! *steps [])
+        (reset! *tool-starts {})
+        (when settled?
+          (swap! *messages conj {:role :error
+                                 :text (str (or (:message payload) "The turn failed.")
+                                            (when-let [c (:code payload)] (str " (" c ")")))})))
+
+      :error
+      (when (sidecar/settle-turn! (event-key "error:" payload id))
+        (reset! *loading? false)
+        (swap! *messages conj {:role :error
+                               :text (str (or (:message payload) "Sidecar error")
+                                          (when-let [c (:code payload)] (str " (" c ")")))}))
+
+      :sidecar/closed
+      (when @*loading?
+        (reset! *loading? false)
+        (swap! *messages conj {:role :error :text "Lost the connection to Kip's sidecar — try again."}))
+
+      nil)))
+
+(rum/defcs ask-widget < (rum/local "" ::text)
+  "Inline ask_user prompt: suggested options (if any) plus a free-text answer."
+  [state ask answer!]
+  (let [*text (::text state)
+        submit! (fn []
+                  (let [v (string/trim @*text)]
+                    (when-not (string/blank? v)
+                      (answer! v)
+                      (reset! *text ""))))]
+    [:div {:style {:margin-top "8px" :padding "8px 10px"
+                   :border "1px solid var(--ls-border-color)" :border-radius "6px"}}
+     [:div {:style {:font-size "12px" :margin-bottom "6px"}} (:question ask)]
+     (when (seq (:options ask))
+       [:div {:style {:display "flex" :gap "6px" :flex-wrap "wrap" :margin-bottom "6px"}}
+        (for [opt (:options ask)]
+          ^{:key opt}
+          [:button {:on-click #(answer! opt)
+                    :style {:font-size "11px" :padding "3px 8px" :cursor "pointer"
+                            :border "1px solid var(--ls-border-color)" :border-radius "5px"
+                            :background "transparent"}}
+           opt])])
+     [:div {:style {:display "flex" :gap "6px"}}
+      [:input.form-input.flex-1.text-sm
+       {:type "text"
+        :placeholder "Your answer…"
+        :value @*text
+        :on-change #(reset! *text (.. % -target -value))
+        :on-key-down (fn [e] (when (= "Enter" (.-key e))
+                               (.preventDefault e)
+                               (submit!)))}]
+      [:button {:on-click submit!
+                :style {:font-size "11px" :padding "3px 10px" :cursor "pointer"
+                        :border "1px solid var(--ls-border-color)" :border-radius "5px"
+                        :background "transparent"}}
+       "Send"]]]))
 
 ;; The last few turns, clipped, sent with the next question so a follow-up
 ;; ("expand on that", "and their salary?") can resolve what it refers to
@@ -119,49 +215,59 @@
                {:role (name role)
                 :text (subs text 0 (min (count text) history-clip))}))))
 
-(defn- ask!
-  "Run one Peck turn for `question` and hand the turn->message map (plus the
-  originating `:q` and `:history`) to `on-result`. Shared by a fresh send and
-  a regenerate. `opts`: {:arena-compare-to <prior call id, kip-app#73>,
-  :history [{:role :text} …] (kip-app#82), :depth \"quick\"|\"full\"
-  (epic #38 track #36)}."
-  [question on-result *loading? *progress *poll-id {:keys [arena-compare-to history depth]}]
-  (when (and (not (string/blank? question)) (not @*loading?))
-    (reset! *loading? true)
-    (start-poll! *progress *poll-id)
-    (-> (ipc/ipc "wikiChat" (vault-root) question false arena-compare-to (or history []) (or depth "full"))
-        (p/then (fn [result]
-                  (on-result (assoc (turn->message (bean/->clj result))
-                                    :q question :history (vec history)))))
-        (p/catch (fn [error]
-                   (swap! *messages conj {:role :error :text (str error)})))
-        (p/finally (fn []
-                     (stop-poll! *progress *poll-id)
-                     (reset! *loading? false))))))
+(defn- legacy-send!
+  "Fallback for a build without the bundled sidecar: the old spawn-per-action
+  :wikiChat path, rendered as a single (non-streaming) assistant turn. Keeps
+  Kip usable while the sidecar is only wired in dev. Uses the same turn->message
+  mapping as the sidecar path so the answer's widgets don't regress."
+  [question *loading? {:keys [history depth arena-compare-to]}]
+  (-> (ipc/ipc "wikiChat" (vault-root) question false arena-compare-to
+               (or history []) (or depth "full"))
+      (p/then (fn [result]
+                (swap! *messages conj
+                       (assoc (sidecar/turn->message (bean/->clj result) nil nil)
+                              :q question
+                              :history (vec (or history []))))))
+      (p/catch (fn [e]
+                 (swap! *messages conj {:role :error :text (str e)})))
+      (p/finally (fn [] (reset! *loading? false)))))
 
 (defn- send-message!
-  [*loading? *progress *poll-id]
-  (let [input (string/trim @*input)]
+  [*loading?]
+  (let [input (string/trim @*input)
+        history (recent-history @*messages)]
     (when (and (not (string/blank? input)) (not @*loading?))
-      (let [history (recent-history @*messages)]
-        (reset! *input "")
-        (swap! *messages conj {:role :user :text input})
-        (ask! input #(swap! *messages conj %) *loading? *progress *poll-id {:history history :depth @*depth})))))
+      (reset! *input "")
+      (reset! *loading? true)
+      (swap! *messages conj {:role :user :text input :history (vec history)})
+      (-> (sidecar/send-chat! input {:depth @*depth :history history})
+          (p/catch (fn [e]
+                     ;; Only a genuinely missing sidecar falls back to the old
+                     ;; path; a real turn failure must not run the turn twice.
+                     (if (sidecar/unavailable?)
+                       (legacy-send! input *loading? {:history history :depth @*depth})
+                       (do (reset! *loading? false)
+                           (swap! *messages conj {:role :error :text (str e)})))))))))
 
 (defn- regenerate!
   "Re-run the question that produced `msg`, appending a fresh answer below it.
-  Fires the preference-signals `regenerated` behaviour signal against the old
-  answer's call id. On the managed `kip` connector the re-run also goes
-  through the arena as candidate B (the new answer carries an :arena-id and
-  gets a 'was this better?' strip). A no-op of both on every other provider.
-  Replays the same conversation history the original turn used."
-  [{:keys [q call-id history]} *loading? *progress *poll-id]
+  Fires the `regenerated` behaviour signal and, on the managed `kip` connector,
+  the arena compare (candidate B) — same as the pre-sidecar path. Replays the
+  conversation history the original turn used."
+  [{:keys [q call-id history]} *loading?]
   (when (and (not (string/blank? q)) (not @*loading?))
     (when call-id (pref-signals/behavior! call-id "regenerated"))
-    (let [arena-compare-to (when (and call-id (pref-signals/enabled?)) call-id)]
-      (ask! q #(swap! *messages conj (assoc % :regen? true))
-            *loading? *progress *poll-id
-            {:arena-compare-to arena-compare-to :history (vec history) :depth @*depth}))))
+    (reset! *loading? true)
+    (let [arena-compare-to (when (and call-id (pref-signals/enabled?)) call-id)
+          opts {:arena-compare-to arena-compare-to
+                :history (vec (or history []))
+                :depth @*depth}]
+      (-> (sidecar/send-chat! q opts)
+          (p/catch (fn [e]
+                     (if (sidecar/unavailable?)
+                       (legacy-send! q *loading? opts)
+                       (do (reset! *loading? false)
+                           (swap! *messages conj {:role :error :text (str e)})))))))))
 
 (defn- steps-line
   "A ⚙ line per skill the tool loop ran, above the answer."
@@ -419,7 +525,7 @@
           "↻ Regenerate"])]])])
 
 (rum/defc streaming-message
-  "The answer as it streams in, from peck-progress.json's :partialAnswer. Same
+  "The answer as it streams in, accumulated from turn.delta events. Same
   markdown renderer as a settled :assistant turn, with a trailing caret; it's
   swapped for the real message once the turn resolves."
   [text]
@@ -504,13 +610,20 @@
 (rum/defcs chat-panel
   < rum/reactive
   (rum/local false ::loading?)
-  (rum/local nil ::progress)
-  (rum/local nil ::poll-id)
+  (rum/local "" ::stream)
+  (rum/local [] ::activity)
+  (rum/local [] ::steps)
+  (rum/local {} ::tool-starts)
+  (rum/local false ::regen?)
+  (rum/local nil ::turn-id)
+  (rum/local nil ::ask)
   (rum/local nil ::scroll-el)
   (rum/local true ::stick?)
   {:will-mount (fn [state]
                  (llm-handler/refresh!)
-                 state)
+                 ;; sidecar events drive the live turn; unsubscribe on unmount
+                 (assoc state ::unsub
+                        (sidecar/add-listener! (fn [ev] (handle-event! state ev)))))
    :did-mount (fn [state]
                 (scroll-to-bottom! @(::scroll-el state))
                 state)
@@ -521,23 +634,36 @@
                    (scroll-to-bottom! @(::scroll-el state)))
                  state)
    :will-unmount (fn [state]
-                   (stop-poll! (get state ::progress) (get state ::poll-id))
+                   (when-let [unsub (::unsub state)] (unsub))
                    state)}
   [state]
   (let [*loading? (get state ::loading?)
-        *progress (get state ::progress)
-        *poll-id (get state ::poll-id)
+        *stream (get state ::stream)
+        *activity (get state ::activity)
+        *ask (get state ::ask)
+        *turn-id (get state ::turn-id)
+        *regen? (get state ::regen?)
         *scroll-el (get state ::scroll-el)
         *stick? (get state ::stick?)
         _ (state/sub :kip/llm)  ; so the 👍/👎 widget appears/hides live on a provider switch
         messages (rum/react *messages)
         input (rum/react *input)
         depth (rum/react *depth)
+        stream @*stream
+        activity @*activity
+        ask @*ask
+        turn-id @*turn-id
+        reset-live! #(do (reset! *stream "") (reset! *activity [])
+                         (reset! *ask nil) (reset! *regen? false))
         ;; a fresh send or a regenerate is the user acting — always ride it down
-        submit! #(do (reset! *stick? true) (send-message! *loading? *progress *poll-id))
-        regen! (fn [msg] (reset! *stick? true) (regenerate! msg *loading? *progress *poll-id))
-        activity (get @*progress :activity)
-        partial-answer (get @*progress :partialAnswer)]
+        submit! #(do (reset! *stick? true) (reset-live!) (send-message! *loading?))
+        regen! (fn [msg] (reset! *stick? true) (reset-live!)
+                 (reset! *regen? true) (regenerate! msg *loading?))
+        cancel! #(sidecar/cancel! turn-id)
+        answer! (fn [answer]
+                  (when-let [c (:call-id ask)]
+                    (sidecar/respond! c answer)
+                    (reset! *ask nil)))]
     [:div.flex.flex-col {:style {:height "100%"}}
      [:div.flex-1.overflow-y-auto.px-2.pt-2
       {:ref #(when (and % (not @*scroll-el)) (reset! *scroll-el %))
@@ -552,11 +678,25 @@
                      messages))
       (when @*loading?
         [:div.py-2
-         (if (string/blank? partial-answer)
+         (if (string/blank? stream)
            [:div.text-sm.opacity-60 "Thinking…"]
-           (streaming-message partial-answer))
+           (streaming-message stream))
          (when (seq activity)
-           (telemetry/activity-feed (reverse activity)))])]
+           (telemetry/activity-feed (reverse activity)))
+         (when ask
+           (ask-widget ask answer!))
+         ;; Stop is only offered when the sidecar advertises cancel support.
+         ;; Kip's v1 protocol has no chat.cancel yet (kip#69), so showing it
+         ;; would be a control that silently does nothing.
+         (when (sidecar/cancel-supported?)
+           [:div.mt-2
+            [:button {:on-click cancel!
+                      :title "Stop this turn"
+                      :style {:font-size "9px" :letter-spacing "0.1em" :text-transform "uppercase"
+                              :font-family "ui-monospace, SFMono-Regular, Menlo, monospace"
+                              :opacity 0.5 :cursor "pointer" :background "transparent"
+                              :border "none" :padding "3px 0"}}
+             "■ Stop"]])])]
       [:div.flex.gap-2.p-2.border-t.border-gray-06
        [:input.form-input.flex-1.text-sm
         {:type "text"

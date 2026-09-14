@@ -29,6 +29,99 @@ const scriptsGlob = [
   path.join(scriptsSrcPath, 'package.json')
 ]
 
+// The persistent WS sidecar (kip-app#147) lives in the kip repo's sidecar/
+// (a sibling of its scripts/). It ships at <app>/sidecar — next to scripts/ so
+// its `require('../scripts/lib/paths.js')` resolves, and its own node_modules
+// install locally because a plain Node child spawned from app.asar.unpacked
+// can't resolve modules out of the packed asar. Skip the tests.
+const sidecarSrcPath = path.join(__dirname, '..', 'sidecar')
+const sidecarGlob = [
+  path.join(sidecarSrcPath, '**', '*.ts'),
+  path.join(sidecarSrcPath, '**', '*.cjs'),
+  '!' + path.join(sidecarSrcPath, 'test', '**', '*')
+]
+
+// The sidecar's runtime deps are derived from the sidecar's own source (the
+// bare imports in its *.ts/*.cjs), with versions read from the kip repo's
+// package.json — so a new import can't ship without its dependency, and a
+// version bump in the kip repo flows through without editing this file.
+// better-sqlite3 is native and deliberately excluded: under Electron it must be
+// the Electron-ABI build, which packaging/*/build vendors next to the app (same
+// as scripts/), never a fresh Node-ABI install in sidecar/node_modules.
+const KIP_ROOT_PKG = path.join(__dirname, '..', 'package.json')
+const KIP_SCRIPTS_PKG = path.join(__dirname, '..', 'scripts', 'package.json')
+const NATIVE_SIDECAR_DEPS = new Set(['better-sqlite3'])
+const SIDECAR_DEPS_FALLBACK = ['@anthropic-ai/sdk', 'gray-matter', 'isomorphic-git', 'ws', 'zod']
+// Pinned versions for deps only declared in kip's repo-root package.json (not
+// the scripts one). Keeps a tree without that file from installing a `*` range.
+const SIDECAR_DEP_VERSION_FALLBACK = {
+  '@anthropic-ai/sdk': '^0.70.0',
+  'gray-matter': '^4.0.3',
+  'isomorphic-git': '^1.42.2',
+  'ws': '^8.21.3',
+  'zod': '^4.6.5'
+}
+
+function readKipDependencyVersions () {
+  const versions = { ...SIDECAR_DEP_VERSION_FALLBACK }
+  // scripts/package.json is always synced next to app/; the root package.json
+  // (CI lifts the kip repo's into place) wins where both declare a dep.
+  for (const pkgPath of [KIP_SCRIPTS_PKG, KIP_ROOT_PKG]) {
+    try {
+      Object.assign(versions, JSON.parse(fs.readFileSync(pkgPath, 'utf8')).dependencies || {})
+    } catch {
+      // absent in some layouts — the pinned fallbacks cover the sidecar's deps
+    }
+  }
+  return versions
+}
+
+function walkSidecarFiles (dir) {
+  const out = []
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules' || entry.name === 'test') continue
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory()) out.push(...walkSidecarFiles(full))
+    else if (/\.(ts|cjs|mjs)$/.test(entry.name)) out.push(full)
+  }
+  return out
+}
+
+function sidecarDependencyNames () {
+  if (!fs.existsSync(sidecarSrcPath)) return []
+  let files
+  try {
+    files = walkSidecarFiles(sidecarSrcPath)
+  } catch {
+    return SIDECAR_DEPS_FALLBACK
+  }
+  const names = new Set()
+  const importRe = /(?:from\s+|require\(\s*)['"](@?[^'"./][^'"]*)['"]/g
+  for (const file of files) {
+    const src = fs.readFileSync(file, 'utf8')
+    let m
+    while ((m = importRe.exec(src)) !== null) {
+      const raw = m[1]
+      const name = raw.startsWith('@') ? raw.split('/').slice(0, 2).join('/') : raw.split('/')[0]
+      if (!name.startsWith('node:') && !NATIVE_SIDECAR_DEPS.has(name)) names.add(name)
+    }
+  }
+  const found = [...names].sort()
+  return found.length ? found : SIDECAR_DEPS_FALLBACK
+}
+
+function sidecarDeps () {
+  const versions = readKipDependencyVersions()
+  const deps = {}
+  for (const name of sidecarDependencyNames()) {
+    if (!versions[name]) {
+      console.warn(`[syncSidecar] no known version for "${name}"; add it to SIDECAR_DEP_VERSION_FALLBACK`)
+    }
+    deps[name] = versions[name] || '*'
+  }
+  return deps
+}
+
 const css = {
   watchCSS () {
     return cp.spawn(`yarn css:watch`, {
@@ -133,6 +226,50 @@ const common = {
 
   keepSyncScripts () {
     return gulp.watch(scriptsGlob, { ignoreInitial: true }, common.syncScripts)
+  },
+
+  syncSidecar (...params) {
+    const dest = path.join(outputPath, 'sidecar')
+    const deps = sidecarDeps()
+    return gulp.series(
+      // nodir: the source tree is all files (no shipped subdirs to preserve
+      // beyond the glob structure). test/ is excluded above.
+      () => gulp.src(sidecarGlob, { base: sidecarSrcPath, nodir: true }).pipe(gulp.dest(dest)),
+      (cb) => {
+        if (!Object.keys(deps).length) {
+          // No sidecar/ next to app/ (a plain dev tree): leave the app to fall
+          // back to :wikiChat rather than installing an unrelated dep set.
+          console.warn('[syncSidecar] no sidecar/ source found next to app/ — skipping dependency install')
+          return cb()
+        }
+        // Rebuild the sidecar's package.json only when the dep set changes, so
+        // the mtime-vs-lock staleness check below doesn't reinstall every run.
+        const pkgPath = path.join(dest, 'package.json')
+        const pkg = {
+          name: 'kip-sidecar',
+          version: '0.0.0',
+          private: true,
+          // The sidecar is ESM (.ts run through Node's type stripping).
+          type: 'module',
+          dependencies: deps
+        }
+        const next = JSON.stringify(pkg, null, 2) + '\n'
+        const prev = fs.existsSync(pkgPath) ? fs.readFileSync(pkgPath, 'utf8') : ''
+        if (prev !== next) fs.writeFileSync(pkgPath, next)
+
+        const lock = path.join(dest, 'node_modules', '.package-lock.json')
+        const stale = !fs.existsSync(lock) ||
+          fs.statSync(pkgPath).mtimeMs > fs.statSync(lock).mtimeMs
+        if (stale) {
+          cp.execSync('npm install --omit=dev --no-audit --no-fund --loglevel=error', { cwd: dest, stdio: 'inherit' })
+        }
+        cb()
+      }
+    )(...params)
+  },
+
+  keepSyncSidecar () {
+    return gulp.watch(sidecarGlob, { ignoreInitial: true }, common.syncSidecar)
   },
 
   syncAllStatic () {
@@ -243,9 +380,9 @@ exports.electronMaker = async () => {
 
 exports.cap = common.runCapWithLocalDevServerEntry
 exports.clean = common.clean
-exports.watch = gulp.series(common.syncResourceFile, common.syncAssetFiles, common.syncAllStatic, common.syncScripts,
-  gulp.parallel(common.keepSyncResourceFile, common.keepSyncScripts, css.watchCSS))
-exports.build = gulp.series(common.clean, common.syncResourceFile, common.syncAssetFiles, common.syncScripts, css.buildCSS)
+exports.watch = gulp.series(common.syncResourceFile, common.syncAssetFiles, common.syncAllStatic, common.syncScripts, common.syncSidecar,
+  gulp.parallel(common.keepSyncResourceFile, common.keepSyncScripts, common.keepSyncSidecar, css.watchCSS))
+exports.build = gulp.series(common.clean, common.syncResourceFile, common.syncAssetFiles, common.syncScripts, common.syncSidecar, css.buildCSS)
 
 // Like electronMaker but produces an unpackaged, directly-runnable app folder
 // (static/out/Kip-win32-x64/) instead of an installer — for local testing.

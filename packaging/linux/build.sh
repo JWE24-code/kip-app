@@ -100,6 +100,17 @@ for m in better-sqlite3 bindings file-uri-to-path; do
   cp -a "$APP_DIR/static/node_modules/$m" "$APP_DIR/static/scripts/node_modules/$m"
 done
 
+# Same for the sidecar's own require('better-sqlite3') (roost/schema.ts): it
+# runs under ELECTRON_RUN_AS_NODE, so it too needs the Electron-ABI build
+# locally rather than walking up into the packed asar. gulp leaves it out of
+# sidecar/package.json (NATIVE_SIDECAR_DEPS) for exactly this reason.
+step "vendor better-sqlite3 into sidecar/node_modules"
+mkdir -p "$APP_DIR/static/sidecar/node_modules"
+for m in better-sqlite3 bindings file-uri-to-path; do
+  rm -rf "$APP_DIR/static/sidecar/node_modules/$m"
+  cp -a "$APP_DIR/static/node_modules/$m" "$APP_DIR/static/sidecar/node_modules/$m"
+done
+
 # --- 6. package --------------------------------------------------------------
 # KIP_TARGET=installer  -> electron-builder: AppImage (self-updating) + tar.gz
 #                          + latest-linux.yml  (#38, feeds electron-updater)
@@ -162,9 +173,10 @@ node -e "const p='$APP/package.json',j=require(p);j.version='$VERSION';require('
 
 # --- 7. pack resources/app -> app.asar ----------------------------------------
 # One archive instead of ~15k loose files: faster to unzip, faster to load.
-# scripts/ stays unpacked (electron.wiki spawns `node scripts/*.js` by path —
-# can't cwd into or exec out of an asar) and so do native .node addons
-# (better-sqlite3). asar auto-creates app.asar.unpacked/ for the --unpack* set.
+# scripts/ and sidecar/ stay unpacked (electron.wiki/electron.sidecar spawn
+# `node scripts/*.js` / `sidecar/index.ts` by path — can't cwd into or exec out
+# of an asar) and so do native .node addons (better-sqlite3). asar auto-creates
+# app.asar.unpacked/ for the --unpack* set.
 # the Linux installer / PKGBUILD need a real icon file — keep one outside the asar
 cp -f "$APP/icon.png" "$OUT/resources/icon.png" 2>/dev/null || true
 
@@ -174,11 +186,13 @@ step "pack app.asar"
 # wrong we MUST fail loudly: a missing app.asar makes upload-artifact silently
 # drop the now-empty resources/ dir and ship a codeless app.
 npx --yes -p @electron/asar@3.4.1 asar pack "$APP" "$OUT/resources/app.asar" \
-  --unpack-dir "{scripts,node_modules/better-sqlite3}" \
+  --unpack-dir "{scripts,sidecar,node_modules/better-sqlite3}" \
   --unpack "*.node"
 [[ -f "$OUT/resources/app.asar" ]] || { echo "FATAL: asar pack produced no app.asar"; exit 1; }
 [[ -f "$OUT/resources/app.asar.unpacked/scripts/hatch-all.js" ]] \
   || { echo "FATAL: scripts/ was not unpacked from the asar"; exit 1; }
+[[ -f "$OUT/resources/app.asar.unpacked/sidecar/index.ts" ]] \
+  || { echo "FATAL: sidecar/ was not unpacked from the asar"; exit 1; }
 rm -rf "$APP"
 
 step "done — $OUT  (Kip $VERSION, cljs:$CLJS_MODE)"

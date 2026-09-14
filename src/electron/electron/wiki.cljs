@@ -686,18 +686,6 @@
                                              :answer answer
                                              :candidateSlugs (clj->js (or candidate-slugs []))})]))
 
-(defn peck-progress!
-  "Reads <coop>/.roost/peck-progress.json, written continuously by chat.js
-  during a Peck turn — same shape as hatch-progress.json ({phase running
-  activity metrics}). nil when there's none. Plain file read for cheap
-  polling while the panel waits for an answer."
-  [vault-root]
-  (p/create
-   (fn [resolve* _reject]
-     (try
-       (resolve* (js/JSON.parse (fs/readFileSync (roost-file vault-root "peck-progress.json") "utf8")))
-       (catch :default _ (resolve* nil))))))
-
 (defn skills-list!
   "The skills Peck can see (scripts/skills-list.js) — content-free: name,
   description, whenToUse, source, network, enabled, parameters. No secrets, no
