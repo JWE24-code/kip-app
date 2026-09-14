@@ -476,7 +476,16 @@
 
 (defmethod handle :setCurrentGraph [^js window [_ graph-name]]
   (when graph-name
-    (set-current-graph! window (utils/get-graph-dir graph-name))))
+    (let [graph-path (utils/get-graph-dir graph-name)]
+      (set-current-graph! window graph-path)
+      ;; Spawn the sidecar once, up front, so it's ready before the first Peck
+      ;; turn (rather than a cold start mid-turn). Fire-and-forget: a missing
+      ;; sidecar must not delay or fail the graph switch — the chat panel
+      ;; falls back to :wikiChat in that case.
+      (when (sidecar/available?)
+        (-> (sidecar/ensure! graph-path)
+            (p/catch (fn [e] (logger/debug "[Sidecar]" (str "prewarm skipped: " e))))))
+      nil)))
 
 (defmethod handle :runGit [_ [_ {:keys [repo command]}]]
   (when (seq command)
