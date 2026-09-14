@@ -621,6 +621,19 @@
   (rum/local true ::stick?)
   {:will-mount (fn [state]
                  (llm-handler/refresh!)
+                 ;; Warm the renderer's own WS connection now, not on the first
+                 ;; send-chat! — the main process prewarms the sidecar PROCESS on
+                 ;; graph-open (electron.handler's :setCurrentGraph), but the
+                 ;; renderer's own hello/ready handshake never starts until the
+                 ;; first message is sent. That made the first message racy
+                 ;; (kip-app#149): if the panel mounts and the user sends
+                 ;; something quickly, the renderer's cold connect-repo! can lose
+                 ;; a startup race and fall back to :wikiChat. Firing it here
+                 ;; instead gives it the whole time the user spends reading/
+                 ;; typing to settle, invisibly, before send-chat! ever needs it
+                 ;; — a failure here is silent and harmless, since send-chat!
+                 ;; still retries the connection itself.
+                 (-> (sidecar/ensure-connected!) (p/catch (fn [_] nil)))
                  ;; sidecar events drive the live turn; unsubscribe on unmount
                  (assoc state ::unsub
                         (sidecar/add-listener! (fn [ev] (handle-event! state ev)))))
