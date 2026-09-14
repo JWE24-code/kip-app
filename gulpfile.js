@@ -49,15 +49,31 @@ const sidecarGlob = [
 // the Electron-ABI build, which packaging/*/build vendors next to the app (same
 // as scripts/), never a fresh Node-ABI install in sidecar/node_modules.
 const KIP_ROOT_PKG = path.join(__dirname, '..', 'package.json')
+const KIP_SCRIPTS_PKG = path.join(__dirname, '..', 'scripts', 'package.json')
 const NATIVE_SIDECAR_DEPS = new Set(['better-sqlite3'])
 const SIDECAR_DEPS_FALLBACK = ['@anthropic-ai/sdk', 'gray-matter', 'isomorphic-git', 'ws', 'zod']
+// Pinned versions for deps only declared in kip's repo-root package.json (not
+// the scripts one). Keeps a tree without that file from installing a `*` range.
+const SIDECAR_DEP_VERSION_FALLBACK = {
+  '@anthropic-ai/sdk': '^0.70.0',
+  'gray-matter': '^4.0.3',
+  'isomorphic-git': '^1.42.2',
+  'ws': '^8.21.3',
+  'zod': '^4.6.5'
+}
 
 function readKipDependencyVersions () {
-  try {
-    return JSON.parse(fs.readFileSync(KIP_ROOT_PKG, 'utf8')).dependencies || {}
-  } catch {
-    return {}
+  const versions = { ...SIDECAR_DEP_VERSION_FALLBACK }
+  // scripts/package.json is always synced next to app/; the root package.json
+  // (CI lifts the kip repo's into place) wins where both declare a dep.
+  for (const pkgPath of [KIP_SCRIPTS_PKG, KIP_ROOT_PKG]) {
+    try {
+      Object.assign(versions, JSON.parse(fs.readFileSync(pkgPath, 'utf8')).dependencies || {})
+    } catch {
+      // absent in some layouts — the pinned fallbacks cover the sidecar's deps
+    }
   }
+  return versions
 }
 
 function walkSidecarFiles (dir) {
@@ -98,6 +114,9 @@ function sidecarDeps () {
   const versions = readKipDependencyVersions()
   const deps = {}
   for (const name of sidecarDependencyNames()) {
+    if (!versions[name]) {
+      console.warn(`[syncSidecar] no known version for "${name}"; add it to SIDECAR_DEP_VERSION_FALLBACK`)
+    }
     deps[name] = versions[name] || '*'
   }
   return deps
