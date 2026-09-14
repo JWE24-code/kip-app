@@ -15,8 +15,10 @@
   The sidecar runs under the bundled Electron binary as a plain Node
   interpreter (process.execPath + ELECTRON_RUN_AS_NODE=1), same as
   electron.wiki's script runner, so a packaged Kip needs no system `node`. It
-  tears itself down on SIGTERM/SIGINT or when its parent dies; we also stop
-  every managed process explicitly on app teardown."
+  ships at <app>/sidecar (gulp's syncSidecar copies the kip repo's sidecar/
+  source + installs its own node_modules there); KIP_SIDECAR_DIR overrides the
+  lookup for dev. It tears itself down on SIGTERM/SIGINT or when its parent
+  dies; we also stop every managed process explicitly on app teardown."
   (:require ["child_process" :as child-process]
             ["crypto" :as crypto]
             ["fs" :as fs]
@@ -47,9 +49,13 @@
           p)))))
 
 (defn entry-point
-  "Absolute path to the sidecar entry (sidecar/index.ts)."
+  "Absolute path to the sidecar entry. Prefers a compiled index.js when one
+  was shipped, otherwise the TypeScript source (run via Node type stripping)."
   []
-  (.join node-path sidecar-dir "index.ts"))
+  (let [js (.join node-path sidecar-dir "index.js")]
+    (if (fs/existsSync js)
+      js
+      (.join node-path sidecar-dir "index.ts"))))
 
 (defn available?
   "Is the sidecar actually bundled? False in a dev tree without the kip repo's

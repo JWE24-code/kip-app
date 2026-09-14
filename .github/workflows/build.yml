@@ -104,9 +104,12 @@ jobs:
           path: _kip
           fetch-depth: 1
 
-      - name: Place scripts/ next to app/
+      - name: Place scripts/ + sidecar/ next to app/
         shell: bash
-        run: mv _kip/scripts ./scripts && rm -rf _kip
+        run: |
+          mv _kip/scripts ./scripts
+          mv _kip/sidecar ./sidecar
+          rm -rf _kip
 
       - name: Free disk space (linux)
         if: runner.os == 'Linux'
@@ -187,6 +190,7 @@ jobs:
           # upload-artifact would just skip (shipping a codeless app)
           test -f "$outdir/resources/app.asar" || { echo "::error::$outdir has no resources/app.asar"; exit 1; }
           test -f "$outdir/resources/app.asar.unpacked/scripts/hatch-all.js" || { echo "::error::scripts/ not unpacked"; exit 1; }
+          test -f "$outdir/resources/app.asar.unpacked/sidecar/index.ts" || { echo "::error::sidecar/ not unpacked"; exit 1; }
           nfiles=$(find "$outdir" -type f | wc -l)
           [ "$nfiles" -ge 100 ] || { echo "::error::$outdir has only $nfiles files"; exit 1; }
           echo "packaged app: $nfiles files, app.asar $(du -h "$outdir/resources/app.asar" | cut -f1)"

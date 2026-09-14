@@ -33,10 +33,12 @@ files:
   - "!.shadow-cljs${/*}"
   - "!forge.config.js"
   - "!entitlements.plist"
-  # scripts/ (the retrieval layer) has its OWN nested node_modules that
-  # electron-builder's dependency collector prunes (it only knows the app's
-  # package.json). build/after-pack.js copies it in whole instead — see below.
+  # scripts/ (the retrieval layer) and sidecar/ (the persistent WS sidecar)
+  # have their OWN nested node_modules that electron-builder's dependency
+  # collector prunes (it only knows the app's package.json). build/after-pack.js
+  # copies them in whole instead — see below.
   - "!scripts${/*}"
+  - "!sidecar${/*}"
   - "!node_modules/electron${/*}"
   - "!node_modules/electron-builder${/*}"
   - "!node_modules/@electron-forge${/*}"

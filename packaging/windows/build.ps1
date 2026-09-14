@@ -174,20 +174,24 @@ $j.version = $VERSION
 
 # --- 7. pack resources\app -> app.asar -----------------------------------
 # One archive instead of ~15k loose files: faster to unzip, faster to load.
-# scripts\ stays unpacked (electron.wiki spawns `node scripts\*.js` by path —
-# can't cwd into or exec out of an asar) and so do native .node addons
-# (better-sqlite3). asar auto-creates app.asar.unpacked\ for the --unpack* set.
+# scripts\ and sidecar\ stay unpacked (electron.wiki/electron.sidecar spawn
+# `node scripts\*.js` / `sidecar\index.ts` by path — can't cwd into or exec out
+# of an asar) and so do native .node addons (better-sqlite3). asar auto-creates
+# app.asar.unpacked\ for the --unpack* set.
 Step 'pack app.asar'
 # Fetch @electron/asar via npx — yarn 1 doesn't hoist it to a predictable path
 # in static\node_modules (works on Linux, not Windows). If anything here goes
 # wrong we MUST fail loudly: a missing app.asar makes upload-artifact silently
 # drop the now-empty resources\ dir and ship a codeless app.
 npx --yes -p @electron/asar@3.4.1 asar pack "$APP" "$OUT\resources\app.asar" `
-  --unpack-dir "{scripts,node_modules/better-sqlite3}" --unpack "*.node"
+  --unpack-dir "{scripts,sidecar,node_modules/better-sqlite3}" --unpack "*.node"
 if ($LASTEXITCODE) { throw "asar pack failed (exit $LASTEXITCODE)" }
 if (-not (Test-Path "$OUT\resources\app.asar")) { throw 'asar pack produced no app.asar' }
 if (-not (Test-Path "$OUT\resources\app.asar.unpacked\scripts\hatch-all.js")) {
   throw 'scripts\ was not unpacked from the asar'
+}
+if (-not (Test-Path "$OUT\resources\app.asar.unpacked\sidecar\index.ts")) {
+  throw 'sidecar\ was not unpacked from the asar'
 }
 Remove-Item "$APP" -Recurse -Force
 

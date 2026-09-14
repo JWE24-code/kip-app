@@ -29,6 +29,28 @@ const scriptsGlob = [
   path.join(scriptsSrcPath, 'package.json')
 ]
 
+// The persistent WS sidecar (kip-app#147) lives in the kip repo's sidecar/
+// (a sibling of its scripts/). It ships at <app>/sidecar — next to scripts/ so
+// its `require('../scripts/lib/paths.js')` resolves, and its own node_modules
+// install locally because a plain Node child spawned from app.asar.unpacked
+// can't resolve modules out of the packed asar. Skip the tests.
+const sidecarSrcPath = path.join(__dirname, '..', 'sidecar')
+const sidecarGlob = [
+  path.join(sidecarSrcPath, '**', '*.ts'),
+  path.join(sidecarSrcPath, '**', '*.cjs'),
+  '!' + path.join(sidecarSrcPath, 'test', '**', '*')
+]
+
+// The sidecar's runtime deps. kip's sidecar/package.json is only
+// {"type":"module"} today, so syncSidecar writes this package.json itself —
+// keep it in sync with kip's package.json when the sidecar gains a dep.
+const SIDECAR_DEPS = {
+  '@anthropic-ai/sdk': '^0.70.0',
+  'isomorphic-git': '^1.42.2',
+  'ws': '^8.21.3',
+  'zod': '^4.6.5'
+}
+
 const css = {
   watchCSS () {
     return cp.spawn(`yarn css:watch`, {
@@ -133,6 +155,43 @@ const common = {
 
   keepSyncScripts () {
     return gulp.watch(scriptsGlob, { ignoreInitial: true }, common.syncScripts)
+  },
+
+  syncSidecar (...params) {
+    const dest = path.join(outputPath, 'sidecar')
+    return gulp.series(
+      // nodir: the source tree is all files (no shipped subdirs to preserve
+      // beyond the glob structure). test/ is excluded above.
+      () => gulp.src(sidecarGlob, { base: sidecarSrcPath, nodir: true }).pipe(gulp.dest(dest)),
+      (cb) => {
+        // Rebuild the sidecar's package.json only when the dep set changes, so
+        // the mtime-vs-lock staleness check below doesn't reinstall every run.
+        const pkgPath = path.join(dest, 'package.json')
+        const pkg = {
+          name: 'kip-sidecar',
+          version: '0.0.0',
+          private: true,
+          // The sidecar is ESM (.ts run through Node's type stripping).
+          type: 'module',
+          dependencies: SIDECAR_DEPS
+        }
+        const next = JSON.stringify(pkg, null, 2) + '\n'
+        const prev = fs.existsSync(pkgPath) ? fs.readFileSync(pkgPath, 'utf8') : ''
+        if (prev !== next) fs.writeFileSync(pkgPath, next)
+
+        const lock = path.join(dest, 'node_modules', '.package-lock.json')
+        const stale = !fs.existsSync(lock) ||
+          fs.statSync(pkgPath).mtimeMs > fs.statSync(lock).mtimeMs
+        if (stale) {
+          cp.execSync('npm install --omit=dev --no-audit --no-fund --loglevel=error', { cwd: dest, stdio: 'inherit' })
+        }
+        cb()
+      }
+    )(...params)
+  },
+
+  keepSyncSidecar () {
+    return gulp.watch(sidecarGlob, { ignoreInitial: true }, common.syncSidecar)
   },
 
   syncAllStatic () {
@@ -243,9 +302,9 @@ exports.electronMaker = async () => {
 
 exports.cap = common.runCapWithLocalDevServerEntry
 exports.clean = common.clean
-exports.watch = gulp.series(common.syncResourceFile, common.syncAssetFiles, common.syncAllStatic, common.syncScripts,
-  gulp.parallel(common.keepSyncResourceFile, common.keepSyncScripts, css.watchCSS))
-exports.build = gulp.series(common.clean, common.syncResourceFile, common.syncAssetFiles, common.syncScripts, css.buildCSS)
+exports.watch = gulp.series(common.syncResourceFile, common.syncAssetFiles, common.syncAllStatic, common.syncScripts, common.syncSidecar,
+  gulp.parallel(common.keepSyncResourceFile, common.keepSyncScripts, common.keepSyncSidecar, css.watchCSS))
+exports.build = gulp.series(common.clean, common.syncResourceFile, common.syncAssetFiles, common.syncScripts, common.syncSidecar, css.buildCSS)
 
 // Like electronMaker but produces an unpackaged, directly-runnable app folder
 // (static/out/Kip-win32-x64/) instead of an installer — for local testing.
