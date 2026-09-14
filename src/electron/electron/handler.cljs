@@ -27,6 +27,7 @@
             [electron.search :as search]
             [electron.server :as server]
             [electron.shell :as shell]
+            [electron.sidecar :as sidecar]
             [electron.state :as state]
             [electron.update :as update]
             [electron.updater :as updater]
@@ -623,6 +624,18 @@
 ;; strips the signal to its wire fields, so this handler stays a thin pass.
 (defmethod handle :kipFeedback [_ [_ vault-root signal]]
   (preference-signals/post-feedback! vault-root signal))
+
+;; Persistent WS sidecar (kip-app#147) — main spawns/supervises the process and
+;; hands the renderer its discovery info (loopback url + bearer token). The
+;; renderer owns the socket and speaks the envelope directly; see
+;; frontend.handler.sidecar. Resolves the discovery map, or rejects when the
+;; sidecar isn't bundled / couldn't start.
+(defmethod handle :sidecarInfo [_ [_ vault-root]]
+  (sidecar/ensure! vault-root))
+
+(defmethod handle :sidecarStop [_ [_ vault-root]]
+  (sidecar/stop! vault-root)
+  true)
 
 (defmethod handle :wikiChat [_ [_ vault-root question trace? arena-compare-to history depth]]
   (wiki/peck! vault-root question (boolean trace?) arena-compare-to history depth))

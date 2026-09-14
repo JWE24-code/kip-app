@@ -9,6 +9,7 @@
             [electron.url :refer [logseq-url-handler]]
             [electron.logger :as logger]
             [electron.server :as server]
+            [electron.sidecar :as sidecar]
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
@@ -281,6 +282,7 @@
                                      (try
                                        (fs-watcher/close-watcher!)
                                        (search/close!)
+                                       (sidecar/stop-all!)
                                        (catch :default e
                                          (logger/error "window-all-closed" e)))
                                      (.quit app)))
@@ -311,14 +313,15 @@
 
                (vreset! *setup-fn
                         (fn []
-                          (let [t1 (setup-updater! win)
+                           (let [t1 (setup-updater! win)
                                 t2 (setup-app-manager! win)
                                 t3 (handler/set-ipc-handler! win)
                                 t4 (server/setup! win)
+                                t5 (fn [] (sidecar/stop-all!))
                                 tt (exceptions/setup-exception-listeners!)]
 
                             (vreset! *teardown-fn
-                                     #(doseq [f [t0 t1 t2 t3 t4 tt]]
+                                     #(doseq [f [t0 t1 t2 t3 t4 t5 tt]]
                                         (and f (f)))))))
 
                ;; setup effects
