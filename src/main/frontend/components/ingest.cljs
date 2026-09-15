@@ -170,7 +170,8 @@
       (and grouped (empty? grouped)) {:done? true}
       (or (:source res) (:whiteboard res))
       {:proposals [res] :remaining (:remaining res) :whiteboard? (boolean (:whiteboard res))}
-      :else {:done? true})))
+      (and (map? res) (empty? res)) {:done? true}
+      :else {:error "Unexpected response from hatch-all.js --propose-next."})))
 
 (defn- commit-results
   "A commit result is one map (single-file) or a vector of per-file maps (group)."
@@ -180,20 +181,45 @@
     (map? res)        [res]
     :else             []))
 
-(defn- review-record! [*done proposals res]
-  (let [by-source (into {} (map (fn [p] [(:source p) p]) proposals))]
-    (doseq [{:keys [source kind results error keptNone skipped ms]} (commit-results res)]
-      (let [proposal (get by-source source)]
+(defn- entry-key
+  "Stable identity for a done entry, so a retried file replaces rather than
+  duplicates its row."
+  [proposal source]
+  (or (:relPath proposal) (:source proposal) source))
+
+(defn- record-entry [d bucket k entry]
+  (update d bucket
+          (fn [xs] (conj (vec (remove #(= k (::key %)) xs)) (assoc entry ::key k)))))
+
+(defn- review-record!
+  "Fold the commit result(s) into *done. A group commit returns one result per
+  stashed file in proposal order, so pair by position when the counts line up;
+  otherwise fall back to matching on relPath / humanized source."
+  [*done proposals res]
+  (let [rs (commit-results res)
+        pairs (if (= (count rs) (count proposals))
+                (map vector proposals rs)
+                (map (fn [r]
+                       [(first (filter #(or (= (:relPath %) (:relPath r))
+                                            (= (:source %) (:source r)))
+                                       proposals))
+                        r])
+                     rs))]
+    (doseq [[proposal {:keys [source kind results error keptNone skipped ms]}] pairs]
+      (let [proposal (or proposal {})
+            source   (or source (:source proposal))]
         (swap! *done
                (fn [d]
                  (cond
-                   error   (update d :failed conj {:source source :error error :ms ms})
+                   error    (record-entry d :failed (entry-key proposal source)
+                                          {:source source :error error :ms ms})
                    keptNone d
-                   :else   (update d :hatched conj {:source source
-                                                    :kind (or kind (:kind proposal))
-                                                    :results results
-                                                    :skipped (or skipped [])
-                                                    :ms ms}))))))))
+                   :else    (record-entry d :hatched (entry-key proposal source)
+                                          {:source source
+                                           :kind (or kind (:kind proposal))
+                                           :results results
+                                           :skipped (or skipped [])
+                                           :ms ms}))))))))
 
 (defn- review-commit!
   "Commit the group's kept pages in one IPC call. `keep-all?` is the
@@ -225,9 +251,10 @@
   (-> (ipc/ipc "wikiIngestProposeNext" (vault-root) batch-size (get @*rp :skip 0)
                review-group-size (boolean @*classic?) (boolean @*force?))
       (p/then (fn [r]
-                (let [{:keys [done? grouped? proposals remaining whiteboard?]}
+                (let [{:keys [done? grouped? proposals remaining whiteboard? error]}
                       (normalize-propose (bean/->clj r))]
                   (cond
+                    error       (swap! *rp assoc :phase :reviewing :proposals nil :error error)
                     done?       (do (swap! *rp assoc :phase :done)
                                     (load-preview! *preview *error *busy? *force?))
                     whiteboard? (do (swap! *rp assoc :proposals proposals :keeps {}
@@ -275,8 +302,8 @@
    [:input {:type "checkbox" :checked checked? :on-change on-change}]
    label])
 
-(defn- toggle-keep! [*rp key slug]
-  (swap! *rp update-in [:keeps key]
+(defn- toggle-keep! [*rp k slug]
+  (swap! *rp update-in [:keeps k]
          (fn [ks]
            (let [ks (or ks #{})]
              ((if (contains? ks slug) disj conj) ks slug)))))
@@ -335,8 +362,10 @@
                [:div.text-xs.opacity-60 summary])]]])])
      [:div.mt-1
       (ui/button {:variant :outline :size :sm
-                  :on-click #(swap! *rp update :keeps dissoc k)}
-                 "Skip this file")]]))
+                  :on-click (if error
+                              #(swap! *rp update :skip inc)
+                              #(swap! *rp update :keeps dissoc k))}
+                 (if error "Skip this file →" "Skip this file"))]]))
 
 (rum/defc review-panel
   "The group plan review shown while ::rp is active. `rp` is its state map."
@@ -432,8 +461,8 @@
       [:h2#modal-headline.text-xl.mb-3 "Hatch sources"]
       [:p.text-sm.opacity-70.mb-3
        "Turns new or changed files in " (glossary/term "pages/") " and "
-       [:code "journals/"] " into nest pages — no per-file review. Runs in batches of "
-       (str batch-size) "."]
+        [:code "journals/"] " into nest pages — no per-file review. Runs in batches of "
+        (str batch-size) ", or reviews up to " (str review-group-size) " files at a time."]
 
      (if demo?
        [:div.text-sm.opacity-70.my-2
