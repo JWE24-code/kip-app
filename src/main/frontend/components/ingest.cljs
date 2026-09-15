@@ -157,21 +157,28 @@
 
 (defn- normalize-propose
   "Fold either IPC propose shape into {:done? :grouped? :proposals :remaining
-  :whiteboard?}. Grouped (kip#112): {:files [...]} (also accepts :proposals /
-  :plans / a bare array). Singular (pre-kip#112): one {:source ... :plan [...]}
-  map, or {:whiteboard true}."
+  :whiteboard?}, or {:error msg} when the response shape isn't one we know.
+  Grouped (kip#112): {:files [...]} (also accepts :proposals / :plans /
+  :summaries / a bare array). Singular (pre-kip#112): one {:source ...
+  :plan [...]} map, or {:whiteboard true}.
+
+  Deliberately not `:done? true` for an unrecognized non-empty response: that
+  would end review with files still pending and nothing written."
   [res]
-  (let [grouped (when-let [ps (or (:files res) (:proposals res) (:plans res)
+  (let [grouped (when-let [ps (or (:files res) (:proposals res) (:plans res) (:summaries res)
                                   (when (vector? res) res))]
                   (vec ps))]
     (cond
       (true? (:done res)) {:done? true}
       (seq grouped)       {:grouped? true :proposals grouped :remaining (:remaining res)}
-      (and grouped (empty? grouped)) {:done? true}
+      (some? grouped)     ;; empty group — done only if nothing is left
+      (if (and (number? (:remaining res)) (pos? (:remaining res)))
+        {:error "Hatch proposed no plans for this group but reported files still pending."}
+        {:done? true})
       (or (:source res) (:whiteboard res))
       {:proposals [res] :remaining (:remaining res) :whiteboard? (boolean (:whiteboard res))}
-      (and (map? res) (empty? res)) {:done? true}
-      :else {:error "Unexpected response from hatch-all.js --propose-next."})))
+      (or (nil? res) (and (map? res) (empty? res))) {:done? true}
+      :else {:error (str "Unrecognized hatch propose response: " (pr-str res))})))
 
 (defn- commit-results
   "A commit result is one map (single-file) or a vector of per-file maps (group)."
@@ -193,18 +200,20 @@
 
 (defn- review-record!
   "Fold the commit result(s) into *done. A group commit returns one result per
-  stashed file in proposal order, so pair by position when the counts line up;
-  otherwise fall back to matching on relPath / humanized source."
+  stashed file in proposal order (kip doesn't stamp relPath on each result), so
+  pair by position when the counts line up; otherwise fall back to matching on
+  relPath / humanized source. Rows are upserted, so a retried file replaces its
+  row rather than duplicating it."
   [*done proposals res]
   (let [rs (commit-results res)
+        by-key (reduce (fn [m p]
+                         (cond-> m
+                           (:source p)  (assoc (:source p) p)
+                           (:relPath p) (assoc (:relPath p) p)))
+                       {} proposals)
         pairs (if (= (count rs) (count proposals))
                 (map vector proposals rs)
-                (map (fn [r]
-                       [(first (filter #(or (= (:relPath %) (:relPath r))
-                                            (= (:source %) (:source r)))
-                                       proposals))
-                        r])
-                     rs))]
+                (map (fn [r] [(get by-key (or (:relPath r) (:source r))) r]) rs))]
     (doseq [[proposal {:keys [source kind results error keptNone skipped ms]}] pairs]
       (let [proposal (or proposal {})
             source   (or source (:source proposal))]
@@ -226,6 +235,11 @@
   whiteboard / single-file path (nil keep = keep every proposed page)."
   [{:keys [*rp *done] :as ctx} keep-all?]
   (let [{:keys [proposals keeps grouped? group-size]} @*rp
+        ;; Whiteboards have no plan (nothing to pick), so they're left out of
+        ;; keep-map: kip#112 commits a stashed whiteboard deterministically
+        ;; regardless of `keeps`, matching the singular commitReviewedPlan and
+        ;; hatchAllSources paths. They still show in the summary via
+        ;; review-record!, which matches on :relPath / :source, not keep-map.
         keep-map (into {}
                        (for [p proposals
                              :when (seq (:plan p))]
@@ -360,12 +374,22 @@
              [:span.text-xs.opacity-50.ml-1 (str "[" type " · " action "]")]
              (when-not (string/blank? summary)
                [:div.text-xs.opacity-60 summary])]]])])
-     [:div.mt-1
-      (ui/button {:variant :outline :size :sm
-                  :on-click (if error
-                              #(swap! *rp update :skip inc)
-                              #(swap! *rp update :keeps dissoc k))}
-                 (if error "Skip this file →" "Skip this file"))]]))
+     ;; A reviewable plan gets a real "clear this file's keeps" skip; an errored
+     ;; card gets a cursor-advancing skip (upstream leaves its hash unrecorded,
+     ;; so it would otherwise be re-proposed forever); whiteboards and empty
+     ;; plans have nothing to skip.
+     (cond
+       error
+       [:div.mt-1
+        (ui/button {:variant :outline :size :sm
+                    :on-click #(swap! *rp update :skip inc)}
+                   "Skip this file →")]
+
+       (seq plan)
+       [:div.mt-1
+        (ui/button {:variant :outline :size :sm
+                    :on-click #(swap! *rp update :keeps dissoc k)}
+                   "Skip this file")])]))
 
 (rum/defc review-panel
   "The group plan review shown while ::rp is active. `rp` is its state map."
@@ -461,8 +485,9 @@
       [:h2#modal-headline.text-xl.mb-3 "Hatch sources"]
       [:p.text-sm.opacity-70.mb-3
        "Turns new or changed files in " (glossary/term "pages/") " and "
-        [:code "journals/"] " into nest pages — no per-file review. Runs in batches of "
-        (str batch-size) ", or reviews up to " (str review-group-size) " files at a time."]
+       [:code "journals/"] " into nest pages. Runs in batches of "
+       (str batch-size) " — or " (str review-group-size)
+       " when you review each source's pages before writing."]
 
      (if demo?
        [:div.text-sm.opacity-70.my-2
