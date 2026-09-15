@@ -157,20 +157,28 @@
 
 (defn- normalize-propose
   "Fold either IPC propose shape into {:done? :grouped? :proposals :remaining
-  :whiteboard?}. Grouped (kip#112): {:files [...]} (also accepts :proposals /
-  :plans / a bare array). Singular (pre-kip#112): one {:source ... :plan [...]}
-  map, or {:whiteboard true}."
+  :whiteboard?}, or {:error msg} when the response shape isn't one we know.
+  Grouped (kip#112): {:files [...]} (also accepts :proposals / :plans /
+  :summaries / a bare array). Singular (pre-kip#112): one {:source ...
+  :plan [...]} map, or {:whiteboard true}.
+
+  Deliberately not `:done? true` for an unrecognized non-empty response: that
+  would end review with files still pending and nothing written."
   [res]
-  (let [grouped (when-let [ps (or (:files res) (:proposals res) (:plans res)
+  (let [grouped (when-let [ps (or (:files res) (:proposals res) (:plans res) (:summaries res)
                                   (when (vector? res) res))]
                   (vec ps))]
     (cond
       (true? (:done res)) {:done? true}
       (seq grouped)       {:grouped? true :proposals grouped :remaining (:remaining res)}
-      (and grouped (empty? grouped)) {:done? true}
+      (some? grouped)     ;; empty group — done only if nothing is left
+      (if (and (number? (:remaining res)) (pos? (:remaining res)))
+        {:error "Hatch proposed no plans for this group but reported files still pending."}
+        {:done? true})
       (or (:source res) (:whiteboard res))
       {:proposals [res] :remaining (:remaining res) :whiteboard? (boolean (:whiteboard res))}
-      :else {:done? true})))
+      (or (nil? res) (and (map? res) (empty? res))) {:done? true}
+      :else {:error (str "Unrecognized hatch propose response: " (pr-str res))})))
 
 (defn- commit-results
   "A commit result is one map (single-file) or a vector of per-file maps (group)."
@@ -181,9 +189,16 @@
     :else             []))
 
 (defn- review-record! [*done proposals res]
-  (let [by-source (into {} (map (fn [p] [(:source p) p]) proposals))]
-    (doseq [{:keys [source kind results error keptNone skipped ms]} (commit-results res)]
-      (let [proposal (get by-source source)]
+  ;; Match each commit result back to its proposal by the stable per-file key
+  ;; (relPath), falling back to :source for the singular shape. :source is a
+  ;; humanized basename, so duplicate names in different folders would collapse
+  ;; if it were the only key.
+  (let [by-key (reduce (fn [m p]
+                         (let [m (if (:source p) (assoc m (:source p) p) m)]
+                           (if (:relPath p) (assoc m (:relPath p) p) m)))
+                       {} proposals)]
+    (doseq [{:keys [source kind results error keptNone skipped ms] :as result} (commit-results res)]
+      (let [proposal (get by-key (or (:relPath result) source))]
         (swap! *done
                (fn [d]
                  (cond
@@ -200,6 +215,11 @@
   whiteboard / single-file path (nil keep = keep every proposed page)."
   [{:keys [*rp *done] :as ctx} keep-all?]
   (let [{:keys [proposals keeps grouped? group-size]} @*rp
+        ;; Whiteboards have no plan (nothing to pick), so they're left out of
+        ;; keep-map: kip#112 commits a stashed whiteboard deterministically
+        ;; regardless of `keeps`, matching the singular commitReviewedPlan and
+        ;; hatchAllSources paths. They still show in the summary via
+        ;; review-record!, which matches on :relPath / :source, not keep-map.
         keep-map (into {}
                        (for [p proposals
                              :when (seq (:plan p))]
@@ -225,9 +245,10 @@
   (-> (ipc/ipc "wikiIngestProposeNext" (vault-root) batch-size (get @*rp :skip 0)
                review-group-size (boolean @*classic?) (boolean @*force?))
       (p/then (fn [r]
-                (let [{:keys [done? grouped? proposals remaining whiteboard?]}
+                (let [{:keys [done? grouped? proposals remaining whiteboard? error]}
                       (normalize-propose (bean/->clj r))]
                   (cond
+                    error       (swap! *rp assoc :phase :reviewing :proposals nil :error error)
                     done?       (do (swap! *rp assoc :phase :done)
                                     (load-preview! *preview *error *busy? *force?))
                     whiteboard? (do (swap! *rp assoc :proposals proposals :keeps {}
@@ -275,8 +296,8 @@
    [:input {:type "checkbox" :checked checked? :on-change on-change}]
    label])
 
-(defn- toggle-keep! [*rp key slug]
-  (swap! *rp update-in [:keeps key]
+(defn- toggle-keep! [*rp k slug]
+  (swap! *rp update-in [:keeps k]
          (fn [ks]
            (let [ks (or ks #{})]
              ((if (contains? ks slug) disj conj) ks slug)))))
@@ -333,10 +354,14 @@
              [:span.text-xs.opacity-50.ml-1 (str "[" type " · " action "]")]
              (when-not (string/blank? summary)
                [:div.text-xs.opacity-60 summary])]]])])
-     [:div.mt-1
-      (ui/button {:variant :outline :size :sm
-                  :on-click #(swap! *rp update :keeps dissoc k)}
-                 "Skip this file")]]))
+     ;; Only a file with a reviewable plan can be skipped; a whiteboard is
+     ;; converted deterministically by the commit (and an errored/empty file
+     ;; has no plan to drop), so no misleading no-op "skip" on those cards.
+     (when (seq plan)
+       [:div.mt-1
+        (ui/button {:variant :outline :size :sm
+                    :on-click #(swap! *rp update :keeps dissoc k)}
+                   "Skip this file")])]))
 
 (rum/defc review-panel
   "The group plan review shown while ::rp is active. `rp` is its state map."
@@ -432,8 +457,9 @@
       [:h2#modal-headline.text-xl.mb-3 "Hatch sources"]
       [:p.text-sm.opacity-70.mb-3
        "Turns new or changed files in " (glossary/term "pages/") " and "
-       [:code "journals/"] " into nest pages — no per-file review. Runs in batches of "
-       (str batch-size) "."]
+       [:code "journals/"] " into nest pages. Runs in batches of "
+       (str batch-size) " — or " (str review-group-size)
+       " when you review each source's pages before writing."]
 
      (if demo?
        [:div.text-sm.opacity-70.my-2

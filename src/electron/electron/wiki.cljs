@@ -28,6 +28,7 @@
             ["fs" :as fs]
             ["path" :as node-path]
             ["electron" :refer [app dialog shell]]
+            [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.logger :as logger]
             [promesa.core :as p]))
@@ -209,13 +210,19 @@
   {relPath [slugs]} map for a group commit — a file omitted or mapped to [] is
   skipped — or a flat [slugs] vector for the single-file shape; nil keeps all.
   With `group-size` > 1 the whole group is written in one pass (kip#112).
-  Resolves to one per-file result map, or a vector of them for a group."
+  Resolves to one per-file result map, or a vector of them for a group.
+
+  The keeps map crosses the IPC boundary as a bean (the \"main\" channel runs
+  bean/->clj on the args), so serialize it back with bean/->js: plain clj->js
+  encodes keyword keys with `name`, which would strip the \"pages/\" namespace
+  off every relPath key and silently commit the wrong keep-sets. The singular
+  flat vector is unaffected either way."
   [vault-root keeps group-size]
   (run-node-script! (script "hatch-all.js") vault-root
                     (cond-> ["--commit-next"]
                       (some? keeps)
                       (conj (if (or (array? keeps) (vector? keeps)) "--keep" "--keeps")
-                            (js/JSON.stringify (clj->js keeps)))
+                            (js/JSON.stringify (bean/->js keeps)))
                       (and group-size (> group-size 1)) (conj "--group-size" (str group-size)))))
 
 (defn hatch-progress!
