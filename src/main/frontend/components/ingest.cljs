@@ -118,52 +118,125 @@
                        (reset! *busy? false)))))))
 
 ;; --- "Review before writing" mode ----------------------------------------
-;; One file at a time: propose its pages (LLM), let the user keep/skip each,
-;; then commit. hatch-all.js --propose-next / --commit-next; the plan is
-;; stashed in .roost/hatch-plan.json between the two. `skip` steps past files
-;; that failed to propose (a committed file just drops out of the pending
-;; scan, so it usually stays 0).
+;; A *group* at a time: propose the next `review-group-size` pending files'
+;; pages in one combined LLM call (kip#112's proposeNextPendingGroup), let the
+;; user keep/skip pages independently per file, then commit the whole group in
+;; one pass. hatch-all.js --propose-next / --commit-next --group-size N; the
+;; plans are stashed in .roost/hatch-plan.json between the two. `skip` steps
+;; past files that failed to propose (a committed file just drops out of the
+;; pending scan, so it usually stays 0).
+;;
+;; The IPC shapes are group-first but tolerate the older single-file shape (a
+;; bundled hatch-all.js without kip#112): normalize-propose and commit-results
+;; fold either into the same state, and review-commit! sends a flat keep vector
+;; in that case — so an un-upgraded coop degrades to reviewing one file at a
+;; time rather than breaking.
+
+(def ^:private review-group-size 3)
 
 (declare review-next!)
 
-(defn- review-record! [*done proposal res]
-  (let [{:keys [source results error keptNone skipped]} res]
-    (swap! *done (fn [d]
-                   (cond
-                     error   (update d :failed conj {:source source :error error})
-                     keptNone d
-                     :else   (update d :hatched conj {:source source :kind (:kind proposal)
-                                                      :results results :skipped (or skipped [])}))))))
+(defn- file-key
+  "Stable per-file identity for a proposal (the keys of the :keeps map)."
+  [{:keys [relPath source]}]
+  (or relPath source))
 
-(defn- review-commit! [{:keys [*rp *done] :as ctx} keep-all?]
-  (let [{:keys [proposal keeps]} @*rp
-        keep-slugs (when-not keep-all?
-                     (vec (filter keeps (map :slug (:plan proposal)))))]
+(defn- proposal-keeps
+  "The slugs the user kept for `proposal` (empty when skipped / none picked)."
+  [{:keys [plan] :as proposal} keeps]
+  (filterv (get keeps (file-key proposal)) (map :slug plan)))
+
+(defn- initial-keeps
+  "Start every file that proposed pages with all of its pages checked."
+  [proposals]
+  (into {}
+        (for [p proposals
+              :when (seq (:plan p))]
+          [(file-key p) (set (map :slug (:plan p)))])))
+
+(defn- normalize-propose
+  "Fold either IPC propose shape into {:done? :grouped? :proposals :remaining
+  :whiteboard?}. Grouped (kip#112): {:proposals [...]} / {:plans [...]} / a
+  bare array. Singular (pre-kip#112): one {:source ... :plan [...]} map, or
+  {:whiteboard true}."
+  [res]
+  (let [grouped (when-let [ps (or (:proposals res) (:plans res) (when (vector? res) res))]
+                  (vec ps))]
+    (cond
+      (true? (:done res)) {:done? true}
+      (seq grouped)       {:grouped? true :proposals grouped :remaining (:remaining res)}
+      (and grouped (empty? grouped)) {:done? true}
+      (or (:source res) (:whiteboard res))
+      {:proposals [res] :remaining (:remaining res) :whiteboard? (boolean (:whiteboard res))}
+      :else {:done? true})))
+
+(defn- commit-results
+  "A commit result is one map (single-file) or a vector of per-file maps (group)."
+  [res]
+  (cond
+    (sequential? res) (vec res)
+    (map? res)        [res]
+    :else             []))
+
+(defn- review-record! [*done proposals res]
+  (let [by-source (into {} (map (fn [p] [(:source p) p]) proposals))]
+    (doseq [{:keys [source results error keptNone skipped]} (commit-results res)]
+      (let [proposal (get by-source source)]
+        (swap! *done
+               (fn [d]
+                 (cond
+                   error   (update d :failed conj {:source source :error error})
+                   keptNone d
+                   :else   (update d :hatched conj {:source source :kind (:kind proposal)
+                                                    :results results :skipped (or skipped [])}))))))))
+
+(defn- review-commit!
+  "Commit the group's kept pages in one IPC call. `keep-all?` is the
+  whiteboard / single-file path (nil keep map = keep every proposed page)."
+  [{:keys [*rp *done] :as ctx} keep-all?]
+  (let [{:keys [proposals keeps grouped? group-size]} @*rp
+        keep-map (into {}
+                       (for [p proposals
+                             :when (seq (:plan p))]
+                         [(file-key p) (proposal-keeps p keeps)]))
+        flat-keeps (vec (mapcat val (sort-by key keep-map)))]
     (swap! *rp assoc :phase :committing)
     (-> (ipc/ipc "wikiIngestCommitNext" (vault-root)
-                 (when-not keep-all? (clj->js (or keep-slugs []))))
+                 (cond
+                   keep-all? nil
+                   grouped?  (clj->js keep-map)
+                   :else     (clj->js flat-keeps))
+                 (when (and grouped? (not keep-all?)) group-size))
         (p/then (fn [r]
-                  (review-record! *done proposal (bean/->clj r))
+                  (review-record! *done proposals (bean/->clj r))
                   (coop/refresh-counts!)))
         (p/catch (fn [e]
-                   (swap! *done update :failed conj {:source (:source proposal) :error (str e)})))
+                   (swap! *done update :failed conj {:source (or (:source (first proposals)) "group")
+                                                     :error (str e)})))
         (p/finally (fn [] (review-next! ctx))))))
 
 (defn- review-next! [{:keys [*rp *classic? *force? *preview *error *busy?] :as ctx}]
-  (swap! *rp assoc :phase :proposing :proposal nil :error nil)
-  (-> (ipc/ipc "wikiIngestProposeNext" (vault-root) batch-size (get @*rp :skip 0) (boolean @*classic?) (boolean @*force?))
+  (swap! *rp assoc :phase :proposing :proposals nil :error nil)
+  (-> (ipc/ipc "wikiIngestProposeNext" (vault-root) batch-size (get @*rp :skip 0)
+               review-group-size (boolean @*classic?) (boolean @*force?))
       (p/then (fn [r]
-                (let [{:keys [done whiteboard plan] :as res} (bean/->clj r)]
+                (let [{:keys [done? grouped? proposals remaining whiteboard?]}
+                      (normalize-propose (bean/->clj r))]
                   (cond
-                    done       (do (swap! *rp assoc :phase :done)
-                                   (load-preview! *preview *error *busy? *force?))
-                    whiteboard (do (swap! *rp assoc :proposal res) (review-commit! ctx true))
-                    :else      (swap! *rp assoc
-                                      :phase :reviewing
-                                      :proposal res
-                                      :keeps (set (map :slug plan)))))))
+                    done?       (do (swap! *rp assoc :phase :done)
+                                    (load-preview! *preview *error *busy? *force?))
+                    whiteboard? (do (swap! *rp assoc :proposals proposals :keeps {}
+                                            :group-size review-group-size)
+                                    (review-commit! ctx true))
+                    :else       (swap! *rp assoc
+                                       :phase :reviewing
+                                       :proposals proposals
+                                       :keeps (initial-keeps proposals)
+                                       :grouped? grouped?
+                                       :group-size review-group-size
+                                       :remaining remaining)))))
       (p/catch (fn [e]
-                 (swap! *rp assoc :phase :reviewing :proposal nil :error (str e))))))
+                 (swap! *rp assoc :phase :reviewing :proposals nil :error (str e))))))
 
 (defn- review-start! [ctx]
   (if (config/demo-graph?)
@@ -197,14 +270,74 @@
    [:input {:type "checkbox" :checked checked? :on-change on-change}]
    label])
 
+(defn- toggle-keep! [*rp key slug]
+  (swap! *rp update-in [:keeps key]
+         (fn [ks]
+           (let [ks (or ks #{})]
+             ((if (contains? ks slug) disj conj) ks slug)))))
+
+(defn- group-stats
+  "Button counts: pages kept, files that will be written, and whiteboards."
+  [proposals keeps]
+  (let [page-counts (for [p proposals
+                          :let [kept (proposal-keeps p keeps)]
+                          :when (seq kept)]
+                      (count kept))]
+    {:pages  (reduce + 0 page-counts)
+     :files  (count page-counts)
+     :boards (count (filter :whiteboard proposals))}))
+
+(defn- review-button-label [{:keys [pages files boards]}]
+  (let [plural (fn [n w] (str n " " w (when (not= 1 n) "s")))]
+    (cond
+      (and (zero? pages) (zero? boards)) "Skip these files →"
+      (zero? pages) (str "Convert " (plural boards "whiteboard") " →")
+      :else (str "Write " (plural pages "page") " across " (plural files "file")
+                 (when (pos? boards) (str " + " (plural boards "whiteboard"))) " →"))))
+
+(rum/defc review-card
+  < rum/static
+  [{:keys [source relPath kind plan whiteboard] :as proposal} keeps *rp]
+  (let [k (file-key proposal)]
+    [:div.p-3.mb-2.rounded.border
+     {:class "border-gray-200 dark:border-gray-700"}
+     [:div.text-sm.mb-1
+      [:span.font-medium source]
+      (when relPath [:span.text-xs.opacity-50.ml-1 (str "(" relPath ")")])
+      (when kind [:span.text-xs.opacity-50.ml-1 (str "[" kind "]")])]
+     (cond
+       whiteboard
+       [:div.text-sm.opacity-70.my-1 "Whiteboard — converted as-is, nothing to pick."]
+
+       (empty? plan)
+       [:div.text-sm.opacity-70.my-1 "No pages proposed for this file."]
+
+       :else
+       [:ul.my-1
+        (for [{:keys [slug title type action summary]} plan]
+          [:li.py-1 {:key slug}
+           [:label.flex.items-start.gap-2.cursor-pointer
+            [:input.mt-1 {:type "checkbox"
+                          :checked (boolean (contains? (get keeps k) slug))
+                          :on-change #(toggle-keep! *rp k slug)}]
+            [:span
+             [:span.font-medium title]
+             [:span.text-xs.opacity-50.ml-1 (str "[" type " · " action "]")]
+             (when-not (string/blank? summary)
+               [:div.text-xs.opacity-60 summary])]]])])
+     [:div.mt-1
+      (ui/button {:variant :outline :size :sm
+                  :on-click #(swap! *rp update :keeps dissoc k)}
+                 "Skip this file")]]))
+
 (rum/defc review-panel
-  "The per-file plan review shown while ::rp is active. `rp` is its state map."
+  "The group plan review shown while ::rp is active. `rp` is its state map."
   [rp {:keys [*rp] :as ctx}]
-  (let [{:keys [phase proposal keeps error]} rp
-        {:keys [source relPath plan remaining]} proposal]
+  (let [{:keys [phase proposals keeps group-size remaining error]} rp
+        stats (group-stats proposals keeps)]
     [:div.my-2
      (case phase
-       :proposing  [:div.text-sm.opacity-70 "Proposing pages for " [:span.font-medium (or source "the next file")] "…"]
+       :proposing  [:div.text-sm.opacity-70 "Proposing pages for " (str (or group-size review-group-size)) " files…"]
        :committing [:div.text-sm.opacity-70 "Writing…"]
        :reviewing
        [:div
@@ -218,36 +351,18 @@
             (ui/button {:variant :ghost :size :sm :on-click #(reset! *rp {:skip 0 :phase :done})}
                        "Stop review")]]
           [:div
-           [:div.text-sm.mb-1
-            [:span.font-medium source]
-            (when relPath [:span.text-xs.opacity-50.ml-1 (str "(" relPath ")")])
-            (when (and (number? remaining) (pos? remaining))
-              [:span.text-xs.opacity-50.ml-1 (str "· " remaining " more after this")])]
-           (if (empty? plan)
-             [:div.text-sm.opacity-70.my-2 "No pages proposed for this file."]
-             [:ul.my-1
-              (for [{:keys [slug title type action summary]} plan]
-                [:li.text-sm.py-1 {:key slug}
-                 [:label.flex.items-start.gap-2.cursor-pointer
-                  [:input.mt-1 {:type "checkbox"
-                                :checked (boolean (keeps slug))
-                                :on-change #(swap! *rp update :keeps
-                                                   (fn [ks] ((if (keeps slug) disj conj) (or ks #{}) slug)))}]
-                  [:span
-                   [:span.font-medium title]
-                   [:span.text-xs.opacity-50.ml-1 (str "[" type " · " action "]")]
-                   (when-not (string/blank? summary)
-                     [:div.text-xs.opacity-60 summary])]]])])
-           [:div.flex.gap-2.mt-2
-            (ui/button {:size :sm :disabled (or (empty? plan) (empty? keeps))
-                        :on-click #(review-commit! ctx false)}
-                       (str "Write " (count keeps) (if (= 1 (count keeps)) " page" " pages") " →"))
-            (ui/button {:variant :outline :size :sm
-                        :on-click #(do (swap! *rp assoc :keeps #{}) (review-commit! ctx false))}
-                       "Skip this file")
+           (when (and (number? remaining) (pos? remaining))
+             [:div.text-xs.opacity-50.mb-1 (str remaining " more after this group")])
+           [:div {:class "max-h-80 overflow-y-auto"}
+            (for [[i p] (map-indexed vector proposals)]
+              (rum/with-key (review-card p keeps *rp) i))]
+           [:div.flex.gap-2.items-center.mt-2
+            (ui/button {:size :sm :on-click #(review-commit! ctx false)}
+                       (review-button-label stats))
             (ui/button {:variant :ghost :size :sm :on-click #(reset! *rp {:skip 0 :phase :done})}
                        "Stop")]])]
        nil)]))
+
 
 (rum/defcs hatch-modal
   < rum/reactive
@@ -427,7 +542,7 @@
             {:on-click #(if @*review? (review-start! ctx) (run-batch! ctx))
              :disabled @*busy?}
             (if @*review?
-              (str "Review " (min batch-size pending-n) " file" (when (not= 1 (min batch-size pending-n)) "s") " →")
+              (str "Review " (min review-group-size pending-n) " file" (when (not= 1 (min review-group-size pending-n)) "s") " →")
               (str (if started? "Hatch next " "Start — hatch ")
                    (min batch-size pending-n)
                    (when started? (str " (" pending-n " left)")))))])
