@@ -15,7 +15,6 @@
             [clojure.core.async :as async]
             [clojure.string :as string]
             [electron.backup-file :as backup-file]
-            [electron.bug-report :as bug-report]
             [electron.configs :as cfgs]
             [electron.file-sync-rsapi :as rsapi]
             [electron.find-in-page :as find]
@@ -592,9 +591,6 @@
 
 (defmethod handle :wikiAddSource [_ [_ vault-root filename content]]
   (wiki/add-source! vault-root filename content))
-
-(defmethod handle :reportBug [_ [_ payload]]
-  (bug-report/report! payload))
 
 (defmethod handle :wikiAddOfficeSource [_ [_ vault-root filename base64]]
   (wiki/add-office-source! vault-root filename base64))
