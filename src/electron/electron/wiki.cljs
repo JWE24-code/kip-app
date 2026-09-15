@@ -205,15 +205,17 @@
                       force? (conj "--force"))))
 
 (defn hatch-commit-next!
-  "Commit the plan(s) stashed by hatch-propose-next!. `keep-map` is a
+  "Commit the plan(s) stashed by hatch-propose-next!. `keeps` is a
   {relPath [slugs]} map for a group commit — a file omitted or mapped to [] is
   skipped — or a flat [slugs] vector for the single-file shape; nil keeps all.
   With `group-size` > 1 the whole group is written in one pass (kip#112).
   Resolves to one per-file result map, or a vector of them for a group."
-  [vault-root keep-map group-size]
+  [vault-root keeps group-size]
   (run-node-script! (script "hatch-all.js") vault-root
                     (cond-> ["--commit-next"]
-                      (some? keep-map) (conj "--keep" (js/JSON.stringify (clj->js keep-map)))
+                      (some? keeps)
+                      (conj (if (or (array? keeps) (vector? keeps)) "--keep" "--keeps")
+                            (js/JSON.stringify (clj->js keeps)))
                       (and group-size (> group-size 1)) (conj "--group-size" (str group-size)))))
 
 (defn hatch-progress!

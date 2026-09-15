@@ -126,11 +126,12 @@
 ;; past files that failed to propose (a committed file just drops out of the
 ;; pending scan, so it usually stays 0).
 ;;
-;; The IPC shapes are group-first but tolerate the older single-file shape (a
-;; bundled hatch-all.js without kip#112): normalize-propose and commit-results
-;; fold either into the same state, and review-commit! sends a flat keep vector
-;; in that case — so an un-upgraded coop degrades to reviewing one file at a
-;; time rather than breaking.
+;; The IPC shapes are group-first (:files [...] from kip#112) but tolerate the
+;; older single-file shape (a bundled hatch-all.js without kip#112):
+;; normalize-propose and commit-results fold either into the same state, and
+;; review-commit! sends the flat --keep vector in that case — so an
+;; un-upgraded coop degrades to reviewing one file at a time rather than
+;; breaking.
 
 (def ^:private review-group-size 3)
 
@@ -156,11 +157,12 @@
 
 (defn- normalize-propose
   "Fold either IPC propose shape into {:done? :grouped? :proposals :remaining
-  :whiteboard?}. Grouped (kip#112): {:proposals [...]} / {:plans [...]} / a
-  bare array. Singular (pre-kip#112): one {:source ... :plan [...]} map, or
-  {:whiteboard true}."
+  :whiteboard?}. Grouped (kip#112): {:files [...]} (also accepts :proposals /
+  :plans / a bare array). Singular (pre-kip#112): one {:source ... :plan [...]}
+  map, or {:whiteboard true}."
   [res]
-  (let [grouped (when-let [ps (or (:proposals res) (:plans res) (when (vector? res) res))]
+  (let [grouped (when-let [ps (or (:files res) (:proposals res) (:plans res)
+                                  (when (vector? res) res))]
                   (vec ps))]
     (cond
       (true? (:done res)) {:done? true}
@@ -180,19 +182,22 @@
 
 (defn- review-record! [*done proposals res]
   (let [by-source (into {} (map (fn [p] [(:source p) p]) proposals))]
-    (doseq [{:keys [source results error keptNone skipped]} (commit-results res)]
+    (doseq [{:keys [source kind results error keptNone skipped ms]} (commit-results res)]
       (let [proposal (get by-source source)]
         (swap! *done
                (fn [d]
                  (cond
-                   error   (update d :failed conj {:source source :error error})
+                   error   (update d :failed conj {:source source :error error :ms ms})
                    keptNone d
-                   :else   (update d :hatched conj {:source source :kind (:kind proposal)
-                                                    :results results :skipped (or skipped [])}))))))))
+                   :else   (update d :hatched conj {:source source
+                                                    :kind (or kind (:kind proposal))
+                                                    :results results
+                                                    :skipped (or skipped [])
+                                                    :ms ms}))))))))
 
 (defn- review-commit!
   "Commit the group's kept pages in one IPC call. `keep-all?` is the
-  whiteboard / single-file path (nil keep map = keep every proposed page)."
+  whiteboard / single-file path (nil keep = keep every proposed page)."
   [{:keys [*rp *done] :as ctx} keep-all?]
   (let [{:keys [proposals keeps grouped? group-size]} @*rp
         keep-map (into {}
@@ -297,7 +302,7 @@
 
 (rum/defc review-card
   < rum/static
-  [{:keys [source relPath kind plan whiteboard] :as proposal} keeps *rp]
+  [{:keys [source relPath kind plan whiteboard error] :as proposal} keeps *rp]
   (let [k (file-key proposal)]
     [:div.p-3.mb-2.rounded.border
      {:class "border-gray-200 dark:border-gray-700"}
@@ -306,6 +311,9 @@
       (when relPath [:span.text-xs.opacity-50.ml-1 (str "(" relPath ")")])
       (when kind [:span.text-xs.opacity-50.ml-1 (str "[" kind "]")])]
      (cond
+       error
+       [:div.my-1 (llm-banner/error-view error "hatch/review")]
+
        whiteboard
        [:div.text-sm.opacity-70.my-1 "Whiteboard — converted as-is, nothing to pick."]
 
