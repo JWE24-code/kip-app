@@ -92,30 +92,58 @@
 (def ^:private no-graph-msg
   "Open a folder first (File → Open a folder) — Kip hatches the sources inside a graph's folder.")
 
-(defn- run-batch! [{:keys [*preview *done *remaining *error *busy? *progress *poll-id *metrics *trace? *classic? *force? *recovery]}]
-  (if (config/demo-graph?)
-    (reset! *error no-graph-msg)
-    (do
-      (reset! *busy? true)
-      (reset! *error nil)
-      (reset! *recovery nil)
-      (reset! *progress nil)
-      (start-poll! *progress *poll-id)
-      (-> (ipc/ipc "wikiIngestBatch" (vault-root) batch-size (boolean @*trace?) (boolean @*classic?) (boolean @*force?))
-          (p/then (fn [r]
-                    (let [{:keys [hatched failed remaining metrics]} (bean/->clj r)]
-                      (swap! *done (fn [d] {:hatched (into (:hatched d) hatched)
-                                            :failed  (into (:failed d) failed)}))
-                      (reset! *remaining remaining)
-                      (reset! *metrics metrics)
-                      (coop/refresh-counts!))))
-          (p/catch (fn [e]
-                     (reset! *error (str e))
-                     (check-recovery! *recovery *error (str e))
-                     (load-preview! *preview *error *busy? *force?)))
-          (p/finally (fn []
-                       (stop-poll! *progress *poll-id)
-                       (reset! *busy? false)))))))
+(defn- run-batch!
+  "Hatches one batch-size chunk, then — as long as it made net progress —
+  keeps going on its own until nothing's left, so \"Start\" on 50 pending
+  files doesn't mean coming back to click \"Hatch next 10\" five times.
+
+  `prev-remaining` is the prior round's leftover count (nil on the first
+  call). `remaining` only reflects the pending scan's size, not how many of
+  THIS round's files actually hatched — a batch where every file fails
+  leaves it unchanged. Looping on `(pos? remaining)` alone would then retry
+  the same failures forever against a broken provider/network; stopping
+  when a round makes no net progress is the circuit breaker for that."
+  ([ctx] (run-batch! ctx nil))
+  ([{:keys [*preview *done *remaining *error *busy? *progress *poll-id *metrics *trace? *classic? *force? *recovery] :as ctx}
+    prev-remaining]
+   (if (config/demo-graph?)
+     (reset! *error no-graph-msg)
+     (do
+       (stop-poll! *progress *poll-id) ;; clear a still-running interval from the previous round, if any
+       (reset! *busy? true)
+       (reset! *error nil)
+       (reset! *recovery nil)
+       (reset! *progress nil)
+       (start-poll! *progress *poll-id)
+       (-> (ipc/ipc "wikiIngestBatch" (vault-root) batch-size (boolean @*trace?) (boolean @*classic?) (boolean @*force?))
+           (p/then (fn [r]
+                     (let [{:keys [hatched failed remaining metrics]} (bean/->clj r)]
+                       (swap! *done (fn [d] {:hatched (into (:hatched d) hatched)
+                                             :failed  (into (:failed d) failed)}))
+                       (reset! *remaining remaining)
+                       (reset! *metrics metrics)
+                       (coop/refresh-counts!)
+                       (cond
+                         (not (number? remaining))
+                         (do (stop-poll! *progress *poll-id) (reset! *busy? false))
+
+                         (zero? remaining)
+                         (do (stop-poll! *progress *poll-id) (reset! *busy? false))
+
+                         (= remaining prev-remaining)
+                         (do (stop-poll! *progress *poll-id)
+                             (reset! *busy? false)
+                             (reset! *error
+                                     (str "Stopped after a batch made no progress (" (count failed)
+                                          " failed) — see Failed below, fix it, then Retry.")))
+
+                         :else (run-batch! ctx remaining)))))
+           (p/catch (fn [e]
+                      (reset! *error (str e))
+                      (check-recovery! *recovery *error (str e))
+                      (load-preview! *preview *error *busy? *force?)
+                      (stop-poll! *progress *poll-id)
+                      (reset! *busy? false))))))))
 
 ;; --- "Review before writing" mode ----------------------------------------
 ;; One file at a time: propose its pages (LLM), let the user keep/skip each,
@@ -428,9 +456,11 @@
              :disabled @*busy?}
             (if @*review?
               (str "Review " (min batch-size pending-n) " file" (when (not= 1 (min batch-size pending-n)) "s") " →")
-              (str (if started? "Hatch next " "Start — hatch ")
-                   (min batch-size pending-n)
-                   (when started? (str " (" pending-n " left)")))))])
+              ;; run-batch! now processes batch-size chunks back-to-back on
+              ;; its own until nothing's left (or it hits a no-progress
+              ;; stop), so the label promises the whole queue, not one chunk.
+              (str (if started? "Hatch " "Start — hatch ") pending-n
+                   " file" (when (not= 1 pending-n) "s"))))])
 
         (when (and (not @*busy?) @*metrics)
           [:details.mt-3.text-sm
