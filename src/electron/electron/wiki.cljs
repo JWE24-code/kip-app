@@ -28,6 +28,7 @@
             ["fs" :as fs]
             ["path" :as node-path]
             ["electron" :refer [app dialog shell]]
+            [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.logger :as logger]
             [promesa.core :as p]))
@@ -188,26 +189,41 @@
 
 (defn hatch-propose-next!
   "\"Review before writing\": propose pages for the next pending source (past
-  `skip` in the current batch of `limit`) without writing anything. Resolves
-  to {:done true} when there's nothing left, otherwise {:source :relPath :kind
-  :remaining :plan [{:slug :title :type :action :summary}]} (or {:whiteboard
-  true} for a board — no plan to pick from). The full plan is stashed at
-  <coop>/.roost/hatch-plan.json for hatch-commit-next!. `force?` includes
-  already-hatched sources in the pending scan (kip-app#124)."
-  [vault-root limit skip classic? force?]
+  `skip` in the current batch of `limit`) without writing anything. With
+  `group-size` > 1, proposes the next `group-size` pending sources in a single
+  combined LLM call (kip#112) and resolves to the group shape — a vector of
+  per-file summaries, plus :remaining. Without it, resolves to the single-file
+  shape: {:done true} when there's nothing left, otherwise {:source :relPath
+  :kind :remaining :plan [{:slug :title :type :action :summary}]} (or
+  {:whiteboard true} for a board — no plan to pick from). The full plan(s) are
+  stashed at <coop>/.roost/hatch-plan.json for hatch-commit-next!. `force?`
+  includes already-hatched sources in the pending scan (kip-app#124)."
+  [vault-root limit skip group-size classic? force?]
   (run-node-script! (script "hatch-all.js") vault-root
                     (cond-> ["--propose-next" "--limit" (str limit) "--skip" (str skip)]
+                      (and group-size (> group-size 1)) (conj "--group-size" (str group-size))
                       classic? (conj "--classic")
                       force? (conj "--force"))))
 
 (defn hatch-commit-next!
-  "Commit the plan stashed by hatch-propose-next!, keeping only the pages whose
-  slug is in `keep-slugs` (a vector; nil = keep all). Resolves to {:source
-  :results [...] :skipped [...]} / {:source :keptNone true} / {:source :error}."
-  [vault-root keep-slugs]
+  "Commit the plan(s) stashed by hatch-propose-next!. `keeps` is a
+  {relPath [slugs]} map for a group commit — a file omitted or mapped to [] is
+  skipped — or a flat [slugs] vector for the single-file shape; nil keeps all.
+  With `group-size` > 1 the whole group is written in one pass (kip#112).
+  Resolves to one per-file result map, or a vector of them for a group.
+
+  The keeps map crosses the IPC boundary as a bean (the \"main\" channel runs
+  bean/->clj on the args), so serialize it back with bean/->js: plain clj->js
+  encodes keyword keys with `name`, which would strip the \"pages/\" namespace
+  off every relPath key and silently commit the wrong keep-sets. The singular
+  flat vector is unaffected either way."
+  [vault-root keeps group-size]
   (run-node-script! (script "hatch-all.js") vault-root
                     (cond-> ["--commit-next"]
-                      (some? keep-slugs) (conj "--keep" (js/JSON.stringify (clj->js keep-slugs))))))
+                      (some? keeps)
+                      (conj (if (or (array? keeps) (vector? keeps)) "--keep" "--keeps")
+                            (js/JSON.stringify (bean/->js keeps)))
+                      (and group-size (> group-size 1)) (conj "--group-size" (str group-size)))))
 
 (defn hatch-progress!
   "Reads <coop>/.roost/hatch-progress.json, written continuously by

@@ -578,11 +578,11 @@
 (defmethod handle :wikiIngestBatch [_ [_ vault-root limit trace? classic? force?]]
   (wiki/hatch-batch! vault-root limit trace? classic? (boolean force?)))
 
-(defmethod handle :wikiIngestProposeNext [_ [_ vault-root limit skip classic? force?]]
-  (wiki/hatch-propose-next! vault-root limit skip classic? (boolean force?)))
+(defmethod handle :wikiIngestProposeNext [_ [_ vault-root limit skip group-size classic? force?]]
+  (wiki/hatch-propose-next! vault-root limit skip group-size (boolean classic?) (boolean force?)))
 
-(defmethod handle :wikiIngestCommitNext [_ [_ vault-root keep-slugs]]
-  (wiki/hatch-commit-next! vault-root keep-slugs))
+(defmethod handle :wikiIngestCommitNext [_ [_ vault-root keep-map group-size]]
+  (wiki/hatch-commit-next! vault-root keep-map group-size))
 
 (defmethod handle :wikiIngestProgress [_ [_ vault-root]]
   (wiki/hatch-progress! vault-root))
