@@ -2,7 +2,10 @@
   "This ns provides common fns related to user config"
   (:require [clojure.string :as string]))
 
-(defn- hidden?
+(defn hidden?
+  "True when path matches one of the :hidden config patterns. Shared by
+  remove-hidden-files (bulk graph load) and the live fs watcher, which needs
+  the same per-path check before it parses a change into the DB."
   [path patterns]
   (let [path (if (and (string? path)
                       (= \/ (first path)))

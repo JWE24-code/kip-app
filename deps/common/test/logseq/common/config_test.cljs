@@ -2,6 +2,13 @@
   (:require [logseq.common.config :as common-config]
             [cljs.test :refer [deftest is]]))
 
+(deftest hidden?
+  (is (true? (common-config/hidden? "pages/report.md" ["pages"])))
+  (is (true? (common-config/hidden? "/pages/report.md" ["pages"])))
+  (is (nil? (common-config/hidden? "nest/report.md" ["pages"])))
+  (is (nil? (common-config/hidden? "pages/report.md" nil))
+      "no :hidden config means nothing is hidden"))
+
 (deftest remove-hidden-files
   (let [files ["pages/foo.md" "pages/bar.md"
                "script/README.md" "script/config.edn"
