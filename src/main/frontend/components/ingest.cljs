@@ -143,9 +143,12 @@
   (or relPath source))
 
 (defn- proposal-keeps
-  "The slugs the user kept for `proposal` (empty when skipped / none picked)."
+  "The slugs the user kept for `proposal` (empty when skipped / none picked).
+  `keeps` is missing an entry for a skipped file (see the \"Skip this file\"
+  button below, which dissocs it) — default to #{}, since nil isn't callable
+  as a filter predicate and would crash the panel on the next render."
   [{:keys [plan] :as proposal} keeps]
-  (filterv (get keeps (file-key proposal)) (map :slug plan)))
+  (filterv (get keeps (file-key proposal) #{}) (map :slug plan)))
 
 (defn- initial-keeps
   "Start every file that proposed pages with all of its pages checked."
