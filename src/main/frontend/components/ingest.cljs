@@ -343,7 +343,7 @@
        [:div
         (if error
           [:div
-           [:div.my-1 (llm-banner/error-view error)]
+           [:div.my-1 (llm-banner/error-view error "hatch/review")]
            [:div.flex.gap-2.mt-2
             (ui/button {:variant :outline :size :sm
                         :on-click #(do (swap! *rp update :skip inc) (review-next! ctx))}
@@ -453,7 +453,7 @@
      (llm-banner/provider-banner)
 
      (when @*error
-       [:div.my-2 (llm-banner/error-view @*error)])
+       [:div.my-2 (llm-banner/error-view @*error "hatch/modal")])
 
      (when (and recovery (not @*busy?))
        [:div.my-2.p-3.rounded.border.border-amber-500.text-sm

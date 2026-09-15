@@ -15,6 +15,7 @@
             [clojure.core.async :as async]
             [clojure.string :as string]
             [electron.backup-file :as backup-file]
+            [electron.bug-report :as bug-report]
             [electron.configs :as cfgs]
             [electron.file-sync-rsapi :as rsapi]
             [electron.find-in-page :as find]
@@ -27,6 +28,7 @@
             [electron.search :as search]
             [electron.server :as server]
             [electron.shell :as shell]
+            [electron.sidecar :as sidecar]
             [electron.state :as state]
             [electron.update :as update]
             [electron.updater :as updater]
@@ -475,7 +477,16 @@
 
 (defmethod handle :setCurrentGraph [^js window [_ graph-name]]
   (when graph-name
-    (set-current-graph! window (utils/get-graph-dir graph-name))))
+    (let [graph-path (utils/get-graph-dir graph-name)]
+      (set-current-graph! window graph-path)
+      ;; Spawn the sidecar once, up front, so it's ready before the first Peck
+      ;; turn (rather than a cold start mid-turn). Fire-and-forget: a missing
+      ;; sidecar must not delay or fail the graph switch — the chat panel
+      ;; falls back to :wikiChat in that case.
+      (when (sidecar/available?)
+        (-> (sidecar/ensure! graph-path)
+            (p/catch (fn [e] (logger/debug "[Sidecar]" (str "prewarm skipped: " e))))))
+      nil)))
 
 (defmethod handle :runGit [_ [_ {:keys [repo command]}]]
   (when (seq command)
@@ -582,6 +593,9 @@
 (defmethod handle :wikiAddSource [_ [_ vault-root filename content]]
   (wiki/add-source! vault-root filename content))
 
+(defmethod handle :reportBug [_ [_ payload]]
+  (bug-report/report! payload))
+
 (defmethod handle :wikiAddOfficeSource [_ [_ vault-root filename base64]]
   (wiki/add-office-source! vault-root filename base64))
 
@@ -624,6 +638,18 @@
 (defmethod handle :kipFeedback [_ [_ vault-root signal]]
   (preference-signals/post-feedback! vault-root signal))
 
+;; Persistent WS sidecar (kip-app#147) — main spawns/supervises the process and
+;; hands the renderer its discovery info (loopback url + bearer token). The
+;; renderer owns the socket and speaks the envelope directly; see
+;; frontend.handler.sidecar. Resolves the discovery map, or rejects when the
+;; sidecar isn't bundled / couldn't start.
+(defmethod handle :sidecarInfo [_ [_ vault-root]]
+  (sidecar/ensure! vault-root))
+
+(defmethod handle :sidecarStop [_ [_ vault-root]]
+  (sidecar/stop! vault-root)
+  true)
+
 (defmethod handle :wikiChat [_ [_ vault-root question trace? arena-compare-to history depth]]
   (wiki/peck! vault-root question (boolean trace?) arena-compare-to history depth))
 
@@ -638,9 +664,6 @@
 ;; to /v1/arena/<id>/verdict; a no-op otherwise.
 (defmethod handle :kipArena [_ [_ vault-root arena-id winner]]
   (preference-signals/post-arena-verdict! vault-root arena-id winner))
-
-(defmethod handle :wikiChatProgress [_ [_ vault-root]]
-  (wiki/peck-progress! vault-root))
 
 (defmethod handle :wikiSkills [_ [_ vault-root]]
   (wiki/skills-list! vault-root))

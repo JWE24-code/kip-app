@@ -3,6 +3,29 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [0.7.0] — 2026-09-14
+
+- **Peck now runs over a persistent sidecar, not spawn-per-action.** The chat
+  panel used to shell out to `scripts/chat.js` for every message and poll
+  `.roost/peck-progress.json` for progress; it now speaks a versioned
+  WebSocket protocol to one long-lived Kip sidecar process per open coop.
+  - Turns stream live (`turn.delta`) straight into the answer bubble instead
+    of arriving as a single blob at the end.
+  - **Cancel** actually aborts a running turn in under a second — the sidecar
+    now drives a real turn loop instead of a stub that returned
+    `NOT_IMPLEMENTED`.
+  - Live tool/skill activity (`skill.progress`) renders as the turn runs, and
+    a turn's sources, evidence, "learned" card and rating/arena widgets are
+    now backed by real tool-output accounting from the sidecar rather than
+    best-effort text parsing.
+  - Conversation history and follow-up depth are now carried on every turn,
+    fixing replies that ignored earlier context.
+  - The sidecar ships bundled inside the packaged app (`<app>/sidecar`); a
+    dropped connection now fails a pending action cleanly instead of hanging.
+  - The chat panel warms its own connection as soon as it mounts rather than
+    on the first message, removing a race that could make the very first
+    message in a session fail or hang.
+
 ## [0.6.0] — 2026-09-07
 
 - **Mindmaps** — a new kind of page where the map *is* the outline. Make one

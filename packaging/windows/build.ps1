@@ -104,6 +104,18 @@ foreach ($m in 'better-sqlite3','bindings','file-uri-to-path') {
   RC "$APP_DIR\static\node_modules\$m" $mDst @('/E')
 }
 
+# The sidecar's roost/schema.ts also require()s better-sqlite3 and runs under
+# ELECTRON_RUN_AS_NODE, so it needs the same Electron-ABI build locally rather
+# than walking up into the packed asar. gulp leaves it out of the sidecar's
+# package.json (NATIVE_SIDECAR_DEPS) for exactly this reason.
+Step 'vendor better-sqlite3 into sidecar\node_modules'
+New-Item -ItemType Directory -Force -Path "$APP_DIR\static\sidecar\node_modules" | Out-Null
+foreach ($m in 'better-sqlite3','bindings','file-uri-to-path') {
+  $mDst = "$APP_DIR\static\sidecar\node_modules\$m"
+  if (Test-Path $mDst) { Remove-Item $mDst -Recurse -Force }
+  RC "$APP_DIR\static\node_modules\$m" $mDst @('/E')
+}
+
 # --- 6. package -------------------------------------------------------------
 # KIP_TARGET=installer -> electron-builder: NSIS Kip-Setup-<version>.exe
 #                         + latest.yml  (#38, feeds electron-updater)
@@ -174,20 +186,24 @@ $j.version = $VERSION
 
 # --- 7. pack resources\app -> app.asar -----------------------------------
 # One archive instead of ~15k loose files: faster to unzip, faster to load.
-# scripts\ stays unpacked (electron.wiki spawns `node scripts\*.js` by path —
-# can't cwd into or exec out of an asar) and so do native .node addons
-# (better-sqlite3). asar auto-creates app.asar.unpacked\ for the --unpack* set.
+# scripts\ and sidecar\ stay unpacked (electron.wiki/electron.sidecar spawn
+# `node scripts\*.js` / `sidecar\index.ts` by path — can't cwd into or exec out
+# of an asar) and so do native .node addons (better-sqlite3). asar auto-creates
+# app.asar.unpacked\ for the --unpack* set.
 Step 'pack app.asar'
 # Fetch @electron/asar via npx — yarn 1 doesn't hoist it to a predictable path
 # in static\node_modules (works on Linux, not Windows). If anything here goes
 # wrong we MUST fail loudly: a missing app.asar makes upload-artifact silently
 # drop the now-empty resources\ dir and ship a codeless app.
 npx --yes -p @electron/asar@3.4.1 asar pack "$APP" "$OUT\resources\app.asar" `
-  --unpack-dir "{scripts,node_modules/better-sqlite3}" --unpack "*.node"
+  --unpack-dir "{scripts,sidecar,node_modules/better-sqlite3}" --unpack "*.node"
 if ($LASTEXITCODE) { throw "asar pack failed (exit $LASTEXITCODE)" }
 if (-not (Test-Path "$OUT\resources\app.asar")) { throw 'asar pack produced no app.asar' }
 if (-not (Test-Path "$OUT\resources\app.asar.unpacked\scripts\hatch-all.js")) {
   throw 'scripts\ was not unpacked from the asar'
+}
+if (-not (Test-Path "$OUT\resources\app.asar.unpacked\sidecar\index.ts")) {
+  throw 'sidecar\ was not unpacked from the asar'
 }
 Remove-Item "$APP" -Recurse -Force
 
