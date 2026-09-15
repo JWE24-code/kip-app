@@ -1,8 +1,9 @@
 (ns frontend.components.llm-banner
   "Shared LLM-related UI bits: the 'no provider set' banner at the top of Peck
-  and Hatch, and a humanised error view (title + hint + collapsible raw). Both
-  lean on frontend.handler.llm."
-  (:require [frontend.handler.llm :as llm-handler]
+  and Hatch, and a humanised error view (title + hint + collapsible raw + a
+  'Report this bug' action). Both lean on frontend.handler.llm."
+  (:require [frontend.components.bug-report-modal :as bug-report-modal]
+            [frontend.handler.llm :as llm-handler]
             [frontend.state :as state]
             [logseq.shui.ui :as ui]
             [rum.core :as rum]))
@@ -25,11 +26,14 @@
                   "Set it up")])))
 
 ;; Render an LLM failure humanely — a short title + a hint + a collapsible
-;; "Show details" with the raw error. `raw` is the original error string
-;; (a rejected IPC message, a `failed` entry's :error, stderr).
+;; "Show details" with the raw error, plus a "Report this bug" action. `raw`
+;; is the original error string (a rejected IPC message, a `failed` entry's
+;; :error, stderr). `context` is a short feature tag (e.g. "peck/chat",
+;; "hatch/modal") identifying which part of the app this error came from —
+;; every call site names its own, so one component here covers all of them.
 (rum/defcs error-view
   < (rum/local false ::open?)
-  [state raw]
+  [state raw context]
   (let [*open? (::open? state)
         {:keys [title hint] :as parsed} (llm-handler/humanize-error raw)
         raw-str (:raw parsed)]
@@ -45,4 +49,9 @@
           [:pre.text-xs.opacity-70.mt-1.whitespace-pre-wrap
            {:style {:max-height "8rem" :overflow-y "auto"}}
            raw-str])]
-       raw-str)]))
+       raw-str)
+     [:div.mt-1
+      (ui/button {:variant :ghost :size :sm
+                  :on-click #(bug-report-modal/open! {:context context
+                                                 :error {:title title :hint hint :raw raw-str}})}
+                 "Report this bug")]]))

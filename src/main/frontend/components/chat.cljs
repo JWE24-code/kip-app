@@ -22,6 +22,7 @@
             [frontend.components.first-run :as first-run]
             [frontend.components.kip-brand :as brand]
             [frontend.components.llm-banner :as llm-banner]
+            [frontend.components.svg :as svg]
             [frontend.components.telemetry :as telemetry]
             [frontend.config :as config]
             [frontend.handler.llm :as llm-handler]
@@ -475,7 +476,7 @@
       [:div.inline-block.bg-gray-04.rounded.px-3.py-2.text-sm text]]
 
      :error
-     (llm-banner/error-view text)
+     (llm-banner/error-view text "peck/chat")
 
      :learned
      [:div.text-sm.rounded.px-3.py-2 {:class "bg-gray-03 border-l-2 border-gray-11"}
@@ -607,6 +608,44 @@
                  :background (if on? "var(--ls-tertiary-background-color)" "transparent")}}
         label]))])
 
+(def ^:private tool-status-labels
+  "Friendly present-tense labels for the sidecar's base tools (ADD-1 §5) —
+  shown as the 'what's happening' line while a turn is running and no answer
+  text has streamed yet."
+  {"search_notes"      "Searching your notes"
+   "read_note"         "Reading a note"
+   "write_agent_note"  "Writing a note"
+   "update_agent_note" "Updating a note"
+   "fetch_url"         "Fetching a page"
+   "web_search"        "Searching the web"
+   "ask_user"          "Asking you a question"})
+
+(defn- humanize-tool-name [name]
+  (or (get tool-status-labels name)
+      (some-> name (string/replace #"[_-]+" " ") string/capitalize)))
+
+(defn- current-status-text
+  "A human line describing the most recent thing the turn did, from the
+  activity feed's last row (a tool call or skill.progress event) — falls back
+  to a generic message before the first tool/skill activity arrives."
+  [activity]
+  (if-let [{:keys [phase label]} (last activity)]
+    (case phase
+      "tool"  (str (humanize-tool-name label) "…")
+      "skill" (str "Running " label)
+      "Thinking…")
+    "Thinking…"))
+
+(rum/defc thinking-indicator
+  "Small spinner + a status line that updates as tool/skill activity comes in,
+  replacing a bare static 'Thinking…' (kip-app feedback: wanted something
+  meaningful, an animation, or both)."
+  < rum/static
+  [activity]
+  [:div.flex.items-center.gap-2.text-sm.opacity-60
+   (svg/loader-fn {:class "w-3 h-3"})
+   [:span (current-status-text activity)]])
+
 (rum/defcs chat-panel
   < rum/reactive
   (rum/local false ::loading?)
@@ -692,7 +731,7 @@
       (when @*loading?
         [:div.py-2
          (if (string/blank? stream)
-           [:div.text-sm.opacity-60 "Thinking…"]
+           (thinking-indicator activity)
            (streaming-message stream))
          (when (seq activity)
            (telemetry/activity-feed (reverse activity)))

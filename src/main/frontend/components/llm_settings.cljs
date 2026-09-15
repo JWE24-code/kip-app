@@ -339,7 +339,7 @@
         (when-let [{:keys [success error]} @*test-result]
           (if success
             [:div.text-sm.my-1.text-green-500 "Connection OK."]
-            [:div.my-1 (llm-banner/error-view error)]))
+            [:div.my-1 (llm-banner/error-view error "settings/llm-test")]))
 
         (when (and can-add? (not @*opted-in?) (or managed-hidden? (not has-managed?)))
           [:div.text-xs.mt-4.pt-3.border-t.border-gray-200.dark:border-gray-700.opacity-70
