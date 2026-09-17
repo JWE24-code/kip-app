@@ -15,7 +15,11 @@
  ;; Exclude directories/files.
  ;; Example usage:
  ;; :hidden ["/archived" "/test.md" "../assets/archived"]
- :hidden []
+ ;; "pages" is Kip's raw Hatch drop-zone (dropped/pasted source docs, not the
+ ;; wiki itself — that's nest/), so it's hidden from indexing by default; a
+ ;; page created via "New page" still lands there but won't be
+ ;; linkable/searchable inside Logseq unless you remove it from this list.
+ :hidden ["pages"]
 
  ;; Define the default journal page template.
  ;; Enter the template name between the quotes.

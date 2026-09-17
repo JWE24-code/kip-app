@@ -18,6 +18,7 @@
             [frontend.util :as util]
             [frontend.util.fs :as fs-util]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.util.block-ref :as block-ref]
@@ -68,7 +69,13 @@
           repo-dir (config/get-local-dir repo)
           {:keys [mtime]} stat
           ext (keyword (path/file-ext path))]
-      (when (contains? #{:org :md :markdown :css :js :edn :excalidraw :tldr} ext)
+      ;; :hidden config (e.g. "pages" as Kip's raw Hatch drop-zone) is already
+      ;; applied to the bulk graph-load path (remove-hidden-files in
+      ;; frontend.handler.repo) but this per-event watcher is the other way a
+      ;; file reaches the DB — a Hatch-dropped or live-edited file here would
+      ;; otherwise get parsed and indexed regardless of :hidden.
+      (when (and (contains? #{:org :md :markdown :css :js :edn :excalidraw :tldr} ext)
+                 (not (common-config/hidden? path (:hidden (state/get-config repo)))))
         (let [db-content (db/get-file repo path)
               exists-in-db? (not (nil? db-content))
               db-content (or db-content "")]
