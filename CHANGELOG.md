@@ -3,6 +3,29 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [0.7.1] — 2026-09-17
+
+- **Batch review for Hatch.** "Review each source's pages before writing" now
+  proposes and commits a group of pending files at once (3 by default)
+  instead of one at a time — one combined LLM call proposes the group, one
+  write pass commits it, with independent per-file checkboxes and a "Skip
+  this file" per card (#151).
+- **Hatch drains the whole pending queue in one click.** "Start — hatch N
+  files" used to process one 10-file chunk per click; it now keeps going
+  on its own until nothing's pending, with a circuit breaker that stops and
+  surfaces an error if a round makes no progress instead of retrying failures
+  forever.
+- **Kip's own `pages/` folder no longer gets indexed by Logseq itself,**
+  eliminating the duplicate-title errors that caused.
+- **"Report this bug" now files directly on GitHub** instead of relaying
+  through kip-backend — opens this repo's own GitHub issue form prefilled
+  with your bug description and Kip's version, no backend hop or server-held
+  GitHub credential involved.
+- **Slide view gets a real fullscreen button** — "View as slides" previously
+  only supported fullscreen via a hidden `f` shortcut; there's now a visible
+  button, and the deck actually fills the screen instead of staying capped
+  at the sidebar panel's height.
+
 ## [0.7.0] — 2026-09-14
 
 - **Peck now runs over a persistent sidecar, not spawn-per-action.** The chat
