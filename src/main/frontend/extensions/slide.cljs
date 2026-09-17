@@ -9,8 +9,10 @@
             [clojure.string :as string]
             [frontend.db-mixins :as db-mixins]
             [frontend.db :as db]
+            [frontend.mixins :as mixins]
             [frontend.modules.outliner.tree :as outliner-tree]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.util :as util]))
 
 (defn loaded? []
   js/window.Reveal)
@@ -28,6 +30,26 @@
       m)))
 
 (defonce *loading? (atom false))
+
+(defn- fullscreen-element
+  []
+  (or js/document.fullscreenElement js/document.webkitFullscreenElement))
+
+(defn- request-fullscreen!
+  [el]
+  (when-let [request (and el (or (.-requestFullscreen el) (.-webkitRequestFullscreen el)))]
+    (.call request el)))
+
+(defn- exit-fullscreen!
+  []
+  (when-let [exit (or (.-exitFullscreen js/document) (.-webkitExitFullscreen js/document))]
+    (.call exit js/document)))
+
+(defn- toggle-fullscreen!
+  [el]
+  (if (fullscreen-element)
+    (exit-fullscreen!)
+    (request-fullscreen! el)))
 
 (defn render!
   []
@@ -60,16 +82,44 @@
        children]
       [:section dom-attrs block-el])))
 
-(defn slide-content
-  [loading? style config blocks]
-  [:div
-   [:p.text-sm
-    (t :page/slide-view-tip-go-fullscreen)]
-   [:div.reveal {:style style}
-    (when loading?
-      [:div.ls-center (ui/loading "")])
-    [:div.slides
-     (map #(block-container config % 1) blocks)]]])
+(rum/defcs slide-content < rum/reactive
+  (rum/local false ::fullscreen?)
+  mixins/event-handler-mixin
+  {:did-mount (fn [state]
+                (let [*fullscreen? (::fullscreen? state)
+                      *reveal-ref (::reveal-ref state)]
+                  (mixins/listen state js/document "fullscreenchange"
+                                 (fn [_e]
+                                   (reset! *fullscreen? (= (fullscreen-element) (rum/deref *reveal-ref)))))
+                  (mixins/listen state js/document "webkitfullscreenchange"
+                                 (fn [_e]
+                                   (reset! *fullscreen? (= (fullscreen-element) (rum/deref *reveal-ref))))))
+                state)
+   :will-mount (fn [state]
+                 (assoc state ::reveal-ref (rum/create-ref)))}
+  [state loading? style config blocks]
+  (let [*fullscreen? (::fullscreen? state)
+        fullscreen? (rum/react *fullscreen?)
+        *reveal-ref (::reveal-ref state)]
+    [:div
+     [:div.flex.items-center.justify-between
+      [:p.text-sm
+       (t :page/slide-view-tip-go-fullscreen)]
+      [:button.button.icon.slide-fullscreen-toggle
+       {:title (if fullscreen?
+                 (t :page/slide-view-exit-fullscreen)
+                 (t :page/slide-view-fullscreen))
+        :on-click (fn [e]
+                    (util/stop e)
+                    (toggle-fullscreen! (rum/deref *reveal-ref)))}
+       (ui/icon (if fullscreen? "minimize" "maximize"))]]
+     [:div.reveal
+      {:ref *reveal-ref
+       :style (if fullscreen? {} style)}
+      (when loading?
+        [:div.ls-center (ui/loading "")])
+      [:div.slides
+       (map #(block-container config % 1) blocks)]]]))
 
 (rum/defc slide < rum/reactive db-mixins/query
   {:did-mount (fn [state]

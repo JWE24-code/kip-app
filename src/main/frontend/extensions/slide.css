@@ -36,4 +36,10 @@ html[data-theme=light] {
     transform-origin: 0 0;
     transform: scaleX(0);
   }
+
+  &:fullscreen,
+  &:-webkit-full-screen {
+    width: 100vw;
+    height: 100vh;
+  }
 }
