@@ -3,6 +3,15 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [0.7.3] — 2026-09-17
+
+- **Fixed: a short capture wasn't hatching.** A quick note typed into the
+  PWA's Capture screen, or pasted via the desktop's paste-source panel,
+  could be silently skipped as "near-empty" by Hatch if it was short (Hatch's
+  filter for Logseq's auto-created blank stub pages didn't distinguish those
+  from a genuinely short, deliberately-typed capture). Fixed in the
+  retrieval layer — see its own changelog for detail.
+
 ## [0.7.2] — 2026-09-17
 
 - **Fixed unreadable text in the slide view.** "View as slides" text was
