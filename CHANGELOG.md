@@ -3,6 +3,13 @@
 All notable changes to the Kip desktop app. The retrieval layer has its own
 changelog at [JWE24-code/kip](https://github.com/JWE24-code/kip/blob/main/CHANGELOG.md).
 
+## [0.7.2] — 2026-09-17
+
+- **Fixed unreadable text in the slide view.** "View as slides" text was
+  rendering as dark, low-contrast text against a mismatched background under
+  Kip's own theming. The slide deck now always uses a plain white background
+  with black text.
+
 ## [0.7.1] — 2026-09-17
 
 - **Batch review for Hatch.** "Review each source's pages before writing" now
